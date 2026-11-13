@@ -43,7 +43,7 @@ const ok = (c, msg) => { if (!c) throw new Error(msg); };
   for (let i = 0; i < 90 && g.units.indexOf(bomb) >= 0; i++) S.step(g, 1 / 60, { x: 0, y: 0 });
   ok(g.units.indexOf(bomb) < 0 && g.units.length === 2, '터지면 자리가 빈다');
   ok(near.every(e => e.dead), '폭발: 둘레의 잡몹은 즉사'); ok(!far.dead, '폭발: 먼 적은 무사');
-  ok(elite.dead && g.souls.some(s => s.q === 3), '폭발: 불안정도가 찬 폭탄은 돌격병을 한 방에 잡고 순혈 코어가 남는다');
+  ok(elite.dead && g.souls.some(s => s.q === 3), '폭발: 불안정도가 찬 폭탄은 돌격조를 한 방에 잡고 순혈 코어가 남는다');
   eq(g.hearts.length, 1, '터진 자리에 심장이 남는다'); eq(g.hearts[0].genes.beast, 6, '심장은 유전자를 보존한다');
   ok(g.souls.length >= 3, '터져 죽은 잡몹의 혼이 남는다');
 
@@ -74,7 +74,7 @@ const ok = (c, msg) => { if (!c) throw new Error(msg); };
     ok(t1 >= t0 * 0.8 - 1e-9 && t1 <= t0 && out[main] >= 1, '늦은 심장도 유전자 총량의 80% 이상을 지킨다: ' + JSON.stringify(gs) + ' → ' + JSON.stringify(out));
   }
 
-  // 폭발의 세기는 불안정도에 달렸다: 0%에서 터뜨리면 돌격병은 큰 피해와 기절만
+  // 폭발의 세기는 불안정도에 달렸다: 0%에서 터뜨리면 돌격조는 큰 피해와 기절만
   {
     const g = fresh(); soulAt(g, 'armor', 1);
     const b0 = g.units[0];
@@ -191,21 +191,19 @@ const ok = (c, msg) => { if (!c) throw new Error(msg); };
   g.units[1].inst = 60; g.units[2].inst = 20;
   ok(S.detonate(g), '더블 탭으로 터뜨릴 수 있다'); eq(g.units[1].state, 'rush', '불안정도가 가장 높은 키메라가 터진다');
 
-  // 느려짐: 자리가 찼고 혼이 가까우면 세상이 0.25배로 흐른다(네크로맨서는 제 속도)
+  // 연결: 자리가 찼고 혼이 가까우면 연결선이 생긴다(판은 느려지지 않는다)
   g = fresh(); soulAt(g, 'armor', 1); soulAt(g, 'ranger', 1);
   g.souls.push({ x: g.necro.x + 2.5, y: g.necro.y, type: 'beast', q: 1, ttl: 9 });
   const t0 = g.t, x0 = g.necro.x, y0 = g.necro.y;
   S.step(g, 0.1, { x: 0, y: 1 });
-  ok(!g.slowing && g.link, '자리가 찼고 혼이 가까우면 연결된다(느려지지는 않는다)');
+  ok(g.link, '자리가 찼고 혼이 가까우면 연결된다');
   ok(Math.abs((g.necro.y - y0) - 0.5) < 1e-9, '네크로맨서는 제 속도로 움직인다');
   ok(Math.abs((g.t - t0) - 0.1) < 1e-9, '판의 시간은 느려지지 않는다');
   ok(Math.abs(g.necro.x - x0) < 1e-9, '옆으로는 움직이지 않았다');
-  for (let i = 0; i < 40; i++) S.step(g, 0.1, { x: 0, y: 0 });
-  ok(!g.slowing, '느려짐은 오래가지 않는다');
   g.pinned = g.units[2].uid; S.step(g, 0.01, { x: 0, y: 0 });
   eq(g.link.uid, g.units[2].uid, '찍어 둔 키메라가 먹는다');
 
-  // 돌격병: 20초의 1.5초 전에 예고, 달려들고, 잡으면 순혈 코어
+  // 돌격조: 20초의 1.5초 전에 예고, 달려들고, 잡으면 순혈 코어
   g = S.newGame(9); g.spawnT = 1e9; g.posts = []; g.postsTotal = 0;
   while (g.t < 18.4) S.step(g, 1 / 60, { x: 0, y: 0 });
   ok(!g.enemies.some(e => e.elite), '18.4초에는 아직 없다');
@@ -223,7 +221,7 @@ const ok = (c, msg) => { if (!c) throw new Error(msg); };
   for (let i = 0; i < 120 && el.mode === 'aim'; i++) S.step(g, 1 / 60, { x: 0, y: 0 });
   eq(el.mode, 'charge', '겨눈 뒤 다시 달려든다');
   el.hp = 1; el.bleed = 100; el.bleedT = 1; S.step(g, 1 / 60, { x: 0, y: 0 });
-  ok(g.souls.some(s => s.q === 3), '돌격병을 잡으면 순혈 코어가 남는다');
+  ok(g.souls.some(s => s.q === 3), '돌격조를 잡으면 순혈 코어가 남는다');
 
   // 2등급 이상 갑주는 돌진을 받아 내고, 1등급은 튕겨 나간다
   const charge = armorGenes => {
@@ -272,28 +270,18 @@ const ok = (c, msg) => { if (!c) throw new Error(msg); };
     // 버티기만 해서는 이기지 못한다
     const g2 = fresh(); g2.necro.hp = 1e9; for (let i = 0; i < 60 * 100; i++) S.step(g2, 1 / 60, { x: 0, y: 0 });
     ok(!g2.over, '시간이 지나도 이기지 않는다(목적을 이뤄야 한다)');
-    // 이어지는 구역: 데려온 키메라로 시작하고, 적이 더 세다
-    const ace = S.aceOf({ genes: { beast: 2, armor: 5, ranger: 1 }, main: 'armor', molts: 2, mutant: true });
-    const g3 = S.newGame(3, { district: 3, ace });
+    // 이어지는 구역: 맹수 하나로 처음부터, 적이 더 세다
+    const g3 = S.newGame(3, { district: 3 });
     const a = g3.units[0];
-    ok(g3.units.length === 1 && a.genes.armor === 5 && a.main === 'armor' && a.molts === 2 && a.mutant && a.inst === 0, '데려온 키메라로 시작한다(유전자·탈피·변이 유지, 불안정도 0)');
+    ok(g3.units.length === 1 && a.main === 'beast' && S.geneTotal(a) === 1 && a.inst === 0 && a.molts === 0, '다음 구역도 맹수 하나로 처음부터 시작한다');
     ok(Math.abs(g3.scale - (1 + 2 * C.districtScale)) < 1e-9 && g3.district === 3, '구역이 오르면 적이 세진다');
-    // 셋을 모두 데려간다: 유전자와 불안정도까지 그대로
-    const gs = fresh(); gs.feedT = 0;
-    for (const t of ['armor', 'ranger']) { gs.souls.push({ x: gs.necro.x, y: gs.necro.y, type: t, q: 1, ttl: 5 }); S.step(gs, 1 / 60, { x: 0, y: 0 }); }
-    gs.units[0].genes.beast = 6; gs.units[0].inst = 72; gs.units[1].molts = 3; gs.units[2].state = 'rush';
-    const squad = S.squadOf(gs);
-    eq(squad.length, 2, '뛰어드는 중인 키메라는 데려가지 못한다');
-    const g4 = S.newGame(8, { district: 2, squad });
-    ok(g4.units.length === 2 && g4.units[0].genes.beast === 6 && g4.units[0].inst === 72 && g4.units[1].molts === 3, '데려간 키메라들이 유전자·불안정도·탈피 횟수 그대로 시작한다');
-    ok(g4.units.every(u => u.hp === S.stats(u).maxHp && u.state === 'ok'), '다음 구역은 체력을 가득 채우고 시작한다');
   }
-  console.log('규칙 확인: 초소 폭파, 대장, 구역 정복, 키메라 데려가기');
-  console.log('규칙 확인: 되살리기, 흡수와 불안정도, 과부하, 탈피 폭발, 심장 계승, 수동 자폭, 느려짐과 연결, 돌격병과 갑주 방어');
+  console.log('규칙 확인: 초소 폭파, 대장, 구역 정복, 다음 구역은 처음부터');
+  console.log('규칙 확인: 되살리기, 흡수와 불안정도, 과부하, 탈피 폭발, 심장 계승, 수동 자폭, 연결, 돌격조와 갑주 방어');
 }
 
 // ---- 봇 ----
-// 'play': 혼과 심장을 주우러 다니고, 돌격병이 가까우면 터뜨린다 / 'nomolt': 자리만 채우고 먹이지 않는다 / 'idle'
+// 'play': 혼과 심장을 주우러 다니고, 돌격조가 가까우면 터뜨린다 / 'nomolt': 자리만 채우고 먹이지 않는다 / 'idle'
 function bot(g, policy, mem) {
   const n = g.necro; let x = 0, y = 0;
   for (const e of g.enemies) {
@@ -356,7 +344,7 @@ for (const policy of ['play', 'spam', 'nomolt', 'idle']) {
     a.t += g.t; a.kills += g.kills; a.absorbs += g.absorbs; a.molts += g.molts; a.rebirths += g.rebirths; a.elite += g.eliteKills; a.lvl += g.maxLevel; a.posts += g.postsDown; a.boss += g.boss ? 1 : 0;
   }
   const f = v => (v / N).toFixed(1);
-  console.log(`${label[policy]} 구역 정복 ${a.win}/${N} · 초소 ${f(a.posts)}/3 · 대장 등장 ${a.boss}판 · 걸린 시간 ${f(a.t)}초 · 잡은 적 ${f(a.kills)} · 흡수 ${f(a.absorbs)} · 탈피 ${f(a.molts)} · 계승 ${f(a.rebirths)} · 돌격병 처치 ${f(a.elite)} · 최고 등급 ${f(a.lvl)}`);
+  console.log(`${label[policy]} 구역 정복 ${a.win}/${N} · 초소 ${f(a.posts)}/3 · 대장 등장 ${a.boss}판 · 걸린 시간 ${f(a.t)}초 · 잡은 적 ${f(a.kills)} · 흡수 ${f(a.absorbs)} · 탈피 ${f(a.molts)} · 계승 ${f(a.rebirths)} · 돌격조 처치 ${f(a.elite)} · 최고 등급 ${f(a.lvl)}`);
 }
 const a = run(7, 'play'), b = run(7, 'play');
 if (a.kills !== b.kills || a.t !== b.t) throw new Error('같은 시드인데 결과가 다르다');

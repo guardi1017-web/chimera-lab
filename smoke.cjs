@@ -47,11 +47,10 @@ const tap = (wx, wy) => {
 fire('startBtn', 'click', { fake: 'event' });
 frames(5);
 if (game.district !== 1 || game.units.length !== 1) throw new Error('시작 버튼으로 1구역이 열리지 않았다');
-let pins = 0, booms = 0, sawSlow = false, sawLink = false;
+let pins = 0, booms = 0, sawLink = false;
 for (let i = 0; i < 60 * 40; i++) {
   frames(1);
   game.necro.hp = 100;   // 흐름을 끝까지 보려고 죽지 않게 한다
-  if (game.slowing) sawSlow = true;
   if (game.link) sawLink = true;
   if (i % 90 === 20) game.souls.push({ x: game.necro.x + 2, y: game.necro.y, type: S.KINDS[(i / 90 | 0) % 3], q: 1 + ((i / 90 | 0) % 3), ttl: 6 });
   if (i % 90 === 21) { const s = game.souls[game.souls.length - 1]; game.necro.x = s.x - 1.5; game.necro.y = s.y; }
@@ -60,7 +59,7 @@ for (let i = 0; i < 60 * 40; i++) {
   if (i % 400 === 60 && game.units.length) { const before = game.pinned; tap(game.units[0].x, game.units[0].y); now += 360; flush(); if (game.pinned !== before) pins++; }
   if (i % 400 === 250 && game.units.length) { const before = game.molts; tap(game.necro.x + 3, game.necro.y + 3); now += 120; tap(game.necro.x + 3, game.necro.y + 3); if (game.units.some(u => u.state === 'rush') || game.molts > before) booms++; }
 }
-if (!pins || !booms || sawSlow || !sawLink || !tones) throw new Error('입력·연결선·소리 가운데 동작하지 않는 것이 있다(또는 느려짐이 남아 있다)');
+if (!pins || !booms || !sawLink || !tones) throw new Error('입력·연결선·소리 가운데 동작하지 않는 것이 있다');
 
 // 한 번 톡의 대상은 누른 순간의 키메라다
 {

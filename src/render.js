@@ -48,7 +48,7 @@
     absorb() { this.tone('sawtooth', 150, 400, 0.08, 0.18); },                    // 혼이 빨려 드는 짧은 스윕
     beat() { this.tone('sine', 70, 45, 0.12, 0.35); this.tone('sine', 62, 40, 0.12, 0.25, 0.16); },   // 과부하: 심장 박동
     boom() { this.noise(0.3, 0.5, 900); this.tone('sine', 80, 30, 0.3, 0.6); },   // 탈피 대폭발
-    siren() { for (let i = 0; i < 3; i++) this.tone('square', i % 2 ? 660 : 880, i % 2 ? 660 : 880, 0.13, 0.12, i * 0.17); },   // 돌격병 예고
+    siren() { for (let i = 0; i < 3; i++) this.tone('square', i % 2 ? 660 : 880, i % 2 ? 660 : 880, 0.13, 0.12, i * 0.17); },   // 돌격조 예고
     raise() { this.tone('triangle', 300, 520, 0.1, 0.14); },
     purify() { this.tone('sine', 520, 1040, 0.25, 0.2); this.tone('sine', 780, 1560, 0.25, 0.12, 0.05); },
     rebirth() { this.tone('triangle', 200, 800, 0.22, 0.22); this.tone('sine', 400, 1200, 0.2, 0.12, 0.1); },
@@ -66,7 +66,7 @@
   }
   window.addEventListener('resize', resize);
 
-  // opts: 다음 구역으로 갈 때 { district, ace }. 없으면 1구역부터.
+  // opts: 다음 구역으로 갈 때 { district }. 없으면 1구역부터.
   function start(opts) {
     Sound.on();
     g = S.newGame(seed++, opts && opts.district ? opts : null);
@@ -381,7 +381,7 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const px = scale / dpr, w = cv.width / dpr, hh = cv.height / dpr, pad = 16, bw = w - pad * 2;
     for (const u of g.units) label(String(S.levelOf(u)), sx(u.x), sy(u.y), Math.max(13, u.r * px * 0.9), COL.ground);
-    // 화면 밖에서 겨누는 돌격병: 가장자리에 느낌표
+    // 화면 밖에서 겨누는 돌격조: 가장자리에 느낌표
     for (const e of g.enemies) {
       if (!e.elite || (e.mode !== 'warn' && e.mode !== 'aim')) continue;
       const ex = Math.max(26, Math.min(w - 26, sx(e.x))), ey = Math.max(100, Math.min(hh - 30, sy(e.y)));
@@ -404,7 +404,6 @@
       }
     }
     // 느려진 동안: 화면 테두리
-    if (g.slowing) { ctx.strokeStyle = COL.necro; ctx.globalAlpha = 0.7; ctx.lineWidth = 6; ctx.strokeRect(3, 3, w - 6, hh - 6); ctx.globalAlpha = 1; }
 
     // 화면 고정 표시: 남은 시간, 체력, 키메라 셋의 등급과 불안정도
     // 목적: 초소 칸(부수면 꺼진다)과 그 뒤의 대장 표시

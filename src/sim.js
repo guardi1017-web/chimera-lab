@@ -9,10 +9,9 @@
   // 밸런스 값은 여기 모은다.
   const CFG = {
     maxUnits: 3,
-    absorbRange: 3.2,          // 자리가 찼을 때 이 안의 혼에 다가가면 느려지고 연결선이 생긴다
+    absorbRange: 3.2,          // 자리가 찼을 때 이 안의 혼에 다가가면 연결선이 생긴다
     pickRadius: 1.1,
-    slowScale: 0.25, slowMax: 2.2, slowRecharge: 0.8,   // 느려짐은 실제 시간으로 최대 2.2초, 벗어나 있으면 다시 찬다
-    // 혼의 품질: 1 불량(잡몹), 2 신선(중형), 3 순혈 코어(돌격병)
+    // 혼의 품질: 1 불량(잡몹), 2 신선(중형), 3 순혈 코어(돌격조)
     soul: {
       1: { gene: 1, inst: 24, heal: 0 },
       2: { gene: 2, inst: 12, heal: 0.5 },
@@ -112,10 +111,8 @@
 
   // 초소 자리: 시작 지점(아래쪽)에서 먼 순서. 가장 가까운 것도 사격 범위의 두 배쯤 떨어져 있다.
   const POST_SPOTS = [[4, 16], [14, 13], [8, 7.5], [15, 4.5], [3, 3.5], [9, 1.5]];
-  function aceOf(u) { return { genes: Object.assign({}, u.genes), main: u.main, molts: u.molts, mutant: u.mutant, inst: u.inst || 0 }; }
-  function squadOf(g) { return g.units.filter(u => u.state === 'ok').map(aceOf); }
 
-  // opts.district: 몇 번째 구역인지(1부터). opts.squad: 지난 구역에서 데려온 키메라들(최대 셋).
+  // opts.district: 몇 번째 구역인지(1부터). 키메라는 구역마다 맹수 하나로 처음부터 키운다.
   function newGame(seed, opts) {
     opts = opts || {};
     const district = Math.max(1, opts.district || 1);
@@ -125,22 +122,14 @@
       units: [], enemies: [], souls: [], hearts: [], fx: [], events: [],
       pinned: null,             // 먹일 대상으로 찍어 둔 키메라(없으면 혼에 가장 가까운 키메라)
       link: null,               // 지금 연결된 혼과 키메라(화면의 예고선)
-      slowing: false, slowLeft: CFG.slowMax,
       feedT: 0,                 // 0이 되어야 다음 혼을 먹일 수 있다(실제 시간)
       eliteIdx: 0, spawnT: 1.2,
       kills: 0, raised: 0, absorbs: 0, molts: 0, rebirths: 0, eliteKills: 0, blocks: 0, maxLevel: 1,
       district, scale: 1 + CFG.districtScale * (district - 1),
       posts: [], postsTotal: 0, postsDown: 0, boss: null,
     };
-    // 네크로맨서는 직접 싸우지 못한다. 데려온 키메라가 있으면 그 키메라와, 없으면 맹수 하나와 시작한다.
-    const squad = (opts.squad || (opts.ace ? [opts.ace] : [])).slice(0, CFG.maxUnits);
-    squad.forEach((ace, i) => {
-      const a = Math.PI / 2 + i * Math.PI * 2 / 3;
-      const u = makeUnit(g, ace.genes, ace.main, g.necro.x + Math.cos(a) * 1.5, g.necro.y + Math.sin(a) * 1.5);
-      u.molts = ace.molts || 0; u.mutant = !!ace.mutant; u.inst = Math.min(99, ace.inst || 0); u.hp = stats(u).maxHp;
-      g.units.push(u);
-    });
-    if (!squad.length) g.units.push(makeUnit(g, { beast: 1 }, 'beast', g.necro.x, g.necro.y + 1.5));
+    // 네크로맨서는 직접 싸우지 못한다. 맹수 하나와 시작한다.
+    g.units.push(makeUnit(g, { beast: 1 }, 'beast', g.necro.x, g.necro.y + 1.5));
     // 봉쇄 초소: 구역이 오를수록 많아진다(셋에서 다섯까지)
     // 구역은 아래에서 시작해 위로 밀고 올라간다. 가까운 초소부터 놓는다.
     const spots = POST_SPOTS;
@@ -174,7 +163,7 @@
   }
 
   function spawn(g, dt) {
-    // 돌격병: 정해진 시각의 1.5초 전에 경고와 함께 화면 끝에 나타난다
+    // 돌격조: 정해진 시각의 1.5초 전에 경고와 함께 화면 끝에 나타난다
     if (g.t >= CFG.eliteFirst + CFG.eliteEvery * g.eliteIdx - CFG.eliteWarn) {
       const p = edgePoint(g, 9), hp = CFG.eliteHp * (1 + CFG.eliteHpStep * Math.min(g.eliteIdx, 4)) * g.scale;
       g.enemies.push({
@@ -438,7 +427,7 @@
     n.x = clamp(n.x + mx * NECRO_SPEED * dtReal, 0.6, W - 0.6);
     n.y = clamp(n.y + my * NECRO_SPEED * dtReal, 0.6, H - 0.6);
 
-    // 자리가 찼을 때: 가까운 혼(또는 심장)과 먹일 키메라를 잇고, 세상을 늦춘다
+    // 자리가 찼을 때: 가까운 혼(또는 심장)과 먹일 키메라를 잇는다
     const full = g.units.length >= CFG.maxUnits;
     g.link = null; g.linkItem = null;   // linkItem: 연결선이 가리키는 바로 그 혼(또는 심장). 자리가 찼을 때는 이것만 먹는다
     if (full) {
@@ -447,7 +436,6 @@
       const tgt = near ? feedTarget(g, near) : null;
       if (near && tgt) { g.link = { x: near.x, y: near.y, uid: tgt.uid }; g.linkItem = near; }
     }
-    g.slowing = false;   // 느려짐은 뺐다(먹일 대상을 미리 정해 두는 구조라 고를 틈이 필요 없다)
     const dt = dtReal;
     g.feedT = Math.max(0, g.feedT - dtReal);
 
@@ -576,7 +564,7 @@
       }
     }
 
-    // 서로 겹치지 않게 살짝 민다(돌진 중인 돌격병과 뛰어드는 키메라는 뺀다).
+    // 서로 겹치지 않게 살짝 민다(돌진 중인 돌격조와 뛰어드는 키메라는 뺀다).
     const bodies = g.enemies.filter(e => !e.dead && !(e.elite && e.mode === 'charge')).concat(g.units.filter(u => u.down <= 0 && u.state === 'ok'));
     for (let i = 0; i < bodies.length; i++) {
       for (let j = i + 1; j < bodies.length; j++) {
@@ -641,7 +629,7 @@
     if (!g.over && n.hp <= 0) { n.hp = 0; g.over = 'lose'; g.events.push('lose'); }
   }
 
-  const api = { W, H, DURATION, MAX_LEVEL, KINDS, CFG, newGame, step, stats, geneTotal, levelOf, isFrenzy, heartKeep, scaleGenes, detonate, pin, absorb, feedTarget, spawnBoss, aceOf, squadOf, nextBlast };
+  const api = { W, H, DURATION, MAX_LEVEL, KINDS, CFG, newGame, step, stats, geneTotal, levelOf, isFrenzy, heartKeep, scaleGenes, detonate, pin, absorb, feedTarget, spawnBoss, nextBlast };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.ChimeraSim = api;
 })(typeof window !== 'undefined' ? window : globalThis);
