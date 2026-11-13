@@ -65,15 +65,16 @@
   }
   window.addEventListener('resize', resize);
 
-  function start() {
+  // opts: 다음 구역으로 갈 때 { district, ace }. 없으면 1구역부터.
+  function start(opts) {
     Sound.on();
-    g = S.newGame(seed++);
+    g = S.newGame(seed++, opts && opts.district ? opts : null);
     mode = 'play'; shake = 0; lastTap = null;
     titleEl.hidden = true; endEl.hidden = true;
     inp.x = inp.y = 0; stick = null;
   }
-  document.getElementById('startBtn').addEventListener('click', start);
-  document.getElementById('againBtn').addEventListener('click', start);
+  document.getElementById('startBtn').addEventListener('click', () => start());
+  document.getElementById('againBtn').addEventListener('click', () => start());
 
   // 누르고 끌면 이동. 두 번 톡톡 치면 자폭(탈피). 키메라를 한 번 톡 누르면 먹일 대상으로 찍는다.
   cv.addEventListener('pointerdown', e => {
@@ -300,6 +301,15 @@
       ctx.restore();
     }
 
+    // 봉쇄 초소: 폭발로만 부서진다. 옅은 원이 사격 범위, 위의 칸이 남은 내구도.
+    for (const p of g.posts) {
+      if (p.dead) { ctx.strokeStyle = COL.grid; ctx.lineWidth = 0.1; circle(p.x, p.y, p.r); ctx.stroke(); continue; }
+      ctx.save(); ctx.globalAlpha = 0.12; ctx.strokeStyle = COL.danger; ctx.lineWidth = 0.06; circle(p.x, p.y, S.CFG.postRange); ctx.stroke(); ctx.restore();
+      ctx.fillStyle = COL.dim; ctx.strokeStyle = COL.ink; ctx.lineWidth = 0.1;
+      ctx.beginPath(); for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3 + Math.PI / 6; ctx[i ? 'lineTo' : 'moveTo'](p.x + Math.cos(a) * p.r, p.y + Math.sin(a) * p.r); } ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = Math.floor(now / 400) % 2 ? COL.danger : COL.great; circle(p.x, p.y, 0.22); ctx.fill();
+      for (let i = 0; i < p.maxHp; i++) { ctx.fillStyle = i < p.hp ? COL.ink : COL.grid; ctx.fillRect(p.x - 0.45 + i * 0.5, p.y - p.r - 0.5, 0.4, 0.18); }
+    }
     for (const e of g.enemies) drawEnemy(e, now);
 
     // 예고 연결선: 이 혼을 밟으면 누가 먹는지. 먹으면 터질 참이면 붉다.
@@ -358,12 +368,31 @@
       const ex = Math.max(26, Math.min(w - 26, sx(e.x))), ey = Math.max(100, Math.min(hh - 30, sy(e.y)));
       if (ex !== sx(e.x) || ey !== sy(e.y)) label('!', ex, ey, 34, COL.danger);
     }
+    // 다음 목표(가장 가까운 초소, 다 부쉈으면 대장)가 화면 밖이면 가장자리에 표시한다
+    {
+      const goals = g.posts.filter(p => !p.dead).concat(g.boss && !g.boss.dead ? [g.boss] : []);
+      let goal = null, gd = 1e9;
+      for (const p of goals) { const d = Math.hypot(p.x - n.x, p.y - n.y); if (d < gd) { gd = d; goal = p; } }
+      if (goal) {
+        const gx = sx(goal.x), gy = sy(goal.y), ex = Math.max(30, Math.min(w - 30, gx)), ey = Math.max(104, Math.min(hh - 34, gy));
+        if (ex !== gx || ey !== gy) {
+          const a = Math.atan2(gy - ey, gx - ex);
+          ctx.save(); ctx.translate(ex, ey); ctx.rotate(a);
+          ctx.fillStyle = goal.boss ? COL.danger : COL.great; ctx.beginPath(); ctx.moveTo(16, 0); ctx.lineTo(-8, 11); ctx.lineTo(-8, -11); ctx.closePath(); ctx.fill();
+          ctx.restore();
+          label(Math.round(gd) + 'm', ex, ey + (ey > hh / 2 ? -22 : 22), 12, goal.boss ? COL.danger : COL.great);
+        }
+      }
+    }
     // 느려진 동안: 화면 테두리
     if (g.slowing) { ctx.strokeStyle = COL.necro; ctx.globalAlpha = 0.7; ctx.lineWidth = 6; ctx.strokeRect(3, 3, w - 6, hh - 6); ctx.globalAlpha = 1; }
 
     // 화면 고정 표시: 남은 시간, 체력, 키메라 셋의 등급과 불안정도
-    ctx.fillStyle = COL.grid; ctx.fillRect(pad, 12, bw, 6);
-    ctx.fillStyle = COL.ink; ctx.fillRect(pad, 12, bw * (1 - g.t / S.DURATION), 6);
+    // 목적: 초소 칸(부수면 꺼진다)과 그 뒤의 대장 표시
+    for (let i = 0; i < g.postsTotal; i++) { ctx.fillStyle = i < g.postsDown ? COL.grid : COL.great; ctx.fillRect(pad + i * 22, 10, 16, 9); }
+    ctx.fillStyle = g.boss ? (g.boss.dead ? COL.grid : COL.danger) : COL.grid;
+    ctx.beginPath(); ctx.moveTo(pad + g.postsTotal * 22 + 8, 6); ctx.lineTo(pad + g.postsTotal * 22 + 17, 14.5); ctx.lineTo(pad + g.postsTotal * 22 + 8, 23); ctx.lineTo(pad + g.postsTotal * 22 - 1, 14.5); ctx.closePath(); ctx.fill();
+    if (g.boss && !g.boss.dead) { ctx.fillStyle = COL.grid; ctx.fillRect(pad + g.postsTotal * 22 + 26, 11, bw - g.postsTotal * 22 - 26, 7); ctx.fillStyle = COL.danger; ctx.fillRect(pad + g.postsTotal * 22 + 26, 11, (bw - g.postsTotal * 22 - 26) * Math.max(0, g.boss.hp / g.boss.maxHp), 7); }
     ctx.fillStyle = COL.grid; ctx.fillRect(pad, 24, bw, 10);
     ctx.fillStyle = n.hp / n.maxHp < 0.3 ? COL.danger : COL.necro; ctx.fillRect(pad, 24, bw * n.hp / n.maxHp, 10);
     const slots = hudSlots(w);
@@ -378,7 +407,7 @@
       ctx.font = '700 13px ' + FONT; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = COL.ink; ctx.fillText(S.levelOf(u) + '등급', x0 + 6, y0 + sh / 2 + 0.5);
     }
     ctx.font = '600 14px ' + FONT; ctx.textBaseline = 'middle'; ctx.fillStyle = COL.ink;
-    ctx.textAlign = 'right'; ctx.fillText(Math.ceil(S.DURATION - g.t) + '초', w - pad, 57);
+    ctx.textAlign = 'right'; ctx.fillText(g.district + '구역', w - pad, 57);
 
     if (stick && stick.far >= 14) {
       const r = cv.getBoundingClientRect();
@@ -401,6 +430,9 @@
       else if (ev === 'block') { Sound.clash(); shake = Math.max(shake, 0.25); }
       else if (ev === 'necrohit') { Sound.hurt(); shake = Math.max(shake, 0.3); }
       else if (ev === 'rush') Sound.rush();
+      else if (ev === 'postdown') { Sound.clash(); Sound.purify(); shake = Math.max(shake, 0.4); }
+      else if (ev === 'posthit') Sound.clash();
+      else if (ev === 'boss') { Sound.siren(); shake = Math.max(shake, 0.3); }
     }
     g.events.length = 0;
     // 과부하인 키메라가 있는 동안 심장 박동이 이어진다
@@ -409,14 +441,38 @@
     shake = Math.max(0, shake - dt);
   }
 
+  const BEST_KEY = 'chimera-lab-best-v1';
+  function bestDistrict(reached) {
+    let best = 0;
+    try { best = +localStorage.getItem(BEST_KEY) || 0; } catch (e) { /* 저장 없이도 판은 돈다 */ }
+    if (reached > best) { best = reached; try { localStorage.setItem(BEST_KEY, String(best)); } catch (e) { /* 무시 */ } }
+    return best;
+  }
+  const KIND_NAME = { beast: '맹수', armor: '갑주', ranger: '사수' };
   function showEnd() {
     mode = 'over';
-    document.getElementById('endTitle').textContent = g.over === 'win' ? '버텼다' : '쓰러졌다';
-    document.getElementById('endTime').textContent = g.t.toFixed(0) + '초';
-    document.getElementById('endKills').textContent = g.kills + '마리 (돌격병 ' + g.eliteKills + ')';
-    document.getElementById('endFeed').textContent = g.absorbs + '번';
+    const won = g.over === 'win';
+    document.getElementById('endTitle').textContent = won ? g.district + '구역 정복' : g.district + '구역에서 쓰러졌다';
+    document.getElementById('endPosts').textContent = g.postsDown + ' / ' + g.postsTotal;
+    document.getElementById('endKills').textContent = g.kills + '마리 (돌격조 ' + g.eliteKills + ')';
     document.getElementById('endMolt').textContent = g.molts + '번 터지고 ' + g.rebirths + '번 계승';
     document.getElementById('endLevel').textContent = g.maxLevel + '등급';
+    document.getElementById('endBest').textContent = bestDistrict(won ? g.district : g.district - 1) + '구역';
+    const list = document.getElementById('aceList'), askEl = document.getElementById('aceAsk');
+    list.textContent = '';
+    const alive = won ? g.units.filter(u => u.state === 'ok') : [];
+    askEl.hidden = !alive.length; list.hidden = !alive.length;
+    for (const u of alive) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'ace';
+      const genes = S.KINDS.filter(k => u.genes[k] > 0).map(k => KIND_NAME[k] + ' ' + u.genes[k]).join(' · ');
+      b.textContent = S.levelOf(u) + '등급 · ' + genes + (u.molts ? ' · 탈피 ' + u.molts : '');
+      const ace = S.aceOf(u), next = g.district + 1;
+      b.addEventListener('click', () => start({ district: next, ace }));
+      list.appendChild(b);
+    }
+    document.getElementById('againBtn').textContent = won && alive.length ? '그만하고 1구역부터' : '1구역부터 다시';
+    document.getElementById('againBtn').className = won && alive.length ? '' : 'solo';   // 고를 것이 없으면 이 버튼이 주된 행동이다
     endEl.hidden = false;
     document.getElementById('againBtn').focus();
   }

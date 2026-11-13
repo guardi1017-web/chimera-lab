@@ -1,4 +1,5 @@
-// 키메라 실험 6차: 유전자 누적 + 불안정도 탈피(자폭 뒤 심장 계승) + 돌격병.
+// 키메라 실험 7차: 유전자 누적 + 불안정도 탈피(자폭 뒤 심장 계승) + 돌격조.
+// 한 판의 목적: 봉쇄 초소를 탈피 폭발로 모두 부수고, 나타난 대장을 잡는다. 이기면 키메라 하나를 다음 구역으로 데려간다.
 // 규칙만 담는다(화면·DOM 없음). 같은 시드면 같은 판이 나온다.
 (function (root) {
   'use strict';
@@ -25,7 +26,11 @@
     heartTtl: 12, heartFullFor: 4, heartMinKeep: 0.8,   // 심장은 4초 안에 주우면 유전자 100%, 12초째에는 80%
     moltBonus: 0.1, mutantBonus: 0.2,
     statPerGene: 0.35,
-    eliteTimes: [20, 45, 70], eliteWarn: 1.5, eliteHp: 260, eliteHpStep: 0.5,
+    eliteFirst: 20, eliteEvery: 25, eliteWarn: 1.5,   // 돌격조는 20초에 처음, 그 뒤 25초마다
+    postHits: 2, postRange: 5.5, postDmg: 4, postCd: 1.4,   // 초소: 폭발 두 번(불안정도가 찬 폭발은 한 번)에 부서진다
+    bossHp: 700, bossBlastCap: 0.35,                   // 대장: 폭발 한 번에 최대 체력의 35%까지만
+    districtScale: 0.25,                               // 구역이 하나 오를 때마다 적의 체력과 피해가 이만큼 더
+    eliteHp: 260, eliteHpStep: 0.5,
     chargeSpeed: 13, chargeDmg: 30, eliteDmg: 14, rechargeEvery: 7, aimTime: 1.2,
     spawnStart: 1.5, spawnEnd: 0.8, foeGradeMul: 1.35,
   };
@@ -101,7 +106,13 @@
     return u;
   }
 
-  function newGame(seed) {
+  const POST_SPOTS = [[4, 5], [14, 5], [9, 10.5], [3.5, 20], [14.5, 22], [9, 26.5]];
+  function aceOf(u) { return { genes: Object.assign({}, u.genes), main: u.main, molts: u.molts, mutant: u.mutant }; }
+
+  // opts.district: 몇 번째 구역인지(1부터). opts.ace: 지난 구역에서 데려온 키메라.
+  function newGame(seed, opts) {
+    opts = opts || {};
+    const district = Math.max(1, opts.district || 1);
     const g = {
       W, H, DURATION, t: 0, over: null, rand: mulberry(seed || 1), nextUid: 1,
       necro: { x: W / 2, y: H * 0.6, hp: 100, maxHp: 100, r: 0.5, hurt: 0 },
@@ -112,9 +123,21 @@
       feedT: 0,                 // 0이 되어야 다음 혼을 먹일 수 있다(실제 시간)
       eliteIdx: 0, spawnT: 1.2,
       kills: 0, raised: 0, absorbs: 0, molts: 0, rebirths: 0, eliteKills: 0, blocks: 0, maxLevel: 1,
+      district, scale: 1 + CFG.districtScale * (district - 1),
+      posts: [], postsTotal: 0, postsDown: 0, boss: null,
     };
-    // 네크로맨서는 직접 싸우지 못한다. 맹수 하나를 데리고 시작한다.
-    g.units.push(makeUnit(g, { beast: 1 }, 'beast', g.necro.x, g.necro.y + 1.5));
+    // 네크로맨서는 직접 싸우지 못한다. 데려온 키메라가 있으면 그 키메라와, 없으면 맹수 하나와 시작한다.
+    if (opts.ace) {
+      const u = makeUnit(g, opts.ace.genes, opts.ace.main, g.necro.x, g.necro.y + 1.5);
+      u.molts = opts.ace.molts || 0; u.mutant = !!opts.ace.mutant; u.hp = stats(u).maxHp;
+      g.units.push(u);
+    } else g.units.push(makeUnit(g, { beast: 1 }, 'beast', g.necro.x, g.necro.y + 1.5));
+    // 봉쇄 초소: 구역이 오를수록 많아진다(셋에서 다섯까지)
+    const spots = POST_SPOTS.slice();
+    for (let i = spots.length - 1; i > 0; i--) { const j = Math.floor(g.rand() * (i + 1)); const t = spots[i]; spots[i] = spots[j]; spots[j] = t; }
+    const count = Math.min(5, 2 + district);
+    for (let i = 0; i < count; i++) g.posts.push({ post: true, x: spots[i][0], y: spots[i][1], r: 0.9, hp: CFG.postHits, maxHp: CFG.postHits, cd: 1, dead: false });
+    g.postsTotal = count;
     return g;
   }
 
@@ -143,10 +166,10 @@
 
   function spawn(g, dt) {
     // 돌격병: 정해진 시각의 1.5초 전에 경고와 함께 화면 끝에 나타난다
-    if (g.eliteIdx < CFG.eliteTimes.length && g.t >= CFG.eliteTimes[g.eliteIdx] - CFG.eliteWarn) {
-      const p = edgePoint(g, 9), hp = CFG.eliteHp * (1 + CFG.eliteHpStep * g.eliteIdx);
+    if (g.t >= CFG.eliteFirst + CFG.eliteEvery * g.eliteIdx - CFG.eliteWarn) {
+      const p = edgePoint(g, 9), hp = CFG.eliteHp * (1 + CFG.eliteHpStep * Math.min(g.eliteIdx, 4)) * g.scale;
       g.enemies.push({
-        elite: true, arch: KINDS[g.eliteIdx % 3], g: 3, x: p.x, y: p.y, hp, maxHp: hp, dmg: CFG.eliteDmg, r: 0.95,
+        elite: true, arch: KINDS[g.eliteIdx % 3], g: 3, x: p.x, y: p.y, hp, maxHp: hp, dmg: CFG.eliteDmg * g.scale, r: 0.95,
         cd: 0.5, face: 0, stun: 0, bleed: 0, bleedT: 0,
         mode: 'warn', modeT: CFG.eliteWarn, dx: 0, dy: 0, run: 0, runMax: 0, hitNecro: false, hitUnits: {}, rechargeT: CFG.rechargeEvery,
       });
@@ -155,7 +178,7 @@
     }
     g.spawnT -= dt;
     if (g.spawnT > 0 || g.enemies.length >= 36) return;
-    const k = g.t / DURATION, r = g.rand(), r2 = g.rand();
+    const k = Math.min(1, g.t / DURATION), r = g.rand(), r2 = g.rand();
     g.spawnT = (CFG.spawnStart + (CFG.spawnEnd - CFG.spawnStart) * k) * (0.8 + 0.4 * g.rand());
     let arch = 'beast';
     if (g.t >= 10 && g.t < 35) arch = r < 0.6 ? 'beast' : 'ranger';
@@ -164,8 +187,8 @@
     if (g.t >= 18) grade = r2 < (g.t < 50 ? 0.7 : 0.5) ? 1 : 2;
     const n = arch === 'beast' && grade === 1 && g.t > 30 ? 2 : 1;
     for (let i = 0; i < n; i++) {
-      const p = edgePoint(g, 7), f = FOE[arch], m = Math.pow(CFG.foeGradeMul, grade - 1), hp = f.hp * m * (grade === 2 ? 1.6 : 1);
-      g.enemies.push({ elite: false, arch, g: grade, x: p.x, y: p.y, hp, maxHp: hp, dmg: f.dmg * m, r: f.r + 0.12 * (grade - 1), cd: 0.4, face: 0, stun: 0, bleed: 0, bleedT: 0 });
+      const p = edgePoint(g, 7), f = FOE[arch], m = Math.pow(CFG.foeGradeMul, grade - 1), hp = f.hp * m * (grade === 2 ? 1.6 : 1) * g.scale;
+      g.enemies.push({ elite: false, arch, g: grade, x: p.x, y: p.y, hp, maxHp: hp, dmg: f.dmg * m * g.scale, r: f.r + 0.12 * (grade - 1), cd: 0.4, face: 0, stun: 0, bleed: 0, bleedT: 0 });
     }
   }
 
@@ -174,6 +197,7 @@
     e.dead = true; e.hp = 0;
     g.kills++;
     if (e.elite) { g.eliteKills++; g.events.push('elitedown'); }
+    if (e.boss && !g.over) { g.over = 'win'; g.events.push('win'); }   // 대장을 잡으면 구역을 차지한다
     g.fx.push({ k: 'die', x: e.x, y: e.y, arch: e.arch, big: e.elite, t: 0.35 });
     const q = e.elite ? 3 : e.g >= 2 ? 2 : 1;
     // 순혈 코어는 개수 제한과 상관없이 반드시 남는다
@@ -278,11 +302,13 @@
   // 탈피: 가장 붐비는 적 무리로 뛰어들어 터진다.
   function startMolt(g, u) {
     if (u.state !== 'ok') return false;
+    // 뛰어들 곳: 적이 가장 붐비는 자리. 초소와 돌격조는 더 무겁게 친다.
     let best = null, score = 0;
-    for (const e of g.enemies) {
+    const things = g.enemies.concat(g.posts);
+    for (const e of things) {
       if (e.dead || dist(e, u) > 10) continue;
       let n = 0;
-      for (const o of g.enemies) if (!o.dead && dist(o, e) < CFG.blastRadius) n += o.elite ? 4 : 1;
+      for (const o of things) if (!o.dead && dist(o, e) < CFG.blastRadius) n += o.post ? 5 : o.elite ? 4 : 1;
       if (n > score) { score = n; best = e; }
     }
     u.state = 'rush'; u.rushT = 0; u.down = 0; u.target = best;
@@ -299,8 +325,19 @@
         if (e.mode !== 'charge') knock(e, u.x, u.y, CFG.blastKnock);
         e.stun = Math.max(e.stun, CFG.blastStun);
         if (e.mode === 'charge' || e.mode === 'aim' || e.mode === 'warn') { e.mode = 'chase'; e.rechargeT = CFG.rechargeEvery; }
-        damageEnemy(g, e, e.maxHp * eliteFrac + 0.01, null, null);
+        damageEnemy(g, e, e.maxHp * (e.boss ? Math.min(CFG.bossBlastCap, eliteFrac) : eliteFrac) + 0.01, null, null);
       } else killEnemy(g, e);
+    }
+    // 초소는 폭발로만 부서진다. 불안정도가 찬 폭발은 한 번에, 아니면 두 번.
+    for (const p of g.posts) {
+      if (p.dead || dist(p, u) > CFG.blastRadius + p.r) continue;
+      p.hp -= (u.charge || 0) >= 1 ? CFG.postHits : 1;
+      if (p.hp <= 0) {
+        p.dead = true; g.postsDown++;
+        g.fx.push({ k: 'die', x: p.x, y: p.y, arch: 'armor', big: true, t: 0.35 });
+        g.events.push('postdown');
+        if (g.postsDown >= g.postsTotal && !g.boss) spawnBoss(g);
+      } else g.events.push('posthit');
     }
     g.hearts.push({ x: clamp(u.x, 0.8, W - 0.8), y: clamp(u.y, 0.8, H - 0.8), genes: Object.assign({}, u.genes), main: u.main, molts: u.molts, mutant: u.mutant, age: 0, ttl: CFG.heartTtl });
     g.units = g.units.filter(x => x !== u);
@@ -309,6 +346,19 @@
     g.fx.push({ k: 'boom', x: u.x, y: u.y, r: CFG.blastRadius, t: 0.5 });
     g.events.push('boom');
   }
+  // 초소를 다 부수면 대장이 나타난다. 돌격조처럼 예고하고 달려들지만 훨씬 단단하다.
+  function spawnBoss(g) {
+    const p = edgePoint(g, 9), hp = CFG.bossHp * g.scale;
+    g.boss = {
+      elite: true, boss: true, arch: 'armor', g: 3, x: p.x, y: p.y, hp, maxHp: hp, dmg: CFG.eliteDmg * 1.4 * g.scale, r: 1.35,
+      cd: 0.5, face: 0, stun: 0, bleed: 0, bleedT: 0,
+      mode: 'warn', modeT: CFG.eliteWarn + 0.8, dx: 0, dy: 0, run: 0, runMax: 0, hitNecro: false, hitUnits: {}, rechargeT: CFG.rechargeEvery,
+    };
+    g.enemies.push(g.boss);
+    g.events.push('boss');
+    return g.boss;
+  }
+
   // 손으로 터뜨린다: 불안정도가 가장 높은(같으면 유전자가 가장 적은) 키메라가 뛰어든다.
   function detonate(g) {
     if (g.over) return false;
@@ -493,6 +543,17 @@
       }
     }
 
+    // 초소는 가까이 온 네크로맨서를 쏜다. 폭탄을 끌고 다가가는 길이 위험해진다.
+    for (const p of g.posts) {
+      if (p.dead) continue;
+      p.cd -= dt;
+      if (p.cd <= 0 && dist(p, n) < CFG.postRange) {
+        p.cd = CFG.postCd;
+        n.hp -= CFG.postDmg * g.scale; n.hurt = 0.2;
+        g.fx.push({ k: 'shot', x: p.x, y: p.y, tx: n.x, ty: n.y, arch: 'danger', t: 0.14 });
+      }
+    }
+
     // 서로 겹치지 않게 살짝 민다(돌진 중인 돌격병과 뛰어드는 키메라는 뺀다).
     const bodies = g.enemies.filter(e => !e.dead && !(e.elite && e.mode === 'charge')).concat(g.units.filter(u => u.down <= 0 && u.state === 'ok'));
     for (let i = 0; i < bodies.length; i++) {
@@ -555,11 +616,10 @@
     for (const f of g.fx) f.t -= dt;
     g.fx = g.fx.filter(f => f.t > 0);
 
-    if (n.hp <= 0) { n.hp = 0; g.over = 'lose'; g.events.push('lose'); }
-    else if (g.t >= DURATION) { g.t = DURATION; g.over = 'win'; g.events.push('win'); }
+    if (!g.over && n.hp <= 0) { n.hp = 0; g.over = 'lose'; g.events.push('lose'); }
   }
 
-  const api = { W, H, DURATION, MAX_LEVEL, KINDS, CFG, newGame, step, stats, geneTotal, levelOf, isFrenzy, heartKeep, scaleGenes, detonate, pin, absorb, feedTarget };
+  const api = { W, H, DURATION, MAX_LEVEL, KINDS, CFG, newGame, step, stats, geneTotal, levelOf, isFrenzy, heartKeep, scaleGenes, detonate, pin, absorb, feedTarget, spawnBoss, aceOf };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.ChimeraSim = api;
 })(typeof window !== 'undefined' ? window : globalThis);

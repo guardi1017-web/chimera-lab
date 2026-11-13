@@ -4,58 +4,63 @@
 <style>
   /* 배치: 화면 전체가 판이다. 글은 시작과 끝의 덮개에만 있고, 판 중에는 위쪽 띠 하나만 남는다. */
   :root {
-    --ground: #15121c;   /* 밤의 실험실 바닥 */
+    --ground: #15121c;   /* 봉쇄된 밤거리의 아스팔트 */
     --grid: #2a2536;
-    --ink: #ece4d4;      /* 양피지 */
+    --ink: #ece4d4;
     --dim: #8f869c;
     --necro: #a077ff;    /* 네크로맨서, 연결선 */
     --bone: #d8cfbb;     /* 키메라의 몸 */
-    --beast: #e8893a;    /* 맹수 유전자 */
-    --armor: #6fa6dc;    /* 갑주 유전자 */
-    --ranger: #83c06b;   /* 사수 유전자 */
-    --danger: #e5524c;   /* 불안정도, 돌격병 */
-    --great: #f2d35e;    /* 순혈 코어, 계승 */
-    --veil: rgba(21, 18, 28, 0.92);
+    --beast: #e8893a;    /* 맹수 유전자(군견) */
+    --armor: #6fa6dc;    /* 갑주 유전자(방패 기동대) */
+    --ranger: #83c06b;   /* 사수 유전자(소총수) */
+    --danger: #e5524c;   /* 불안정도, 돌격조, 대장 */
+    --great: #f2d35e;    /* 순혈 코어, 초소, 계승 */
+    --veil: rgba(21, 18, 28, 0.93);
     --font-display: "Gowun Batang", "Nanum Myeongjo", serif;
     --font-body: "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
     color-scheme: dark;
   }
   [hidden] { display: none !important; }
   html, body { height: 100%; margin: 0; }
-  body { background: var(--ground); color: var(--ink); font-family: var(--font-body); font-size: 16px; line-height: 1.55; overflow: hidden; }
+  body { background: var(--ground); color: var(--ink); font-family: var(--font-body); font-size: 16px; line-height: 1.5; overflow: hidden; }
   #stage { position: relative; height: 100%; }
   #game { display: block; width: 100%; height: 100%; touch-action: none; }
   .veil {
-    position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; gap: 14px;
+    position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; gap: 12px;
     background: var(--veil);
-    padding-block: 24px;
+    padding-block: 20px;
     padding-left: max(24px, env(safe-area-inset-left, 0px));
     padding-right: max(24px, env(safe-area-inset-right, 0px));
     overflow-y: auto;
   }
   .veil > * { max-width: 26rem; width: 100%; margin-inline: auto; }
   h1, h2 { font-family: var(--font-display); font-weight: 700; margin: 0; text-wrap: balance; }
-  h1 { font-size: 2.25rem; }
-  h2 { font-size: 2rem; }
+  h1 { font-size: 2.1rem; }
+  h2 { font-size: 1.9rem; }
   p { margin: 0; }
-  .how { display: grid; gap: 9px; margin: 0; padding: 0; list-style: none; }
-  .how li { display: grid; grid-template-columns: 1.5rem 1fr; gap: 12px; align-items: baseline; }
+  .goal { border-left: 4px solid var(--great); padding-left: 12px; }
+  .how { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+  .how li { display: grid; grid-template-columns: 1.4rem 1fr; gap: 10px; align-items: baseline; }
   .step { font-family: var(--font-display); color: var(--necro); text-align: center; }
   .hot { color: var(--danger); }
   .gold { color: var(--great); }
-  .kinds { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; padding: 0; list-style: none; color: var(--dim); }
+  .kinds { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; padding: 0; list-style: none; color: var(--dim); font-size: 0.92rem; }
   .kinds li { display: flex; gap: 8px; align-items: center; }
-  .swatch { width: 1rem; height: 1rem; flex: none; }
+  .swatch { width: 0.95rem; height: 0.95rem; flex: none; }
   .swatch.beast { background: var(--beast); clip-path: polygon(100% 50%, 0 100%, 0 0); }
   .swatch.armor { background: var(--armor); }
   .swatch.ranger { background: var(--ranger); border-radius: 50%; }
-  dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 20px; margin: 0; font-variant-numeric: tabular-nums; }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 5px 20px; margin: 0; font-variant-numeric: tabular-nums; }
   dt { color: var(--dim); }
   dd { margin: 0; }
+  #aceList { display: grid; gap: 8px; }
   button {
-    font: inherit; font-family: var(--font-display); font-size: 1.25rem; color: var(--ground); background: var(--ink);
-    border: 0; padding: 14px 20px; cursor: pointer;
+    font: inherit; font-family: var(--font-display); font-size: 1.2rem; color: var(--ground); background: var(--ink);
+    border: 0; padding: 13px 18px; cursor: pointer;
   }
+  button.ace { font-family: var(--font-body); font-size: 1rem; text-align: left; background: var(--great); }
+  #end #againBtn { background: transparent; color: var(--ink); outline: 2px solid var(--dim); outline-offset: -2px; }
+  #end #againBtn.solo { background: var(--ink); color: var(--ground); outline: 0; }
   button:focus-visible { outline: 3px solid var(--necro); outline-offset: 3px; }
 </style>
 
@@ -64,32 +69,35 @@
 
   <section class="veil" id="title">
     <h1>키메라 실험실</h1>
-    <p>네크로맨서는 직접 싸우지 못한다. 키메라 셋이 대신 싸운다. 90초를 버텨라.</p>
+    <p>봉쇄된 서울의 밤. 네크로맨서는 직접 싸우지 못하고, 키메라 셋이 대신 싸운다.</p>
+    <p class="goal"><strong>목적:</strong> <span class="gold">봉쇄 초소</span>를 폭발로 모두 부수면 진압 대장이 나온다. 대장을 잡으면 구역을 차지하고, 키메라 하나를 다음 구역으로 데려간다.</p>
     <ol class="how">
-      <li><span class="step">1</span><span>누르고 끌면 움직인다. 적이 남긴 혼을 밟으면 키메라로 되살아난다.</span></li>
-      <li><span class="step">2</span><span>셋이 다 차면, 혼을 밟을 때 연결선이 닿은 키메라가 그 혼을 먹는다. 한 번 먹은 키메라가 계속 먹는다. 바꾸려면 위쪽의 키메라 칸을 누른다.</span></li>
-      <li><span class="step">3</span><span>먹을수록 <span class="hot">불안정도</span>가 오른다. 80%부터 광기에 들고, 다 차면 적진에 뛰어들어 터진다. 화면을 두 번 톡톡 치면 바로 터뜨린다.</span></li>
-      <li><span class="step">4</span><span>터진 자리의 <span class="hot">심장</span>을 밟으면 유전자를 물려받은 새 키메라가 깨어난다. 빨리 주울수록 온전하다.</span></li>
-      <li><span class="step">5</span><span>20초, 45초, 70초에 돌격병이 붉은 길을 예고하고 달려든다. 불안정도가 찬 키메라를 터뜨리면 한 방에 잡는다. 잡으면 남는 <span class="gold">순혈 코어</span>는 불안정도를 0으로 식힌다.</span></li>
+      <li><span class="step">1</span><span>누르고 끌면 움직인다. 적이 남긴 혼을 밟으면 키메라가 된다.</span></li>
+      <li><span class="step">2</span><span>셋이 차면 연결선이 닿은 키메라가 혼을 먹어 커진다. 먹일 대상은 위쪽 칸을 눌러 바꾼다.</span></li>
+      <li><span class="step">3</span><span>먹을수록 <span class="hot">불안정도</span>가 찬다. 화면을 두 번 톡톡 치면 가장 불안정한 키메라가 뛰어들어 터진다. 가득 찰수록 폭발이 세다.</span></li>
+      <li><span class="step">4</span><span>터진 자리의 <span class="hot">심장</span>을 밟으면 유전자를 물려받은 키메라가 다시 깨어난다.</span></li>
+      <li><span class="step">5</span><span>초소는 폭발로만 부서진다. 다가가면 쏘니, 폭탄을 키워서 끌고 가라.</span></li>
     </ol>
     <ul class="kinds">
-      <li><span class="swatch beast"></span>맹수: 뛰어들어 문다</li>
-      <li><span class="swatch armor"></span>갑주: 막고 밀친다</li>
-      <li><span class="swatch ranger"></span>사수: 멀리서 쏜다</li>
+      <li><span class="swatch beast"></span>군견의 혼: 뛰어들어 문다</li>
+      <li><span class="swatch armor"></span>방패 기동대: 막고 밀친다</li>
+      <li><span class="swatch ranger"></span>소총수: 멀리서 쏜다</li>
     </ul>
-    <button id="startBtn" type="button">시작</button>
+    <button id="startBtn" type="button">1구역으로</button>
   </section>
 
   <section class="veil" id="end" hidden>
     <h2 id="endTitle">쓰러졌다</h2>
     <dl>
-      <dt>버틴 시간</dt><dd id="endTime">0초</dd>
+      <dt>부순 초소</dt><dd id="endPosts">0 / 3</dd>
       <dt>잡은 적</dt><dd id="endKills">0마리</dd>
-      <dt>먹인 혼</dt><dd id="endFeed">0번</dd>
       <dt>탈피</dt><dd id="endMolt">0번</dd>
       <dt>가장 높은 등급</dt><dd id="endLevel">1등급</dd>
+      <dt>최고 기록</dt><dd id="endBest">0구역</dd>
     </dl>
-    <button id="againBtn" type="button">한 판 더</button>
+    <p id="aceAsk" class="gold" hidden>다음 구역으로 데려갈 키메라를 고른다.</p>
+    <div id="aceList" hidden></div>
+    <button id="againBtn" type="button">1구역부터 다시</button>
   </section>
 </div>
 

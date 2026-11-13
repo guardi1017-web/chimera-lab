@@ -6,7 +6,7 @@ const ok = (c, msg) => { if (!c) throw new Error(msg); };
 
 // ---- 규칙 ----
 {
-  const fresh = () => { const g = S.newGame(5); g.spawnT = 1e9; g.eliteIdx = 99; return g; };   // 적이 나오지 않는 빈 판
+  const fresh = () => { const g = S.newGame(5); g.spawnT = 1e9; g.eliteIdx = 99; g.posts = []; g.postsTotal = 0; return g; };   // 적도 초소도 없는 빈 판
   const soulAt = (g, type, q) => { g.feedT = 0; g.souls.push({ x: g.necro.x, y: g.necro.y, type, q, ttl: 5 }); S.step(g, 1 / 60, { x: 0, y: 0 }); };
   const foe = (g, x, y, extra) => { const e = Object.assign({ elite: false, arch: 'beast', g: 1, x, y, hp: 18, maxHp: 18, dmg: 0, r: 0.42, cd: 99, face: 0, stun: 99, bleed: 0, bleedT: 0 }, extra || {}); g.enemies.push(e); return e; };
 
@@ -163,7 +163,7 @@ const ok = (c, msg) => { if (!c) throw new Error(msg); };
   eq(g.link.uid, g.units[2].uid, '찍어 둔 키메라가 먹는다');
 
   // 돌격병: 20초의 1.5초 전에 예고, 달려들고, 잡으면 순혈 코어
-  g = S.newGame(9); g.spawnT = 1e9;
+  g = S.newGame(9); g.spawnT = 1e9; g.posts = []; g.postsTotal = 0;
   while (g.t < 18.4) S.step(g, 1 / 60, { x: 0, y: 0 });
   ok(!g.enemies.some(e => e.elite), '18.4초에는 아직 없다');
   while (g.t < 18.7) S.step(g, 1 / 60, { x: 0, y: 0 });
@@ -195,6 +195,45 @@ const ok = (c, msg) => { if (!c) throw new Error(msg); };
   ok(r.blocks === 1 && r.necro.hp === 100, '2등급 갑주가 길을 막으면 받아 낸다');
   r = charge(1);
   ok(r.blocks === 0 && r.necro.hp < 100, '1등급은 튕겨 나가고 네크로맨서가 맞는다');
+  // ---- 목적: 초소 폭파 → 대장 → 구역 정복 ----
+  {
+    const g0 = S.newGame(3);
+    eq(g0.posts.length, 3, '1구역의 초소는 셋'); eq(S.newGame(3, { district: 4 }).posts.length, 5, '구역이 오르면 초소가 늘어 다섯까지');
+    ok(g0.posts.every(p => Math.hypot(p.x - g0.necro.x, p.y - g0.necro.y) > 5), '초소는 시작 지점에서 떨어져 있다');
+    // 초소는 폭발로만 부서진다: 불안정도가 낮은 폭발은 두 번, 찬 폭발은 한 번
+    const blastAt = (g, post, inst) => {
+      g.feedT = 0; g.souls.push({ x: g.necro.x, y: g.necro.y, type: 'beast', q: 1, ttl: 5 }); S.step(g, 1 / 60, { x: 0, y: 0 });
+      const u = g.units[g.units.length - 1]; u.x = post.x + 1; u.y = post.y; u.inst = inst;
+      g.pinned = null; for (const o of g.units) if (o !== u) o.inst = 0;
+      S.detonate(g);
+      for (let i = 0; i < 90 && g.units.indexOf(u) >= 0; i++) S.step(g, 1 / 60, { x: 0, y: 0 });
+      g.hearts = []; g.souls = [];
+    };
+    const g = fresh(); g.units = [];
+    const p1 = { post: true, x: 4, y: 5, r: 0.9, hp: C.postHits, maxHp: C.postHits, cd: 99, dead: false }, p2 = { post: true, x: 14, y: 5, r: 0.9, hp: C.postHits, maxHp: C.postHits, cd: 99, dead: false };
+    g.posts = [p1, p2]; g.postsTotal = 2;
+    blastAt(g, p1, 10); ok(!p1.dead && p1.hp === 1, '불안정도가 낮은 폭발: 초소가 한 번 깎인다');
+    blastAt(g, p1, 10); ok(p1.dead && g.postsDown === 1 && !g.boss, '두 번째 폭발에 부서진다. 아직 대장은 없다');
+    blastAt(g, p2, 90); ok(p2.dead && g.postsDown === 2, '불안정도가 찬 폭발: 한 번에 부서진다');
+    ok(g.boss && g.enemies.indexOf(g.boss) >= 0 && g.boss.mode === 'warn', '초소를 다 부수면 대장이 예고와 함께 나타난다');
+    // 대장은 찬 폭발로도 한 번에 죽지 않는다
+    const boss = g.boss; boss.mode = 'chase'; boss.stun = 99; boss.x = 9; boss.y = 9;
+    blastAt(g, boss, 100);
+    ok(!boss.dead && Math.abs(boss.hp - boss.maxHp * (1 - C.bossBlastCap)) < 1, '대장: 폭발 한 번에 최대 체력의 35%까지만');
+    ok(!g.over, '대장이 살아 있으면 판은 끝나지 않는다');
+    boss.hp = 0.5; boss.bleed = 100; boss.bleedT = 1; S.step(g, 1 / 60, { x: 0, y: 0 });
+    eq(g.over, 'win', '대장을 잡으면 구역을 차지한다');
+    // 버티기만 해서는 이기지 못한다
+    const g2 = fresh(); g2.necro.hp = 1e9; for (let i = 0; i < 60 * 100; i++) S.step(g2, 1 / 60, { x: 0, y: 0 });
+    ok(!g2.over, '시간이 지나도 이기지 않는다(목적을 이뤄야 한다)');
+    // 이어지는 구역: 데려온 키메라로 시작하고, 적이 더 세다
+    const ace = S.aceOf({ genes: { beast: 2, armor: 5, ranger: 1 }, main: 'armor', molts: 2, mutant: true });
+    const g3 = S.newGame(3, { district: 3, ace });
+    const a = g3.units[0];
+    ok(g3.units.length === 1 && a.genes.armor === 5 && a.main === 'armor' && a.molts === 2 && a.mutant && a.inst === 0, '데려온 키메라로 시작한다(유전자·탈피·변이 유지, 불안정도 0)');
+    ok(Math.abs(g3.scale - (1 + 2 * C.districtScale)) < 1e-9 && g3.district === 3, '구역이 오르면 적이 세진다');
+  }
+  console.log('규칙 확인: 초소 폭파, 대장, 구역 정복, 키메라 데려가기');
   console.log('규칙 확인: 되살리기, 흡수와 불안정도, 과부하, 탈피 폭발, 심장 계승, 수동 자폭, 느려짐과 연결, 돌격병과 갑주 방어');
 }
 
@@ -216,6 +255,13 @@ function bot(g, policy, mem) {
     if (policy === 'play') {
       const el = g.enemies.find(e => e.elite && Math.hypot(e.x - n.x, e.y - n.y) < 6 && (e.mode === 'chase' || e.mode === 'aim'));
       if (el && g.t - mem.last > 4 && g.units.some(u => u.state === 'ok' && u.inst >= 45)) { S.detonate(g); mem.last = g.t; }
+      const bomb = g.units.filter(u => u.state === 'ok' && u.inst >= 70).sort((a, b) => b.inst - a.inst)[0];
+      const goal = g.posts.filter(p => !p.dead).concat(g.boss && !g.boss.dead ? [g.boss] : []).sort((a, b) => Math.hypot(a.x - n.x, a.y - n.y) - Math.hypot(b.x - n.x, b.y - n.y))[0];
+      if (bomb && goal) {
+        const d = Math.hypot(goal.x - n.x, goal.y - n.y) + 0.01;
+        x += (goal.x - n.x) / d * 2.4; y += (goal.y - n.y) / d * 2.4;
+        if (Math.hypot(bomb.x - goal.x, bomb.y - goal.y) < 3.4 && g.t - mem.last > 1) { S.detonate(g); mem.last = g.t; }
+      }
     }
   }
   x += (g.W / 2 - n.x) * 0.05; y += (g.H / 2 - n.y) * 0.05;
@@ -227,7 +273,8 @@ function run(seed, policy) {
   while (!g.over) {
     S.step(g, 1 / 60, bot(g, policy, mem));
     g.events.length = 0;
-    if (++guard > 60 * 600) throw new Error('판이 끝나지 않는다');
+    if (++guard > 60 * 1200) throw new Error('판이 끝나지 않는다');
+    if (g.t > 240) { g.over = 'timeout'; break; }   // 4분 안에 못 끝내면 진 것으로 센다
     for (const o of [g.necro, ...g.units, ...g.enemies]) {
       if (!Number.isFinite(o.x) || !Number.isFinite(o.y) || !Number.isFinite(o.hp)) throw new Error('NaN at t=' + g.t);
     }
@@ -241,14 +288,14 @@ function run(seed, policy) {
 }
 const label = { play: '먹이고 터뜨림 ', nomolt: '자리만 채움   ', idle: '아무것도 안 함' };
 for (const policy of ['play', 'nomolt', 'idle']) {
-  const N = 40, a = { win: 0, t: 0, kills: 0, absorbs: 0, molts: 0, rebirths: 0, elite: 0, lvl: 0 };
+  const N = 40, a = { win: 0, t: 0, kills: 0, absorbs: 0, molts: 0, rebirths: 0, elite: 0, lvl: 0, posts: 0, boss: 0 };
   for (let s = 1; s <= N; s++) {
     const g = run(s, policy);
     if (g.over === 'win') a.win++;
-    a.t += g.t; a.kills += g.kills; a.absorbs += g.absorbs; a.molts += g.molts; a.rebirths += g.rebirths; a.elite += g.eliteKills; a.lvl += g.maxLevel;
+    a.t += g.t; a.kills += g.kills; a.absorbs += g.absorbs; a.molts += g.molts; a.rebirths += g.rebirths; a.elite += g.eliteKills; a.lvl += g.maxLevel; a.posts += g.postsDown; a.boss += g.boss ? 1 : 0;
   }
   const f = v => (v / N).toFixed(1);
-  console.log(`${label[policy]} 승 ${a.win}/${N} · 버틴 시간 ${f(a.t)}초 · 잡은 적 ${f(a.kills)} · 흡수 ${f(a.absorbs)} · 탈피 ${f(a.molts)} · 계승 ${f(a.rebirths)} · 돌격병 처치 ${f(a.elite)} · 최고 등급 ${f(a.lvl)}`);
+  console.log(`${label[policy]} 구역 정복 ${a.win}/${N} · 초소 ${f(a.posts)}/3 · 대장 등장 ${a.boss}판 · 걸린 시간 ${f(a.t)}초 · 잡은 적 ${f(a.kills)} · 흡수 ${f(a.absorbs)} · 탈피 ${f(a.molts)} · 계승 ${f(a.rebirths)} · 돌격병 처치 ${f(a.elite)} · 최고 등급 ${f(a.lvl)}`);
 }
 const a = run(7, 'play'), b = run(7, 'play');
 if (a.kills !== b.kills || a.t !== b.t) throw new Error('같은 시드인데 결과가 다르다');
