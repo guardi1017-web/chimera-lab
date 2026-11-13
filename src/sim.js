@@ -24,18 +24,18 @@
     rushSpeed: 14, rushMax: 1.0,
     // 덜 익은 폭탄(불안정도 80% 미만)은 약하고 대가가 있다: 반경이 좁고, 잡몹을 즉사시키지 못하고, 심장이 유전자를 덜 지킨다
     blastMinRadius: 0.5, blastWeakMul: 3, heartWeakKeep: 0.6,
-    heartWeakWait: 4,          // 덜 익은 채 터진 심장은 식을 때까지(최대 4초) 주울 수 없다
+    heartWeakWait: 3,          // 덜 익은 채 터진 심장은 식을 때까지(최대 4초) 주울 수 없다
     postMinCharge: 0.5,        // 불안정도 40% 미만의 폭발은 초소에 통하지 않는다
     feedGap: 0.35, feedGapAfterRebirth: 0.8,           // 흡수 사이의 실제 시간 간격(초). 혼 더미 위에서 한꺼번에 먹지 않게
     heartTtl: 12, heartFullFor: 4, heartMinKeep: 0.8,   // 심장은 4초 안에 주우면 유전자 100%, 12초째에는 80%
     moltBonus: 0.1, mutantBonus: 0.2,
     statPerGene: 0.35,
     eliteFirst: 20, eliteEvery: 25, eliteWarn: 1.5,   // 돌격조는 20초에 처음, 그 뒤 25초마다
-    postHits: 2, postRange: 4.2, postDmg: 4, postCd: 1.4,   // 초소: 폭발 두 번(불안정도가 찬 폭발은 한 번)에 부서진다
-    bossHp: 700, bossBlastCap: 0.35,                   // 대장: 폭발 한 번에 최대 체력의 35%까지만
+    postHits: 2, postRange: 4.2, postDmg: 3, postCd: 1.5,   // 초소: 폭발 두 번(불안정도가 찬 폭발은 한 번)에 부서진다
+    bossHp: 600, bossBlastCap: 0.35,                   // 대장: 폭발 한 번에 최대 체력의 35%까지만
     districtScale: 0.25,                               // 구역이 하나 오를 때마다 적의 체력과 피해가 이만큼 더
     eliteHp: 260, eliteHpStep: 0.5,
-    chargeSpeed: 13, chargeDmg: 30, eliteDmg: 14, rechargeEvery: 7, aimTime: 1.2,
+    chargeSpeed: 13, chargeDmg: 25, eliteDmg: 12, rechargeEvery: 7, aimTime: 1.2,
     spawnStart: 1.8, spawnEnd: 1.05, foeGradeMul: 1.35,
   };
   // 주 유전자별 기본 능력(유전자 1개 기준)
