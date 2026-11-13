@@ -131,12 +131,12 @@
     moltBonus: 0.1, mutantBonus: 0.2,
     statPerGene: 0.35,
     eliteFirst: 20, eliteEvery: 25, eliteWarn: 1.5,   // 돌격조는 20초에 처음, 그 뒤 25초마다
-    postHits: 2, postRange: 5.5, postDmg: 4, postCd: 1.4,   // 초소: 폭발 두 번(불안정도가 찬 폭발은 한 번)에 부서진다
+    postHits: 2, postRange: 4.2, postDmg: 4, postCd: 1.4,   // 초소: 폭발 두 번(불안정도가 찬 폭발은 한 번)에 부서진다
     bossHp: 700, bossBlastCap: 0.35,                   // 대장: 폭발 한 번에 최대 체력의 35%까지만
     districtScale: 0.25,                               // 구역이 하나 오를 때마다 적의 체력과 피해가 이만큼 더
     eliteHp: 260, eliteHpStep: 0.5,
     chargeSpeed: 13, chargeDmg: 30, eliteDmg: 14, rechargeEvery: 7, aimTime: 1.2,
-    spawnStart: 1.5, spawnEnd: 0.8, foeGradeMul: 1.35,
+    spawnStart: 1.8, spawnEnd: 1.05, foeGradeMul: 1.35,
   };
   // 주 유전자별 기본 능력(유전자 1개 기준)
   const BASE = {
@@ -210,7 +210,8 @@
     return u;
   }
 
-  const POST_SPOTS = [[4, 5], [14, 5], [9, 10.5], [3.5, 20], [14.5, 22], [9, 26.5]];
+  // 초소 자리: 시작 지점(아래쪽)에서 먼 순서. 가장 가까운 것도 사격 범위의 두 배쯤 떨어져 있다.
+  const POST_SPOTS = [[4, 16], [14, 13], [8, 7.5], [15, 4.5], [3, 3.5], [9, 1.5]];
   function aceOf(u) { return { genes: Object.assign({}, u.genes), main: u.main, molts: u.molts, mutant: u.mutant }; }
 
   // opts.district: 몇 번째 구역인지(1부터). opts.ace: 지난 구역에서 데려온 키메라.
@@ -219,7 +220,7 @@
     const district = Math.max(1, opts.district || 1);
     const g = {
       W, H, DURATION, t: 0, over: null, rand: mulberry(seed || 1), nextUid: 1,
-      necro: { x: W / 2, y: H * 0.6, hp: 100, maxHp: 100, r: 0.5, hurt: 0 },
+      necro: { x: W / 2, y: H - 3.5, hp: 100, maxHp: 100, r: 0.5, hurt: 0 },
       units: [], enemies: [], souls: [], hearts: [], fx: [], events: [],
       pinned: null,             // 먹일 대상으로 찍어 둔 키메라(없으면 혼에 가장 가까운 키메라)
       link: null,               // 지금 연결된 혼과 키메라(화면의 예고선)
@@ -237,8 +238,8 @@
       g.units.push(u);
     } else g.units.push(makeUnit(g, { beast: 1 }, 'beast', g.necro.x, g.necro.y + 1.5));
     // 봉쇄 초소: 구역이 오를수록 많아진다(셋에서 다섯까지)
-    const spots = POST_SPOTS.slice();
-    for (let i = spots.length - 1; i > 0; i--) { const j = Math.floor(g.rand() * (i + 1)); const t = spots[i]; spots[i] = spots[j]; spots[j] = t; }
+    // 구역은 아래에서 시작해 위로 밀고 올라간다. 가까운 초소부터 놓는다.
+    const spots = POST_SPOTS;
     const count = Math.min(5, 2 + district);
     for (let i = 0; i < count; i++) g.posts.push({ post: true, x: spots[i][0], y: spots[i][1], r: 0.9, hp: CFG.postHits, maxHp: CFG.postHits, cd: 1, dead: false });
     g.postsTotal = count;

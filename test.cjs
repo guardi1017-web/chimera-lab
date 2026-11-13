@@ -199,7 +199,8 @@ const ok = (c, msg) => { if (!c) throw new Error(msg); };
   {
     const g0 = S.newGame(3);
     eq(g0.posts.length, 3, '1구역의 초소는 셋'); eq(S.newGame(3, { district: 4 }).posts.length, 5, '구역이 오르면 초소가 늘어 다섯까지');
-    ok(g0.posts.every(p => Math.hypot(p.x - g0.necro.x, p.y - g0.necro.y) > 5), '초소는 시작 지점에서 떨어져 있다');
+    for (const d of [1, 2, 3, 4]) { const gd = S.newGame(3, { district: d }); ok(gd.posts.every(p => Math.hypot(p.x - gd.necro.x, p.y - gd.necro.y) > C.postRange + 3), d + '구역: 시작하자마자 초소에 맞지 않는다'); }
+    { const gq = S.newGame(3); gq.spawnT = 1e9; gq.eliteIdx = 99; for (let i = 0; i < 300; i++) S.step(gq, 1 / 60, { x: 0, y: 0 }); eq(gq.necro.hp, 100, '가만히 서 있어도 초소에 맞지 않는다'); }
     // 초소는 폭발로만 부서진다: 불안정도가 낮은 폭발은 두 번, 찬 폭발은 한 번
     const blastAt = (g, post, inst) => {
       g.feedT = 0; g.souls.push({ x: g.necro.x, y: g.necro.y, type: 'beast', q: 1, ttl: 5 }); S.step(g, 1 / 60, { x: 0, y: 0 });
@@ -264,7 +265,7 @@ function bot(g, policy, mem) {
       }
     }
   }
-  x += (g.W / 2 - n.x) * 0.05; y += (g.H / 2 - n.y) * 0.05;
+  x += (g.W / 2 - n.x) * 0.05; y += (g.H - 7 - n.y) * 0.05;   // 할 일이 없으면 시작 지점 근처(초소 사격 밖)에 머문다
   return { x, y };
 }
 function run(seed, policy) {
