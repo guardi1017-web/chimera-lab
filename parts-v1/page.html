@@ -1,0 +1,90 @@
+<title>키메라 실험실</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=Gowun+Dodum&display=swap">
+<style>
+  /* 배치: 화면 전체가 판이다. 글은 시작과 끝의 덮개에만 있고, 판 중에는 위쪽 띠 하나만 남는다. */
+  :root {
+    --ground: #15121c;   /* 밤의 실험실 바닥 */
+    --grid: #2a2536;
+    --ink: #ece4d4;      /* 양피지 */
+    --dim: #8f869c;
+    --necro: #a077ff;    /* 네크로맨서 */
+    --bone: #d8cfbb;     /* 키메라의 맨몸 */
+    --wolf: #e8893a;
+    --knight: #6fa6dc;
+    --archer: #83c06b;
+    --danger: #e5524c;
+    --veil: rgba(21, 18, 28, 0.88);
+    --font-display: "Gowun Batang", "Nanum Myeongjo", serif;
+    --font-body: "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    color-scheme: dark;
+  }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--ground); color: var(--ink); font-family: var(--font-body); font-size: 16px; line-height: 1.55; overflow: hidden; }
+  #stage { position: relative; height: 100%; }
+  #game { display: block; width: 100%; height: 100%; touch-action: none; }
+  .veil {
+    position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; gap: 20px;
+    background: var(--veil);
+    padding-block: 24px;
+    padding-left: max(24px, env(safe-area-inset-left, 0px));
+    padding-right: max(24px, env(safe-area-inset-right, 0px));
+    overflow-y: auto;
+  }
+  .veil > * { max-width: 26rem; width: 100%; margin-inline: auto; }
+  h1, h2 { font-family: var(--font-display); font-weight: 700; margin: 0; text-wrap: balance; }
+  h1 { font-size: 2.25rem; }
+  h2 { font-size: 2rem; }
+  p { margin: 0; }
+  .how { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+  .how li { display: grid; grid-template-columns: 1.5rem 1fr; gap: 12px; align-items: center; }
+  .swatch { width: 1.1rem; height: 1.1rem; justify-self: center; }
+  .swatch.wolf { background: var(--wolf); clip-path: polygon(100% 50%, 0 100%, 25% 50%, 0 0); }
+  .swatch.knight { background: var(--knight); }
+  .swatch.archer { background: var(--archer); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+  .note { color: var(--dim); }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 20px; margin: 0; font-variant-numeric: tabular-nums; }
+  dt { color: var(--dim); }
+  dd { margin: 0; }
+  #endChimeras { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+  button {
+    font: inherit; font-family: var(--font-display); font-size: 1.25rem; color: var(--ground); background: var(--ink);
+    border: 0; padding: 14px 20px; cursor: pointer;
+  }
+  button:focus-visible { outline: 3px solid var(--necro); outline-offset: 3px; }
+</style>
+
+<div id="stage">
+  <canvas id="game" aria-label="키메라 실험 판"></canvas>
+
+  <section class="veil" id="title">
+    <h1>키메라 실험실</h1>
+    <p>네크로맨서를 움직이면 키메라 셋이 따라와 알아서 싸운다. 적이 떨어뜨린 부위를 밟으면 키메라에게 붙는다. 90초를 버텨라.</p>
+    <ul class="how">
+      <li><span class="swatch wolf"></span><span>늑대의 부위는 빠르게 만든다</span></li>
+      <li><span class="swatch knight"></span><span>기사의 부위는 단단하게 만든다</span></li>
+      <li><span class="swatch archer"></span><span>궁수의 부위는 멀리 닿게 만든다</span></li>
+    </ul>
+    <p class="note">세모는 머리, 막대는 팔, 점 둘은 다리. 키메라를 톡 누르면 그 키메라가 다음 부위를 받는다. 다시 누르면 풀린다.</p>
+    <button id="startBtn" type="button">시작</button>
+  </section>
+
+  <section class="veil" id="end" hidden>
+    <h2 id="endTitle">쓰러졌다</h2>
+    <dl>
+      <dt>버틴 시간</dt><dd id="endTime">0초</dd>
+      <dt>잡은 적</dt><dd id="endKills">0마리</dd>
+      <dt>붙인 부위</dt><dd id="endParts">0개</dd>
+    </dl>
+    <ul id="endChimeras"></ul>
+    <button id="againBtn" type="button">한 판 더</button>
+  </section>
+</div>
+
+<script>
+/*__SIM__*/
+</script>
+<script>
+/*__RENDER__*/
+</script>

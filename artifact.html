@@ -1,0 +1,1092 @@
+<title>키메라 실험실</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=Gowun+Dodum&display=swap">
+<style>
+  /* 배치: 화면 전체가 판이다. 글은 시작과 끝의 덮개에만 있고, 판 중에는 위쪽 띠 하나만 남는다. */
+  :root {
+    --ground: #15121c;   /* 밤의 실험실 바닥 */
+    --grid: #2a2536;
+    --ink: #ece4d4;      /* 양피지 */
+    --dim: #8f869c;
+    --necro: #a077ff;    /* 네크로맨서, 연결선 */
+    --bone: #d8cfbb;     /* 키메라의 몸 */
+    --beast: #e8893a;    /* 맹수 유전자 */
+    --armor: #6fa6dc;    /* 갑주 유전자 */
+    --ranger: #83c06b;   /* 사수 유전자 */
+    --danger: #e5524c;   /* 불안정도, 돌격병 */
+    --great: #f2d35e;    /* 순혈 코어, 계승 */
+    --veil: rgba(21, 18, 28, 0.92);
+    --font-display: "Gowun Batang", "Nanum Myeongjo", serif;
+    --font-body: "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    color-scheme: dark;
+  }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--ground); color: var(--ink); font-family: var(--font-body); font-size: 16px; line-height: 1.55; overflow: hidden; }
+  #stage { position: relative; height: 100%; }
+  #game { display: block; width: 100%; height: 100%; touch-action: none; }
+  .veil {
+    position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; gap: 14px;
+    background: var(--veil);
+    padding-block: 24px;
+    padding-left: max(24px, env(safe-area-inset-left, 0px));
+    padding-right: max(24px, env(safe-area-inset-right, 0px));
+    overflow-y: auto;
+  }
+  .veil > * { max-width: 26rem; width: 100%; margin-inline: auto; }
+  h1, h2 { font-family: var(--font-display); font-weight: 700; margin: 0; text-wrap: balance; }
+  h1 { font-size: 2.25rem; }
+  h2 { font-size: 2rem; }
+  p { margin: 0; }
+  .how { display: grid; gap: 9px; margin: 0; padding: 0; list-style: none; }
+  .how li { display: grid; grid-template-columns: 1.5rem 1fr; gap: 12px; align-items: baseline; }
+  .step { font-family: var(--font-display); color: var(--necro); text-align: center; }
+  .hot { color: var(--danger); }
+  .gold { color: var(--great); }
+  .kinds { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; padding: 0; list-style: none; color: var(--dim); }
+  .kinds li { display: flex; gap: 8px; align-items: center; }
+  .swatch { width: 1rem; height: 1rem; flex: none; }
+  .swatch.beast { background: var(--beast); clip-path: polygon(100% 50%, 0 100%, 0 0); }
+  .swatch.armor { background: var(--armor); }
+  .swatch.ranger { background: var(--ranger); border-radius: 50%; }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 20px; margin: 0; font-variant-numeric: tabular-nums; }
+  dt { color: var(--dim); }
+  dd { margin: 0; }
+  button {
+    font: inherit; font-family: var(--font-display); font-size: 1.25rem; color: var(--ground); background: var(--ink);
+    border: 0; padding: 14px 20px; cursor: pointer;
+  }
+  button:focus-visible { outline: 3px solid var(--necro); outline-offset: 3px; }
+</style>
+
+<div id="stage">
+  <canvas id="game" aria-label="키메라 실험 판"></canvas>
+
+  <section class="veil" id="title">
+    <h1>키메라 실험실</h1>
+    <p>네크로맨서는 직접 싸우지 못한다. 키메라 셋이 대신 싸운다. 90초를 버텨라.</p>
+    <ol class="how">
+      <li><span class="step">1</span><span>누르고 끌면 움직인다. 적이 남긴 혼을 밟으면 키메라로 되살아난다.</span></li>
+      <li><span class="step">2</span><span>셋이 다 차면, 혼을 밟을 때 연결선이 닿은 키메라가 그 혼을 먹는다. 유전자가 쌓여 몸이 커지고 기술이 바뀐다.</span></li>
+      <li><span class="step">3</span><span>먹을수록 <span class="hot">불안정도</span>가 오른다. 80%부터 광기에 들고, 다 차면 적진에 뛰어들어 터진다. 화면을 두 번 톡톡 치면 바로 터뜨린다.</span></li>
+      <li><span class="step">4</span><span>터진 자리의 <span class="hot">심장</span>을 밟으면 유전자를 물려받은 새 키메라가 깨어난다. 빨리 주울수록 온전하다.</span></li>
+      <li><span class="step">5</span><span>20초, 45초, 70초에 돌격병이 붉은 길을 예고하고 달려든다. 불안정도가 찬 키메라를 터뜨리면 한 방에 잡는다. 잡으면 남는 <span class="gold">순혈 코어</span>는 불안정도를 0으로 식힌다.</span></li>
+    </ol>
+    <ul class="kinds">
+      <li><span class="swatch beast"></span>맹수: 뛰어들어 문다</li>
+      <li><span class="swatch armor"></span>갑주: 막고 밀친다</li>
+      <li><span class="swatch ranger"></span>사수: 멀리서 쏜다</li>
+    </ul>
+    <button id="startBtn" type="button">시작</button>
+  </section>
+
+  <section class="veil" id="end" hidden>
+    <h2 id="endTitle">쓰러졌다</h2>
+    <dl>
+      <dt>버틴 시간</dt><dd id="endTime">0초</dd>
+      <dt>잡은 적</dt><dd id="endKills">0마리</dd>
+      <dt>먹인 혼</dt><dd id="endFeed">0번</dd>
+      <dt>탈피</dt><dd id="endMolt">0번</dd>
+      <dt>가장 높은 등급</dt><dd id="endLevel">1등급</dd>
+    </dl>
+    <button id="againBtn" type="button">한 판 더</button>
+  </section>
+</div>
+
+<script>
+// 키메라 실험 6차: 유전자 누적 + 불안정도 탈피(자폭 뒤 심장 계승) + 돌격병.
+// 규칙만 담는다(화면·DOM 없음). 같은 시드면 같은 판이 나온다.
+(function (root) {
+  'use strict';
+  const W = 18, H = 30, DURATION = 90, MAX_LEVEL = 10;
+  const KINDS = ['beast', 'armor', 'ranger'];
+
+  // 밸런스 값은 여기 모은다.
+  const CFG = {
+    maxUnits: 3,
+    absorbRange: 3.2,          // 자리가 찼을 때 이 안의 혼에 다가가면 느려지고 연결선이 생긴다
+    pickRadius: 1.1,
+    slowScale: 0.25, slowMax: 1.6, slowRecharge: 0.6,   // 느려짐은 실제 시간으로 최대 1.6초, 벗어나 있으면 다시 찬다
+    // 혼의 품질: 1 불량(잡몹), 2 신선(중형), 3 순혈 코어(돌격병)
+    soul: {
+      1: { gene: 1, inst: 30, heal: 0 },
+      2: { gene: 2, inst: 15, heal: 0.5 },
+      3: { gene: 3, inst: -1, heal: 1 },   // inst -1 = 불안정도를 0으로 식힌다
+    },
+    soulTtl: 10, soulCap: 12,
+    frenzyAt: 80, frenzyMul: 1.5,
+    blastRadius: 3.2, blastEliteFrac: 0.45, blastKnock: 3, blastStun: 1.2,
+    rushSpeed: 14, rushMax: 1.0,
+    feedGap: 0.35, feedGapAfterRebirth: 0.8,           // 흡수 사이의 실제 시간 간격(초). 혼 더미 위에서 한꺼번에 먹지 않게
+    heartTtl: 12, heartFullFor: 4, heartMinKeep: 0.8,   // 심장은 4초 안에 주우면 유전자 100%, 12초째에는 80%
+    moltBonus: 0.1, mutantBonus: 0.2,
+    statPerGene: 0.35,
+    eliteTimes: [20, 45, 70], eliteWarn: 1.5, eliteHp: 260, eliteHpStep: 0.5,
+    chargeSpeed: 13, chargeDmg: 30, eliteDmg: 14, rechargeEvery: 7, aimTime: 1.2,
+    spawnStart: 1.5, spawnEnd: 0.8, foeGradeMul: 1.35,
+  };
+  // 주 유전자별 기본 능력(유전자 1개 기준)
+  const BASE = {
+    beast:  { hp: 50,  dmg: 7, cd: 0.5, spd: 6.6, range: 0.3, taken: 1,   skillCd: 4 },
+    armor:  { hp: 120, dmg: 6, cd: 0.9, spd: 5.6, range: 0.3, taken: 0.7, skillCd: 0 },   // 갑주의 기술은 맞은 횟수로 터진다
+    ranger: { hp: 42,  dmg: 7, cd: 0.9, spd: 5.8, range: 5.5, taken: 1,   skillCd: 3.5 },
+  };
+  const FOE = {
+    beast:  { hp: 18, dmg: 4, cd: 0.7, spd: 4.5, range: 0.25, r: 0.42 },
+    armor:  { hp: 75, dmg: 8, cd: 1.2, spd: 2.2, range: 0.3,  r: 0.6 },
+    ranger: { hp: 18, dmg: 5, cd: 1.8, spd: 2.8, range: 5.5,  r: 0.42 },
+  };
+  const NECRO_SPEED = 5.0, LEASH = 6.5;
+
+  function mulberry(seed) {
+    let s = seed >>> 0;
+    return function () {
+      s = (s + 0x6D2B79F5) >>> 0;
+      let t = s;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+  function geneTotal(u) { return u.genes.beast + u.genes.armor + u.genes.ranger; }
+  // 등급: 유전자 2개에 2, 5개에 3, 10개에 4 … 82개에 10. 높을수록 많이 먹어야 오른다.
+  function levelOf(u) { return Math.min(MAX_LEVEL, 1 + Math.floor(Math.sqrt(geneTotal(u) - 1))); }
+  function radiusOf(u) { return 0.5 + 0.09 * (levelOf(u) - 1); }
+  function isFrenzy(u) { return u.inst >= CFG.frenzyAt; }
+  // 주 유전자는 가장 많은 것. 같으면 지금의 주 유전자를 유지한다.
+  function refreshMain(u) {
+    for (const k of KINDS) if (u.genes[k] > u.genes[u.main]) u.main = k;
+  }
+
+  // 능력과 기술은 모두 유전자 개수에서 나온다. 주 유전자가 몸과 기술을, 섞인 유전자가 그 변형을 정한다.
+  function stats(u) {
+    const g = u.genes, b = BASE[u.main], total = geneTotal(u);
+    const sb = u.main === 'beast' ? 0 : g.beast, sa = u.main === 'armor' ? 0 : g.armor, sr = u.main === 'ranger' ? 0 : g.ranger;
+    const m = (1 + CFG.statPerGene * (total - 1)) * (1 + CFG.moltBonus * u.molts) * (u.mutant ? 1 + CFG.mutantBonus : 1);
+    const fz = isFrenzy(u) ? CFG.frenzyMul : 1;
+    return {
+      level: levelOf(u), total,
+      maxHp: b.hp * m * (1 + 0.15 * sa),
+      dmg: b.dmg * m * fz,
+      cd: b.cd / ((1 + 0.06 * sb) * fz),
+      spd: b.spd * (1 + 0.06 * sb),
+      range: b.range, ranged: u.main === 'ranger',
+      taken: b.taken / (1 + 0.12 * sa),
+      taunt: u.main === 'armor',
+      lifesteal: Math.min(0.3, 0.05 * sb),             // 맹수 섞임: 흡혈
+      skillCd: b.skillCd / (1 + 0.12 * sb),            // 맹수 섞임: 기술이 빨리 돈다
+      knock: (u.main === 'armor' ? 1.2 : 0) + Math.min(2.5, 0.5 * sa),   // 갑주 섞임: 밀치기
+      stun: sa >= 2 ? 0.3 : 0,
+      shards: Math.min(8, sr),                         // 사수 섞임: 기술을 쓸 때 사방으로 파편
+    };
+  }
+
+  function makeUnit(g, genes, main, x, y) {
+    const u = {
+      uid: g.nextUid++, x, y, genes: { beast: genes.beast || 0, armor: genes.armor || 0, ranger: genes.ranger || 0 }, main,
+      inst: 0, molts: 0, mutant: false, hp: 0, r: 0.5, cd: 0, skillT: 2, hitsTaken: 0, down: 0, pop: 0.5, face: -Math.PI / 2,
+      state: 'ok', rushT: 0, tx: x, ty: y,
+    };
+    refreshMain(u);
+    u.r = radiusOf(u);
+    u.hp = stats(u).maxHp;
+    g.maxLevel = Math.max(g.maxLevel, levelOf(u));
+    return u;
+  }
+
+  function newGame(seed) {
+    const g = {
+      W, H, DURATION, t: 0, over: null, rand: mulberry(seed || 1), nextUid: 1,
+      necro: { x: W / 2, y: H * 0.6, hp: 100, maxHp: 100, r: 0.5, hurt: 0 },
+      units: [], enemies: [], souls: [], hearts: [], fx: [], events: [],
+      pinned: null,             // 먹일 대상으로 찍어 둔 키메라(없으면 혼에 가장 가까운 키메라)
+      link: null,               // 지금 연결된 혼과 키메라(화면의 예고선)
+      slowing: false, slowLeft: CFG.slowMax,
+      feedT: 0,                 // 0이 되어야 다음 혼을 먹일 수 있다(실제 시간)
+      eliteIdx: 0, spawnT: 1.2,
+      kills: 0, raised: 0, absorbs: 0, molts: 0, rebirths: 0, eliteKills: 0, blocks: 0, maxLevel: 1,
+    };
+    // 네크로맨서는 직접 싸우지 못한다. 맹수 하나를 데리고 시작한다.
+    g.units.push(makeUnit(g, { beast: 1 }, 'beast', g.necro.x, g.necro.y + 1.5));
+    return g;
+  }
+
+  function moveToward(o, tx, ty, d) {
+    const dx = tx - o.x, dy = ty - o.y, m = Math.hypot(dx, dy);
+    if (m < 1e-4) return;
+    const k = Math.min(1, d / m);
+    o.x += dx * k; o.y += dy * k;
+    o.face = Math.atan2(dy, dx);
+  }
+  function knock(e, fromX, fromY, d) {
+    const a = Math.atan2(e.y - fromY, e.x - fromX);
+    e.x = clamp(e.x + Math.cos(a) * d, 0.4, W - 0.4);
+    e.y = clamp(e.y + Math.sin(a) * d, 0.4, H - 0.4);
+  }
+  function edgePoint(g, minDist) {
+    let x = 0, y = 0;
+    for (let tries = 0; tries < 8; tries++) {
+      const side = Math.floor(g.rand() * 4), u = g.rand();
+      x = side === 0 ? 0.6 : side === 1 ? W - 0.6 : u * W;
+      y = side === 2 ? 0.6 : side === 3 ? H - 0.6 : u * H;
+      if (Math.hypot(x - g.necro.x, y - g.necro.y) > minDist) break;
+    }
+    return { x, y };
+  }
+
+  function spawn(g, dt) {
+    // 돌격병: 정해진 시각의 1.5초 전에 경고와 함께 화면 끝에 나타난다
+    if (g.eliteIdx < CFG.eliteTimes.length && g.t >= CFG.eliteTimes[g.eliteIdx] - CFG.eliteWarn) {
+      const p = edgePoint(g, 9), hp = CFG.eliteHp * (1 + CFG.eliteHpStep * g.eliteIdx);
+      g.enemies.push({
+        elite: true, arch: KINDS[g.eliteIdx % 3], g: 3, x: p.x, y: p.y, hp, maxHp: hp, dmg: CFG.eliteDmg, r: 0.95,
+        cd: 0.5, face: 0, stun: 0, bleed: 0, bleedT: 0,
+        mode: 'warn', modeT: CFG.eliteWarn, dx: 0, dy: 0, run: 0, runMax: 0, hitNecro: false, hitUnits: {}, rechargeT: CFG.rechargeEvery,
+      });
+      g.eliteIdx++;
+      g.events.push('warn');
+    }
+    g.spawnT -= dt;
+    if (g.spawnT > 0 || g.enemies.length >= 36) return;
+    const k = g.t / DURATION, r = g.rand(), r2 = g.rand();
+    g.spawnT = (CFG.spawnStart + (CFG.spawnEnd - CFG.spawnStart) * k) * (0.8 + 0.4 * g.rand());
+    let arch = 'beast';
+    if (g.t >= 10 && g.t < 35) arch = r < 0.6 ? 'beast' : 'ranger';
+    else if (g.t >= 35) arch = r < 0.42 ? 'beast' : r < 0.7 ? 'ranger' : 'armor';
+    let grade = 1;
+    if (g.t >= 18) grade = r2 < (g.t < 50 ? 0.7 : 0.5) ? 1 : 2;
+    const n = arch === 'beast' && grade === 1 && g.t > 30 ? 2 : 1;
+    for (let i = 0; i < n; i++) {
+      const p = edgePoint(g, 7), f = FOE[arch], m = Math.pow(CFG.foeGradeMul, grade - 1), hp = f.hp * m * (grade === 2 ? 1.6 : 1);
+      g.enemies.push({ elite: false, arch, g: grade, x: p.x, y: p.y, hp, maxHp: hp, dmg: f.dmg * m, r: f.r + 0.12 * (grade - 1), cd: 0.4, face: 0, stun: 0, bleed: 0, bleedT: 0 });
+    }
+  }
+
+  function killEnemy(g, e) {
+    if (e.dead) return;
+    e.dead = true; e.hp = 0;
+    g.kills++;
+    if (e.elite) { g.eliteKills++; g.events.push('elitedown'); }
+    g.fx.push({ k: 'die', x: e.x, y: e.y, arch: e.arch, big: e.elite, t: 0.35 });
+    const q = e.elite ? 3 : e.g >= 2 ? 2 : 1;
+    // 순혈 코어는 개수 제한과 상관없이 반드시 남는다
+    if (q === 3 || g.souls.length < CFG.soulCap) {
+      g.souls.push({ x: clamp(e.x, 0.8, W - 0.8), y: clamp(e.y, 0.8, H - 0.8), type: e.arch, q, ttl: q === 3 ? CFG.soulTtl * 1.5 : CFG.soulTtl });
+    }
+  }
+  function damageEnemy(g, e, dmg, u, s) {
+    if (e.dead) return;
+    e.hp -= dmg;
+    if (u && s && s.lifesteal > 0 && u.down <= 0) u.hp = Math.min(s.maxHp, u.hp + dmg * s.lifesteal);
+    if (e.hp <= 0) killEnemy(g, e);
+  }
+  function hurtUnit(g, u, dmg) {
+    if (u.state !== 'ok' || u.down > 0) return;
+    const s = stats(u);
+    if (s.taken < 0.99) g.fx.push({ k: 'block', x: u.x, y: u.y, face: u.face, r: u.r, t: 0.18 });
+    u.hp -= dmg * s.taken;
+    u.hitsTaken++;
+    if (u.hp <= 0) { u.hp = 0; u.down = 6; g.fx.push({ k: 'down', x: u.x, y: u.y, t: 0.5 }); }
+  }
+
+  // 사수 섞임: 기술을 쓸 때 가까운 적들에게 파편이 날아간다
+  function shards(g, u, s) {
+    if (s.shards <= 0) return;
+    const near = g.enemies.filter(e => !e.dead && dist(e, u) < 4.5).sort((a, b) => dist(a, u) - dist(b, u));
+    for (let i = 0; i < s.shards; i++) {
+      const a = i * Math.PI * 2 / s.shards, e = near.length ? near[i % near.length] : null;
+      g.fx.push({ k: 'shot', x: u.x, y: u.y, tx: e ? e.x : u.x + Math.cos(a) * 3, ty: e ? e.y : u.y + Math.sin(a) * 3, arch: 'ranger', t: 0.2 });
+      if (e) damageEnemy(g, e, s.dmg * 0.5, u, s);
+    }
+  }
+  function applyControl(e, u, s) {
+    if (e.dead) return;
+    if (s.knock > 0 && !(e.elite && e.mode === 'charge')) knock(e, u.x, u.y, e.elite ? s.knock * 0.4 : s.knock);
+    if (s.stun > 0) e.stun = Math.max(e.stun, e.elite ? s.stun * 0.5 : s.stun);
+  }
+
+  // 주력 기술. 주 유전자가 무엇이냐에 따라 다르다.
+  function useSkill(g, u, s, best, bd) {
+    if (u.main === 'beast') {
+      if (!best || bd > 6) return false;
+      // 피의 도약: 적에게 뛰어들어 물어뜯고 출혈을 남긴다
+      const a = Math.atan2(best.y - u.y, best.x - u.x), fx0 = { x: u.x, y: u.y };
+      u.x = best.x - Math.cos(a) * (best.r + u.r) * 0.9; u.y = best.y - Math.sin(a) * (best.r + u.r) * 0.9; u.face = a;
+      g.fx.push({ k: 'leap', x: fx0.x, y: fx0.y, tx: u.x, ty: u.y, t: 0.25 });
+      best.bleed = Math.max(best.bleed, s.dmg * 0.5); best.bleedT = 3;
+      damageEnemy(g, best, s.dmg * 2.5, u, s);
+      applyControl(best, u, s); shards(g, u, s);
+      return true;
+    }
+    if (u.main === 'ranger') {
+      if (!best || bd > 6.5) return false;
+      // 일제 사격: 바라보는 쪽 부채꼴로 뼈 화살을 연달아 쏜다
+      const a = Math.atan2(best.y - u.y, best.x - u.x);
+      const cone = g.enemies.filter(e => {
+        if (e.dead || dist(e, u) > 7) return false;
+        let d = Math.atan2(e.y - u.y, e.x - u.x) - a; d = Math.atan2(Math.sin(d), Math.cos(d));
+        return Math.abs(d) < 0.7;
+      }).sort((p, q) => dist(p, u) - dist(q, u));
+      for (let i = 0; i < 5; i++) {
+        const e = cone.length ? cone[i % cone.length] : null, off = (i - 2) * 0.28;
+        g.fx.push({ k: 'shot', x: u.x, y: u.y, tx: e ? e.x : u.x + Math.cos(a + off) * 6, ty: e ? e.y : u.y + Math.sin(a + off) * 6, arch: 'ranger', t: 0.22 });
+        if (e) { damageEnemy(g, e, s.dmg * 0.8, u, s); applyControl(e, u, s); }
+      }
+      g.fx.push({ k: 'volley', x: u.x, y: u.y, face: a, t: 0.25 });
+      return true;
+    }
+    return false;
+  }
+  // 고통의 반격(갑주): 네 번 맞으면 둘레에 충격파가 터진다
+  function shockwave(g, u, s) {
+    u.hitsTaken = 0;
+    const R = 2.6 + u.r;
+    for (const e of g.enemies) {
+      if (e.dead || dist(e, u) > R) continue;
+      damageEnemy(g, e, s.dmg * 1.5, u, s);
+      applyControl(e, u, s);
+    }
+    g.fx.push({ k: 'wave', x: u.x, y: u.y, r: R, t: 0.3 });
+    shards(g, u, s);
+  }
+
+  // 혼을 먹인다: 유전자가 쌓이고 불안정도가 오른다(순혈 코어는 0으로 식힌다).
+  function absorb(g, u, soul) {
+    const c = CFG.soul[soul.q], before = stats(u).maxHp, wasFrenzy = isFrenzy(u);
+    u.genes[soul.type] += c.gene;
+    refreshMain(u);
+    if (c.inst < 0) { u.inst = 0; u.mutant = true; } else u.inst += c.inst;
+    const after = stats(u).maxHp;
+    if (u.down > 0 && c.heal > 0) u.down = 0;
+    u.hp = Math.min(after, Math.max(u.hp, u.hp + (after - before)) + after * c.heal);
+    u.r = radiusOf(u); u.pop = 0.5;
+    g.absorbs++;
+    g.maxLevel = Math.max(g.maxLevel, levelOf(u));
+    g.fx.push({ k: 'absorb', x: soul.x, y: soul.y, uid: u.uid, type: soul.type, q: soul.q, t: 0.35 });
+    g.events.push(soul.q === 3 ? 'purify' : 'absorb');
+    if (!wasFrenzy && isFrenzy(u)) g.events.push('frenzy');
+    if (u.inst >= 100) startMolt(g, u);
+  }
+
+  // 탈피: 가장 붐비는 적 무리로 뛰어들어 터진다.
+  function startMolt(g, u) {
+    if (u.state !== 'ok') return false;
+    let best = null, score = 0;
+    for (const e of g.enemies) {
+      if (e.dead || dist(e, u) > 10) continue;
+      let n = 0;
+      for (const o of g.enemies) if (!o.dead && dist(o, e) < CFG.blastRadius) n += o.elite ? 4 : 1;
+      if (n > score) { score = n; best = e; }
+    }
+    u.state = 'rush'; u.rushT = 0; u.down = 0; u.target = best;
+    u.charge = Math.min(1, u.inst / CFG.frenzyAt);   // 폭발의 세기는 터지는 순간의 불안정도로 정해진다
+    u.tx = best ? best.x : u.x; u.ty = best ? best.y : u.y;
+    g.events.push('rush');
+    return true;
+  }
+  function explode(g, u) {
+    const eliteFrac = CFG.blastEliteFrac + (1 - CFG.blastEliteFrac) * (u.charge || 0);
+    for (const e of g.enemies) {
+      if (e.dead || dist(e, u) > CFG.blastRadius + e.r) continue;
+      if (e.elite) {
+        if (e.mode !== 'charge') knock(e, u.x, u.y, CFG.blastKnock);
+        e.stun = Math.max(e.stun, CFG.blastStun);
+        if (e.mode === 'charge' || e.mode === 'aim' || e.mode === 'warn') { e.mode = 'chase'; e.rechargeT = CFG.rechargeEvery; }
+        damageEnemy(g, e, e.maxHp * eliteFrac + 0.01, null, null);
+      } else killEnemy(g, e);
+    }
+    g.hearts.push({ x: clamp(u.x, 0.8, W - 0.8), y: clamp(u.y, 0.8, H - 0.8), genes: Object.assign({}, u.genes), main: u.main, molts: u.molts, mutant: u.mutant, age: 0, ttl: CFG.heartTtl });
+    g.units = g.units.filter(x => x !== u);
+    if (g.pinned === u.uid) g.pinned = null;
+    g.molts++;
+    g.fx.push({ k: 'boom', x: u.x, y: u.y, r: CFG.blastRadius, t: 0.5 });
+    g.events.push('boom');
+  }
+  // 손으로 터뜨린다: 불안정도가 가장 높은(같으면 유전자가 가장 적은) 키메라가 뛰어든다.
+  function detonate(g) {
+    if (g.over) return false;
+    const c = g.units.filter(u => u.state === 'ok').sort((a, b) => (b.inst - a.inst) || (geneTotal(a) - geneTotal(b)));
+    return c.length ? startMolt(g, c[0]) : false;
+  }
+  function pin(g, uid) {
+    if (g.over || !g.units.some(u => u.uid === uid)) return null;
+    g.pinned = g.pinned === uid ? null : uid;
+    return g.pinned;
+  }
+
+  // 총량을 keep 비율로 줄이되(올림), 종류별 비율은 가능한 한 그대로 둔다.
+  function scaleGenes(genes, main, keep) {
+    const total = genes.beast + genes.armor + genes.ranger, want = Math.max(1, Math.ceil(total * keep - 1e-9));
+    const out = {}, frac = [];
+    let sum = 0;
+    for (const k of KINDS) { const v = genes[k] * want / total; out[k] = Math.floor(v + 1e-9); sum += out[k]; frac.push([v - out[k], k]); }
+    frac.sort((a, b) => b[0] - a[0] || (a[1] === main ? -1 : 1));
+    for (let i = 0; sum < want; i++, sum++) out[frac[i % 3][1]]++;
+    if (out[main] < 1) { const big = KINDS.slice().sort((a, b) => out[b] - out[a])[0]; out[big]--; out[main]++; }
+    return out;
+  }
+  function heartKeep(h) { return h.age <= CFG.heartFullFor ? 1 : Math.max(CFG.heartMinKeep, 1 - (1 - CFG.heartMinKeep) * (h.age - CFG.heartFullFor) / (CFG.heartTtl - CFG.heartFullFor)); }
+  // 심장 계승: 터지기 전의 유전자를 물려받은 새 키메라가 불안정도 0으로 깨어난다.
+  function rebirth(g, h) {
+    const genes = scaleGenes(h.genes, h.main, heartKeep(h));
+    const u = makeUnit(g, genes, h.main, h.x, h.y);
+    u.molts = h.molts + 1; u.mutant = h.mutant;
+    u.hp = stats(u).maxHp; u.pop = 0.8;
+    g.units.push(u);
+    g.rebirths++;
+    g.maxLevel = Math.max(g.maxLevel, levelOf(u));
+    g.fx.push({ k: 'rebirth', x: u.x, y: u.y, t: 0.6 });
+    g.events.push('rebirth');
+    return u;
+  }
+
+  function feedTarget(g, item) {
+    const ok = g.units.filter(u => u.state === 'ok');
+    if (!ok.length) return null;
+    const p = g.pinned === null ? null : ok.find(u => u.uid === g.pinned);
+    if (p) return p;
+    return ok.slice().sort((a, b) => dist(a, item) - dist(b, item))[0];
+  }
+
+  function step(g, dtReal, inp) {
+    if (g.over) return;
+    const n = g.necro;
+    // 네크로맨서는 느려진 동안에도 제 속도로 움직인다(느려진 세상 속에서 고를 틈이 생긴다)
+    let mx = (inp && inp.x) || 0, my = (inp && inp.y) || 0;
+    const mm = Math.hypot(mx, my);
+    if (mm > 1) { mx /= mm; my /= mm; }
+    n.x = clamp(n.x + mx * NECRO_SPEED * dtReal, 0.6, W - 0.6);
+    n.y = clamp(n.y + my * NECRO_SPEED * dtReal, 0.6, H - 0.6);
+
+    // 자리가 찼을 때: 가까운 혼(또는 심장)과 먹일 키메라를 잇고, 세상을 늦춘다
+    const full = g.units.length >= CFG.maxUnits;
+    g.link = null; g.linkItem = null;   // linkItem: 연결선이 가리키는 바로 그 혼(또는 심장). 자리가 찼을 때는 이것만 먹는다
+    if (full) {
+      let near = null, nd = CFG.absorbRange;
+      for (const it of g.hearts.concat(g.souls)) { const d = dist(it, n) - (it.genes ? 0.8 : 0); if (d < nd) { nd = d; near = it; } }
+      const tgt = near ? feedTarget(g, near) : null;
+      if (near && tgt) { g.link = { x: near.x, y: near.y, uid: tgt.uid }; g.linkItem = near; }
+    }
+    if (g.link && g.slowLeft > 0) { g.slowing = true; g.slowLeft -= dtReal; }
+    else { g.slowing = false; if (!g.link) g.slowLeft = Math.min(CFG.slowMax, g.slowLeft + CFG.slowRecharge * dtReal); }
+    const dt = dtReal * (g.slowing ? CFG.slowScale : 1);
+    g.feedT = Math.max(0, g.feedT - dtReal);
+
+    g.t += dt;
+    n.hurt = Math.max(0, n.hurt - dt);
+    spawn(g, dt);
+
+    for (const u of g.units.slice()) {
+      const idx = g.units.indexOf(u);
+      u.pop = Math.max(0, u.pop - dt);
+      if (u.state === 'rush') {
+        if (u.target && !u.target.dead) { u.tx = u.target.x; u.ty = u.target.y; }
+        u.rushT += dt;
+        moveToward(u, u.tx, u.ty, CFG.rushSpeed * dt);
+        if (Math.hypot(u.tx - u.x, u.ty - u.y) < 0.6 || u.rushT >= CFG.rushMax) explode(g, u);
+        continue;
+      }
+      if (u.down > 0) {
+        u.down -= dt;
+        if (u.down <= 0) { u.down = 0; u.hp = stats(u).maxHp * 0.5; u.pop = 0.3; }
+        continue;
+      }
+      const s = stats(u);
+      u.cd -= dt;
+      let best = null, bd = 1e9;
+      for (const e of g.enemies) {
+        if (e.dead || dist(e, n) > LEASH) continue;
+        const d = dist(e, u);
+        if (d < bd) { bd = d; best = e; }
+      }
+      if (u.main === 'armor') { if (u.hitsTaken >= 4) shockwave(g, u, s); }
+      else if (best) { u.skillT -= dt; if (u.skillT <= 0 && useSkill(g, u, s, best, bd)) { u.skillT = s.skillCd; bd = dist(best, u); } }
+      if (best && !best.dead) {
+        const reach = s.range + best.r + u.r;
+        if (bd > reach) moveToward(u, best.x, best.y, s.spd * dt);
+        else u.face = Math.atan2(best.y - u.y, best.x - u.x);
+        if (bd <= reach + 0.1 && u.cd <= 0) {
+          u.cd = s.cd;
+          if (s.ranged) g.fx.push({ k: 'shot', x: u.x, y: u.y, tx: best.x, ty: best.y, arch: 'ranger', t: 0.16 });
+          else g.fx.push({ k: 'hit', x: best.x, y: best.y, big: s.level >= 3, t: 0.15 });
+          damageEnemy(g, best, s.dmg, u, s);
+        }
+      } else if (!best) {
+        const a = Math.PI / 2 + idx * Math.PI * 2 / 3;
+        const tx = n.x + Math.cos(a) * (1.3 + u.r), ty = n.y + Math.sin(a) * (1.3 + u.r);
+        if (Math.hypot(tx - u.x, ty - u.y) > 0.15) moveToward(u, tx, ty, s.spd * dt);
+      }
+    }
+
+    for (const e of g.enemies) {
+      if (e.dead) continue;
+      if (e.bleedT > 0) { e.bleedT -= dt; damageEnemy(g, e, e.bleed * dt, null, null); if (e.dead) continue; }
+      if (e.stun > 0) { e.stun -= dt; continue; }
+      e.cd -= dt;
+      if (e.elite && e.mode !== 'chase') {
+        if (e.mode === 'warn' || e.mode === 'aim') {
+          // 예고: 네크로맨서를 겨눈 채 서 있다가 방향을 굳히고 달려든다
+          e.face = Math.atan2(n.y - e.y, n.x - e.x);
+          e.modeT -= dt;
+          if (e.modeT <= 0) {
+            const d = Math.max(0.01, dist(e, n));
+            e.dx = (n.x - e.x) / d; e.dy = (n.y - e.y) / d; e.run = 0; e.runMax = d + 5; e.hitNecro = false; e.hitUnits = {};
+            e.mode = 'charge'; g.events.push('charge');
+          }
+          continue;
+        }
+        // 돌진: 굳힌 방향으로 곧장. 2등급 이상 갑주만 받아 내고 나머지는 튕겨 나간다
+        const stepLen = CFG.chargeSpeed * dt;
+        e.x += e.dx * stepLen; e.y += e.dy * stepLen; e.run += stepLen;
+        let stopped = false;
+        for (const u of g.units) {
+          if (u.state !== 'ok' || u.down > 0 || e.hitUnits[u.uid] || dist(e, u) > e.r + u.r) continue;
+          e.hitUnits[u.uid] = true;
+          if (u.main === 'armor' && levelOf(u) >= 2) {
+            hurtUnit(g, u, CFG.chargeDmg * 0.6);
+            e.stun = 1.5; stopped = true; g.blocks++;
+            g.fx.push({ k: 'clash', x: (e.x + u.x) / 2, y: (e.y + u.y) / 2, t: 0.4 });
+            g.events.push('block');
+            break;
+          }
+          hurtUnit(g, u, CFG.chargeDmg * 0.5);
+          knock(u, e.x - e.dy * 0.01, e.y + e.dx * 0.01, 2.2);
+        }
+        if (!stopped && !e.hitNecro && dist(e, n) < e.r + n.r) {
+          e.hitNecro = true; n.hp -= CFG.chargeDmg; n.hurt = 0.4;
+          knock(n, e.x, e.y, 1.5);
+          g.events.push('necrohit');
+        }
+        const out = e.x < 0.6 || e.x > W - 0.6 || e.y < 0.6 || e.y > H - 0.6;
+        e.x = clamp(e.x, 0.6, W - 0.6); e.y = clamp(e.y, 0.6, H - 0.6);
+        if (stopped || out || e.run >= e.runMax) { e.mode = 'chase'; e.rechargeT = CFG.rechargeEvery; }
+        continue;
+      }
+      if (e.elite) {
+        e.rechargeT -= dt;
+        if (e.rechargeT <= 0) { e.mode = 'aim'; e.modeT = CFG.aimTime; g.events.push('warn'); continue; }
+      }
+      const f = e.elite ? { range: 0.35, spd: 3.2, cd: 1.1 } : FOE[e.arch];
+      // 적은 네크로맨서를 노린다. 길을 막은 키메라나 적을 끄는 갑주가 있으면 그쪽과 싸운다.
+      let tgt = n, isNecro = true, td = dist(e, n);
+      for (const u of g.units) {
+        if (u.down > 0 || u.state !== 'ok') continue;
+        const d = dist(e, u);
+        const pull = u.main === 'armor' ? 4 : (e.arch === 'ranger' && !e.elite ? 0 : u.r + e.r + 0.5);
+        if (d < pull && (isNecro || d < td)) { tgt = u; isNecro = false; td = d; }
+      }
+      const reach = f.range + tgt.r + e.r, shooter = e.arch === 'ranger' && !e.elite;
+      if (td > reach * (shooter ? 0.9 : 1)) moveToward(e, tgt.x, tgt.y, f.spd * dt);
+      else e.face = Math.atan2(tgt.y - e.y, tgt.x - e.x);
+      if (td <= reach + 0.1 && e.cd <= 0) {
+        e.cd = f.cd;
+        if (shooter) g.fx.push({ k: 'shot', x: e.x, y: e.y, tx: tgt.x, ty: tgt.y, arch: 'danger', t: 0.12 });
+        if (isNecro) { n.hp -= e.dmg; n.hurt = 0.25; }
+        else hurtUnit(g, tgt, e.dmg);
+      }
+    }
+
+    // 서로 겹치지 않게 살짝 민다(돌진 중인 돌격병과 뛰어드는 키메라는 뺀다).
+    const bodies = g.enemies.filter(e => !e.dead && !(e.elite && e.mode === 'charge')).concat(g.units.filter(u => u.down <= 0 && u.state === 'ok'));
+    for (let i = 0; i < bodies.length; i++) {
+      for (let j = i + 1; j < bodies.length; j++) {
+        const a = bodies[i], b = bodies[j];
+        const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy), min = (a.r + b.r) * 0.9;
+        if (d < min && d > 1e-4) {
+          const push = (min - d) * 0.5, ux = dx / d, uy = dy / d;
+          a.x -= ux * push; a.y -= uy * push; b.x += ux * push; b.y += uy * push;
+        }
+      }
+    }
+
+    // 심장을 혼보다 먼저 본다. 폭발로 쏟아진 혼이 계승할 자리를 먼저 차지하면 안 된다.
+    // 심장: 자리가 비었으면 계승, 찼으면 연결된 키메라가 유전자를 통째로 삼킨다
+    for (const h of g.hearts) {
+      h.ttl -= dt; h.age += dt;
+      if (h.ttl <= 0 || dist(h, n) >= CFG.pickRadius) continue;
+      if (g.units.length < CFG.maxUnits) { rebirth(g, h); h.ttl = 0; g.feedT = CFG.feedGapAfterRebirth; }
+      else if (g.feedT <= 0 && h === g.linkItem) {
+        const tgt = feedTarget(g, h);
+        if (tgt) {
+          g.feedT = CFG.feedGap;
+          const before = stats(tgt).maxHp, add = scaleGenes(h.genes, h.main, heartKeep(h));
+          for (const k of KINDS) tgt.genes[k] += add[k];
+          refreshMain(tgt);
+          const after = stats(tgt).maxHp;
+          tgt.hp = Math.min(after, Math.max(tgt.hp, tgt.hp + (after - before))); tgt.r = radiusOf(tgt); tgt.pop = 0.6;
+          g.absorbs++; g.maxLevel = Math.max(g.maxLevel, levelOf(tgt));
+          g.fx.push({ k: 'absorb', x: h.x, y: h.y, uid: tgt.uid, type: h.main, q: 3, t: 0.35 });
+          g.events.push('absorb');
+          h.ttl = 0;
+        }
+      }
+    }
+    // 혼: 자리가 비었으면 되살리고, 찼으면 연결된 키메라가 먹는다
+    for (const s of g.souls) {
+      s.ttl -= dt;
+      if (s.ttl <= 0 || dist(s, n) >= CFG.pickRadius) continue;
+      if (g.units.length < CFG.maxUnits) {
+        const genes = {}; genes[s.type] = s.q === 3 ? 3 : 1;
+        const u = makeUnit(g, genes, s.type, s.x, s.y);
+        if (s.q === 3) u.mutant = true;
+        u.hp = stats(u).maxHp;
+        g.units.push(u); g.raised++;
+        g.fx.push({ k: 'raise', x: u.x, y: u.y, arch: s.type, t: 0.45 });
+        g.events.push('raise');
+        s.ttl = 0;
+      } else if (g.feedT <= 0 && s === g.linkItem) {
+        const tgt = feedTarget(g, s);
+        if (tgt) { absorb(g, tgt, s); s.ttl = 0; g.feedT = CFG.feedGap; }
+      }
+    }
+    g.souls = g.souls.filter(s => s.ttl > 0);
+    g.hearts = g.hearts.filter(h => h.ttl > 0);
+    g.enemies = g.enemies.filter(e => !e.dead);
+    for (const f of g.fx) f.t -= dt;
+    g.fx = g.fx.filter(f => f.t > 0);
+
+    if (n.hp <= 0) { n.hp = 0; g.over = 'lose'; g.events.push('lose'); }
+    else if (g.t >= DURATION) { g.t = DURATION; g.over = 'win'; g.events.push('win'); }
+  }
+
+  const api = { W, H, DURATION, MAX_LEVEL, KINDS, CFG, newGame, step, stats, geneTotal, levelOf, isFrenzy, heartKeep, scaleGenes, detonate, pin, absorb, feedTarget };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.ChimeraSim = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+// 화면, 입력, 소리. 규칙은 sim.js에 있고 여기서는 상태를 그리고 사건을 소리로 바꾼다.
+(function () {
+  'use strict';
+  const S = window.ChimeraSim;
+  const cv = document.getElementById('game');
+  const ctx = cv.getContext('2d');
+  const css = getComputedStyle(document.documentElement);
+  const C = n => css.getPropertyValue(n).trim();
+  const COL = {
+    ground: C('--ground'), grid: C('--grid'), ink: C('--ink'), dim: C('--dim'), necro: C('--necro'),
+    bone: C('--bone'), beast: C('--beast'), armor: C('--armor'), ranger: C('--ranger'), danger: C('--danger'), great: C('--great'),
+  };
+  const FONT = C('--font-body');
+  const titleEl = document.getElementById('title'), endEl = document.getElementById('end');
+  const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const VIEW_W = 13;   // 화면 가로에 들어오는 판의 폭
+  const TAP_MS = 340;  // 이 안에 한 번 더 치면 두 번 톡톡(자폭), 아니면 한 번 톡(찍기)
+
+  let g = null, mode = 'title', inp = { x: 0, y: 0 }, stick = null, keys = {}, last = 0;
+  let scale = 1, dpr = 1, camX = 0, camY = 0, shake = 0, beatT = 0, lastTap = null, seed = (Date.now() % 100000) + 1;
+
+  // ---- 소리: 외부 파일 없이 Web Audio로 만든다. 첫 터치(시작 버튼) 뒤에만 켜진다. ----
+  const Sound = {
+    ac: null,
+    on() {
+      try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!this.ac && AC) this.ac = new AC();
+        if (this.ac && this.ac.state === 'suspended') this.ac.resume();
+      } catch (e) { this.ac = null; }
+    },
+    tone(type, f0, f1, dur, vol, delay) {
+      const ac = this.ac; if (!ac) return;
+      const t = ac.currentTime + (delay || 0), o = ac.createOscillator(), v = ac.createGain();
+      o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t + dur);
+      v.gain.setValueAtTime(vol, t); v.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      o.connect(v); v.connect(ac.destination); o.start(t); o.stop(t + dur + 0.02);
+    },
+    noise(dur, vol, cutoff) {
+      const ac = this.ac; if (!ac) return;
+      const n = Math.floor(ac.sampleRate * dur), buf = ac.createBuffer(1, n, ac.sampleRate), d = buf.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+      const src = ac.createBufferSource(), f = ac.createBiquadFilter(), v = ac.createGain();
+      src.buffer = buf; f.type = 'lowpass'; f.frequency.value = cutoff; v.gain.value = vol;
+      src.connect(f); f.connect(v); v.connect(ac.destination); src.start();
+    },
+    absorb() { this.tone('sawtooth', 150, 400, 0.08, 0.18); },                    // 혼이 빨려 드는 짧은 스윕
+    beat() { this.tone('sine', 70, 45, 0.12, 0.35); this.tone('sine', 62, 40, 0.12, 0.25, 0.16); },   // 과부하: 심장 박동
+    boom() { this.noise(0.3, 0.5, 900); this.tone('sine', 80, 30, 0.3, 0.6); },   // 탈피 대폭발
+    siren() { for (let i = 0; i < 3; i++) this.tone('square', i % 2 ? 660 : 880, i % 2 ? 660 : 880, 0.13, 0.12, i * 0.17); },   // 돌격병 예고
+    raise() { this.tone('triangle', 300, 520, 0.1, 0.14); },
+    purify() { this.tone('sine', 520, 1040, 0.25, 0.2); this.tone('sine', 780, 1560, 0.25, 0.12, 0.05); },
+    rebirth() { this.tone('triangle', 200, 800, 0.22, 0.22); this.tone('sine', 400, 1200, 0.2, 0.12, 0.1); },
+    clash() { this.noise(0.12, 0.35, 3000); this.tone('square', 220, 110, 0.15, 0.15); },
+    hurt() { this.tone('sawtooth', 180, 60, 0.18, 0.25); },
+    rush() { this.tone('sawtooth', 300, 900, 0.2, 0.12); },
+  };
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const r = cv.getBoundingClientRect();
+    cv.width = Math.max(1, Math.round(r.width * dpr));
+    cv.height = Math.max(1, Math.round(r.height * dpr));
+    scale = cv.width / VIEW_W;
+  }
+  window.addEventListener('resize', resize);
+
+  function start() {
+    Sound.on();
+    g = S.newGame(seed++);
+    mode = 'play'; shake = 0; lastTap = null;
+    titleEl.hidden = true; endEl.hidden = true;
+    inp.x = inp.y = 0; stick = null;
+  }
+  document.getElementById('startBtn').addEventListener('click', start);
+  document.getElementById('againBtn').addEventListener('click', start);
+
+  // 누르고 끌면 이동. 두 번 톡톡 치면 자폭(탈피). 키메라를 한 번 톡 누르면 먹일 대상으로 찍는다.
+  cv.addEventListener('pointerdown', e => {
+    if (mode !== 'play') return;
+    cv.setPointerCapture(e.pointerId);
+    stick = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, at: performance.now(), far: 0 };
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!stick || e.pointerId !== stick.id) return;
+    stick.x = e.clientX; stick.y = e.clientY;
+    stick.far = Math.max(stick.far, Math.hypot(stick.x - stick.x0, stick.y - stick.y0));
+  });
+  function tapAt(cx, cy) {
+    const now = performance.now();
+    if (lastTap && now - lastTap.t < TAP_MS) {
+      clearTimeout(lastTap.timer); lastTap = null;
+      S.detonate(g);
+      return;
+    }
+    const r = cv.getBoundingClientRect();
+    const wx = (cx - r.left) * dpr / scale + camX, wy = (cy - r.top) * dpr / scale + camY;
+    const game = g;
+    // 누른 순간 손가락 아래에 있던 키메라를 기억해 둔다(확정될 때는 이미 움직였을 수 있다)
+    let best = null, bd = 1e9;
+    for (const u of g.units) { const d = Math.hypot(u.x - wx, u.y - wy) - u.r; if (d < 1.0 && d < bd) { bd = d; best = u; } }
+    const uid = best ? best.uid : null;
+    lastTap = { t: now, timer: setTimeout(() => {
+      lastTap = null;
+      if (game !== g || mode !== 'play' || uid === null) return;
+      S.pin(g, uid);
+    }, TAP_MS) };
+  }
+  cv.addEventListener('pointerup', e => {
+    if (!stick || e.pointerId !== stick.id) return;
+    if (mode === 'play' && performance.now() - stick.at < 300 && stick.far < 14) tapAt(e.clientX, e.clientY);
+    stick = null;
+  });
+  cv.addEventListener('pointercancel', e => { if (stick && e.pointerId === stick.id) stick = null; });
+  window.addEventListener('keydown', e => { keys[e.key] = true; if (e.key === ' ' && mode === 'play') S.detonate(g); });
+  window.addEventListener('keyup', e => { keys[e.key] = false; });
+
+  function readInput() {
+    let x = 0, y = 0;
+    if (stick) {
+      const R = 56;
+      x = (stick.x - stick.x0) / R; y = (stick.y - stick.y0) / R;
+      const m = Math.hypot(x, y);
+      if (m < 0.15) { x = 0; y = 0; } else if (m > 1) { x /= m; y /= m; }
+    }
+    if (keys.ArrowLeft || keys.a) x -= 1;
+    if (keys.ArrowRight || keys.d) x += 1;
+    if (keys.ArrowUp || keys.w) y -= 1;
+    if (keys.ArrowDown || keys.s) y += 1;
+    inp.x = x; inp.y = y;
+  }
+
+  function circle(x, y, r) { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); }
+  function bar(x, y, w, f, col) {
+    ctx.fillStyle = COL.grid; ctx.fillRect(x - w / 2, y, w, 0.14);
+    ctx.fillStyle = col; ctx.fillRect(x - w / 2, y, w * Math.max(0, f), 0.14);
+  }
+  // 유전자는 모양으로도 구별한다: 맹수 세모, 갑주 네모, 사수 원.
+  function shape(kind, r) {
+    ctx.beginPath();
+    if (kind === 'beast') { ctx.moveTo(r * 1.25, 0); ctx.lineTo(-r * 0.85, r * 1.0); ctx.lineTo(-r * 0.85, -r * 1.0); ctx.closePath(); }
+    else if (kind === 'armor') ctx.rect(-r * 0.92, -r * 0.92, r * 1.84, r * 1.84);
+    else ctx.arc(0, 0, r, 0, Math.PI * 2);
+  }
+  function mix(c1, c2, k) {
+    const p = c => [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)];
+    if (!/^#[0-9a-f]{6}$/i.test(c1) || !/^#[0-9a-f]{6}$/i.test(c2)) return k > 0.5 ? c2 : c1;
+    const a = p(c1), b = p(c2);
+    return 'rgb(' + a.map((v, i) => Math.round(v + (b[i] - v) * k)).join(',') + ')';
+  }
+  const sx = x => (x - camX) * scale / dpr, sy = y => (y - camY) * scale / dpr;
+
+  // 키메라: 주 유전자가 몸의 모양이고, 섞인 유전자가 개수만큼 몸에 들러붙는다
+  // (맹수 가시, 갑주 장갑판, 사수 눈알). 불안정도가 오르면 붉게 달아오르고 떤다.
+  function drawUnit(u, now) {
+    const gn = u.genes, k = 1 + (reduced ? 0 : u.pop * 0.8), r = u.r * k, frenzy = S.isFrenzy(u);
+    const heat = Math.min(1, u.inst / 100);
+    const amp = reduced ? 0 : (heat > 0.4 ? (heat - 0.4) * 0.16 : 0) * (frenzy ? 1.8 : 1);
+    const jx = amp ? Math.sin(now / 23 + u.uid) * amp : 0, jy = amp ? Math.cos(now / 19 + u.uid * 2) * amp : 0;
+    const blink = frenzy && !reduced && Math.floor(now / 110) % 2 === 0;
+    ctx.save();
+    ctx.translate(u.x + jx, u.y + jy);
+    ctx.globalAlpha = u.down > 0 ? 0.3 : 1;
+    ctx.rotate(u.face);
+    const sb = u.main === 'beast' ? 0 : gn.beast, sa = u.main === 'armor' ? 0 : gn.armor, sr = u.main === 'ranger' ? 0 : gn.ranger;
+    // 맹수가 섞였다: 등과 옆구리의 가시
+    const spikes = Math.min(sb, 12);
+    ctx.fillStyle = COL.beast;
+    for (let i = 0; i < spikes; i++) {
+      const a = Math.PI + (i - (spikes - 1) / 2) * 0.42;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a - 0.16) * r * 0.9, Math.sin(a - 0.16) * r * 0.9);
+      ctx.lineTo(Math.cos(a) * r * 1.75, Math.sin(a) * r * 1.75);
+      ctx.lineTo(Math.cos(a + 0.16) * r * 0.9, Math.sin(a + 0.16) * r * 0.9);
+      ctx.closePath(); ctx.fill();
+    }
+    // 몸: 불안정도에 따라 뼈 색에서 붉은색으로
+    ctx.fillStyle = blink ? COL.danger : mix(COL.bone, COL.danger, heat * 0.85);
+    ctx.strokeStyle = u.mutant ? COL.great : COL[u.main]; ctx.lineWidth = r * (u.mutant ? 0.26 : 0.2); ctx.lineJoin = 'round';
+    shape(u.main, r); ctx.fill(); ctx.stroke();
+    // 주 유전자가 많을수록 몸 안에 같은 모양이 겹겹이 생긴다
+    ctx.strokeStyle = COL[u.main]; ctx.lineWidth = r * 0.08;
+    for (let i = 1; i < Math.min(gn[u.main], 5); i++) { shape(u.main, r * (1 - i * 0.18)); ctx.stroke(); }
+    // 갑주가 섞였다: 앞을 두르는 장갑판
+    const plates = Math.min(sa, 8);
+    ctx.fillStyle = COL.armor;
+    for (let i = 0; i < plates; i++) {
+      const a = (i - (plates - 1) / 2) * 0.46;
+      ctx.save(); ctx.rotate(a); ctx.fillRect(r * 1.12, -r * 0.2, r * 0.3, r * 0.4); ctx.restore();
+    }
+    // 사수가 섞였다: 몸에 돋은 눈알
+    const eyes = Math.min(sr, 8);
+    for (let i = 0; i < eyes; i++) {
+      const a = Math.PI / 2 + i * (Math.PI * 2 / Math.max(eyes, 3)), ex = Math.cos(a) * r * 0.62, ey = Math.sin(a) * r * 0.62;
+      ctx.fillStyle = COL.ranger; circle(ex, ey, r * 0.2); ctx.fill();
+      ctx.fillStyle = COL.ground; circle(ex + r * 0.05, ey, r * 0.08); ctx.fill();
+    }
+    ctx.restore();
+
+    // 불안정도 고리: 다 차면 터진다
+    if (u.inst > 0 && u.state === 'ok') {
+      ctx.strokeStyle = COL.danger; ctx.lineWidth = frenzy ? 0.16 : 0.1;
+      ctx.beginPath(); ctx.arc(u.x, u.y, u.r + 0.38, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * heat); ctx.stroke();
+    }
+    if (g.pinned === u.uid) {
+      ctx.fillStyle = COL.necro;
+      ctx.beginPath(); ctx.moveTo(u.x, u.y - u.r - 0.55); ctx.lineTo(u.x - 0.22, u.y - u.r - 0.95); ctx.lineTo(u.x + 0.22, u.y - u.r - 0.95); ctx.closePath(); ctx.fill();
+    }
+    const mh = S.stats(u).maxHp;
+    if (u.down <= 0 && u.hp < mh && u.state === 'ok') bar(u.x, u.y + u.r + 0.3, Math.max(1, u.r * 1.6), u.hp / mh, COL.bone);
+    if (u.down > 0) {
+      ctx.strokeStyle = COL.bone; ctx.lineWidth = 0.08;
+      ctx.beginPath(); ctx.arc(u.x, u.y, u.r + 0.25, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - u.down / 6)); ctx.stroke();
+    }
+    if (u.state === 'rush') { ctx.strokeStyle = COL.danger; ctx.lineWidth = 0.2; ctx.beginPath(); ctx.moveTo(u.x, u.y); ctx.lineTo(u.tx, u.ty); ctx.stroke(); }
+  }
+
+  function drawEnemy(e, now) {
+    if (e.elite && (e.mode === 'warn' || e.mode === 'aim')) {
+      // 돌진 예고: 겨눈 방향으로 붉은 길이 깔린다
+      const a = e.face, L = 40, w = 0.9 + (reduced ? 0 : 0.25 * Math.sin(now / 60));
+      ctx.save(); ctx.globalAlpha = 0.28; ctx.strokeStyle = COL.danger; ctx.lineWidth = e.r * 2 * w;
+      ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(e.x + Math.cos(a) * L, e.y + Math.sin(a) * L); ctx.stroke();
+      ctx.restore();
+    }
+    ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(e.face);
+    if (e.elite) {
+      ctx.fillStyle = COL.danger; ctx.strokeStyle = COL.ink; ctx.lineWidth = 0.1;
+      shape(e.arch, e.r); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = COL.ink; ctx.beginPath(); ctx.moveTo(e.r * 1.7, 0); ctx.lineTo(e.r * 0.9, e.r * 0.4); ctx.lineTo(e.r * 0.9, -e.r * 0.4); ctx.closePath(); ctx.fill();
+    } else {
+      ctx.fillStyle = COL[e.arch]; ctx.strokeStyle = COL.ground; ctx.lineWidth = 0.07;
+      shape(e.arch, e.r); ctx.fill(); ctx.stroke();
+      if (e.g >= 2) { ctx.strokeStyle = COL.ink; ctx.lineWidth = 0.06; shape(e.arch, e.r * 0.55); ctx.stroke(); }
+    }
+    ctx.restore();
+    if (e.stun > 0) { ctx.strokeStyle = COL.great; ctx.lineWidth = 0.07; ctx.beginPath(); ctx.arc(e.x, e.y - e.r - 0.3, 0.2, now / 90, now / 90 + 4.5); ctx.stroke(); }
+    if (e.hp < e.maxHp) bar(e.x, e.y - e.r - 0.35, e.elite ? 2 : 0.9, e.hp / e.maxHp, COL.danger);
+  }
+
+  function label(text, x, y, size, col) {
+    ctx.font = '700 ' + size + 'px ' + FONT;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineWidth = Math.max(3, size / 5); ctx.strokeStyle = COL.ground; ctx.lineJoin = 'round';
+    ctx.strokeText(text, x, y); ctx.fillStyle = col; ctx.fillText(text, x, y);
+  }
+
+  function draw(now) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = COL.ground; ctx.fillRect(0, 0, cv.width, cv.height);
+    if (!g) return;
+    const vh = cv.height / scale, n = g.necro;
+    camX = Math.max(0, Math.min(S.W - VIEW_W, n.x - VIEW_W / 2));
+    camY = vh >= S.H ? (S.H - vh) / 2 : Math.max(0, Math.min(S.H - vh, n.y - vh / 2));
+    const shx = shake > 0 && !reduced ? (Math.random() - 0.5) * shake * 1.2 : 0, shy = shake > 0 && !reduced ? (Math.random() - 0.5) * shake * 1.2 : 0;
+    ctx.setTransform(scale, 0, 0, scale, (-camX + shx) * scale, (-camY + shy) * scale);
+
+    ctx.strokeStyle = COL.grid; ctx.lineWidth = 0.03;
+    for (let x = 0; x <= S.W; x += 3) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, S.H); ctx.stroke(); }
+    for (let y = 0; y <= S.H; y += 3) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(S.W, y); ctx.stroke(); }
+    ctx.lineWidth = 0.08; ctx.strokeRect(0, 0, S.W, S.H);
+
+    // 혼: 불량은 작고 흐리다. 신선한 것은 푸른 고리, 순혈 코어는 크고 금빛으로 뛴다.
+    for (const s of g.souls) {
+      if (s.ttl < 3 && Math.floor(now / 120) % 2 === 0) continue;
+      const pulse = reduced ? 1 : 1 + 0.1 * Math.sin(now / 150 + s.x);
+      ctx.save(); ctx.translate(s.x, s.y);
+      if (s.q === 1) { ctx.globalAlpha = 0.6; ctx.fillStyle = COL[s.type]; shape(s.type, 0.26); ctx.fill(); }
+      else if (s.q === 2) {
+        ctx.fillStyle = COL[s.type]; shape(s.type, 0.36); ctx.fill();
+        ctx.strokeStyle = COL.armor; ctx.lineWidth = 0.08; circle(0, 0, 0.62 * pulse); ctx.stroke();
+      } else {
+        ctx.fillStyle = COL.great; shape(s.type, 0.5); ctx.fill();
+        ctx.strokeStyle = COL.great; ctx.lineWidth = 0.12; circle(0, 0, 0.85 * pulse); ctx.stroke();
+        ctx.strokeStyle = COL.necro; ctx.lineWidth = 0.07; circle(0, 0, 1.1 * pulse); ctx.stroke();
+      }
+      ctx.restore();
+    }
+    // 변이 심장: 터진 키메라가 남긴 것. 고리가 남은 시간이고, 금빛일 때 주우면 유전자를 다 물려받는다.
+    for (const h of g.hearts) {
+      const pulse = reduced ? 1 : 1 + 0.18 * Math.abs(Math.sin(now / 180)), full = h.age <= S.CFG.heartFullFor;
+      ctx.save(); ctx.translate(h.x, h.y);
+      ctx.fillStyle = COL.danger; ctx.strokeStyle = full ? COL.great : COL.ink; ctx.lineWidth = 0.1;
+      ctx.beginPath(); ctx.moveTo(0, 0.55 * pulse); ctx.lineTo(0.5 * pulse, 0); ctx.lineTo(0.25 * pulse, -0.4 * pulse); ctx.lineTo(0, -0.18 * pulse); ctx.lineTo(-0.25 * pulse, -0.4 * pulse); ctx.lineTo(-0.5 * pulse, 0); ctx.closePath();
+      ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = full ? COL.great : COL.dim; ctx.lineWidth = 0.08;
+      ctx.beginPath(); ctx.arc(0, 0, 0.9, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (h.ttl / S.CFG.heartTtl)); ctx.stroke();
+      ctx.restore();
+    }
+
+    for (const e of g.enemies) drawEnemy(e, now);
+
+    // 예고 연결선: 이 혼을 밟으면 누가 먹는지. 먹으면 터질 참이면 붉다.
+    if (g.link) {
+      const u = g.units.find(x => x.uid === g.link.uid);
+      if (u) {
+        const soul = g.souls.find(s => s.x === g.link.x && s.y === g.link.y);
+        const add = soul ? S.CFG.soul[soul.q].inst : 0, willPop = add > 0 && u.inst + add >= 100;
+        ctx.save(); ctx.strokeStyle = willPop ? COL.danger : COL.necro; ctx.lineWidth = 0.14; ctx.setLineDash([0.3, 0.2]); ctx.lineDashOffset = reduced ? 0 : -now / 60;
+        ctx.beginPath(); ctx.moveTo(g.link.x, g.link.y); ctx.lineTo(u.x, u.y); ctx.stroke();
+        ctx.setLineDash([]); circle(u.x, u.y, u.r + 0.6); ctx.stroke(); circle(g.link.x, g.link.y, 0.75); ctx.stroke();
+        if (add > 0) { ctx.globalAlpha = 0.45; ctx.strokeStyle = COL.danger; ctx.lineWidth = 0.1; const a0 = -Math.PI / 2 + Math.PI * 2 * Math.min(1, u.inst / 100); ctx.beginPath(); ctx.arc(u.x, u.y, u.r + 0.38, a0, a0 + Math.PI * 2 * Math.min(1 - u.inst / 100, add / 100)); ctx.stroke(); }
+        ctx.restore();
+      }
+    }
+    for (const u of g.units) drawUnit(u, now);
+
+    ctx.fillStyle = n.hurt > 0 ? COL.danger : COL.necro;
+    circle(n.x, n.y, n.r); ctx.fill();
+    ctx.strokeStyle = COL.ink; ctx.lineWidth = 0.08; circle(n.x, n.y, n.r + 0.16); ctx.stroke();
+    ctx.fillStyle = COL.ground; circle(n.x, n.y, 0.16); ctx.fill();
+
+    for (const f of g.fx) {
+      if (f.k === 'hit') { ctx.strokeStyle = COL.ink; ctx.lineWidth = f.big ? 0.14 : 0.08; circle(f.x, f.y, 0.25 + (0.15 - f.t) * (f.big ? 6 : 3)); ctx.stroke(); }
+      else if (f.k === 'shot') { ctx.strokeStyle = COL[f.arch]; ctx.lineWidth = f.arch === 'ranger' ? 0.14 : 0.07; ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.lineTo(f.tx, f.ty); ctx.stroke(); }
+      else if (f.k === 'die') { ctx.strokeStyle = COL[f.arch]; ctx.lineWidth = f.big ? 0.2 : 0.1; circle(f.x, f.y, 0.4 + (0.35 - f.t) * (f.big ? 8 : 3)); ctx.stroke(); }
+      else if (f.k === 'block') { ctx.strokeStyle = COL.armor; ctx.lineWidth = 0.22; ctx.beginPath(); ctx.arc(f.x, f.y, f.r * 1.6, f.face - 1.1, f.face + 1.1); ctx.stroke(); }
+      else if (f.k === 'raise') { ctx.strokeStyle = COL[f.arch]; ctx.lineWidth = 0.14; circle(f.x, f.y, 0.5 + (0.45 - f.t) * 3); ctx.stroke(); }
+      else if (f.k === 'absorb') {
+        const u = g.units.find(x => x.uid === f.uid); if (!u) continue;
+        const k = 1 - f.t / 0.35, col = f.q === 3 ? COL.great : COL[f.type];
+        ctx.strokeStyle = col; ctx.lineWidth = 0.18;
+        ctx.beginPath(); ctx.moveTo(f.x + (u.x - f.x) * k, f.y + (u.y - f.y) * k); ctx.lineTo(u.x, u.y); ctx.stroke();
+        ctx.lineWidth = 0.1; circle(u.x, u.y, u.r + 0.3 + k * 1.2); ctx.stroke();
+      }
+      else if (f.k === 'boom') {
+        const k = 1 - f.t / 0.5;
+        ctx.save(); ctx.globalAlpha = (1 - k) * 0.6; ctx.fillStyle = COL.danger; circle(f.x, f.y, f.r * (0.4 + k * 0.6)); ctx.fill();
+        ctx.globalAlpha = 1 - k; ctx.strokeStyle = COL.great; ctx.lineWidth = 0.3; circle(f.x, f.y, f.r * (0.3 + k)); ctx.stroke(); ctx.restore();
+      }
+      else if (f.k === 'wave') { const k = 1 - f.t / 0.3; ctx.strokeStyle = COL.armor; ctx.lineWidth = 0.22 * (1 - k) + 0.05; circle(f.x, f.y, f.r * k); ctx.stroke(); }
+      else if (f.k === 'leap') { ctx.strokeStyle = COL.beast; ctx.lineWidth = 0.3 * (f.t / 0.25); ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.lineTo(f.tx, f.ty); ctx.stroke(); }
+      else if (f.k === 'volley') { ctx.save(); ctx.globalAlpha = f.t / 0.25 * 0.3; ctx.fillStyle = COL.ranger; ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.arc(f.x, f.y, 6.5, f.face - 0.7, f.face + 0.7); ctx.closePath(); ctx.fill(); ctx.restore(); }
+      else if (f.k === 'clash') { const k = 1 - f.t / 0.4; ctx.strokeStyle = COL.ink; ctx.lineWidth = 0.2; for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; ctx.beginPath(); ctx.moveTo(f.x + Math.cos(a) * (0.3 + k), f.y + Math.sin(a) * (0.3 + k)); ctx.lineTo(f.x + Math.cos(a) * (0.9 + k * 2), f.y + Math.sin(a) * (0.9 + k * 2)); ctx.stroke(); } }
+      else if (f.k === 'rebirth') { const k = 1 - f.t / 0.6; ctx.strokeStyle = COL.great; ctx.lineWidth = 0.2; circle(f.x, f.y, 0.4 + k * 2.4); ctx.stroke(); ctx.lineWidth = 0.08; circle(f.x, f.y, 0.4 + k * 4); ctx.stroke(); }
+      else if (f.k === 'down') { ctx.strokeStyle = COL.danger; ctx.lineWidth = 0.1; circle(f.x, f.y, 0.6 + (0.5 - f.t) * 2); ctx.stroke(); }
+    }
+
+    // 여기부터 화면 좌표(글자가 또렷하게 나오게)
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const px = scale / dpr, w = cv.width / dpr, hh = cv.height / dpr, pad = 16, bw = w - pad * 2;
+    for (const u of g.units) label(String(S.levelOf(u)), sx(u.x), sy(u.y), Math.max(13, u.r * px * 0.9), COL.ground);
+    // 화면 밖에서 겨누는 돌격병: 가장자리에 느낌표
+    for (const e of g.enemies) {
+      if (!e.elite || (e.mode !== 'warn' && e.mode !== 'aim')) continue;
+      const ex = Math.max(26, Math.min(w - 26, sx(e.x))), ey = Math.max(100, Math.min(hh - 30, sy(e.y)));
+      if (ex !== sx(e.x) || ey !== sy(e.y)) label('!', ex, ey, 34, COL.danger);
+    }
+    // 느려진 동안: 화면 테두리
+    if (g.slowing) { ctx.strokeStyle = COL.necro; ctx.globalAlpha = 0.7; ctx.lineWidth = 6; ctx.strokeRect(3, 3, w - 6, hh - 6); ctx.globalAlpha = 1; }
+
+    // 화면 고정 표시: 남은 시간, 체력, 키메라 셋의 등급과 불안정도
+    ctx.fillStyle = COL.grid; ctx.fillRect(pad, 12, bw, 6);
+    ctx.fillStyle = COL.ink; ctx.fillRect(pad, 12, bw * (1 - g.t / S.DURATION), 6);
+    ctx.fillStyle = COL.grid; ctx.fillRect(pad, 24, bw, 10);
+    ctx.fillStyle = n.hp / n.maxHp < 0.3 ? COL.danger : COL.necro; ctx.fillRect(pad, 24, bw * n.hp / n.maxHp, 10);
+    const slotW = Math.min(96, (bw - 56) / 3);
+    for (let i = 0; i < S.CFG.maxUnits; i++) {
+      const u = g.units[i], x0 = pad + i * (slotW + 6), y0 = 44;
+      ctx.fillStyle = COL.grid; ctx.fillRect(x0, y0, slotW, 16);
+      if (!u) continue;
+      ctx.fillStyle = COL.danger; ctx.fillRect(x0, y0, slotW * Math.min(1, u.inst / 100), 16);
+      ctx.fillStyle = COL.ink; ctx.fillRect(x0 + slotW * 0.8, y0, 1.5, 16);   // 과부하가 시작되는 80% 눈금
+      ctx.fillStyle = COL[u.main]; ctx.fillRect(x0, y0 + 16, slotW, 3);
+      if (g.pinned === u.uid) { ctx.strokeStyle = COL.necro; ctx.lineWidth = 2; ctx.strokeRect(x0 - 2, y0 - 2, slotW + 4, 23); }
+      ctx.font = '700 12px ' + FONT; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = COL.ink; ctx.fillText(S.levelOf(u) + '등급', x0 + 5, y0 + 8.5);
+    }
+    ctx.font = '600 14px ' + FONT; ctx.textBaseline = 'middle'; ctx.fillStyle = COL.ink;
+    ctx.textAlign = 'right'; ctx.fillText(Math.ceil(S.DURATION - g.t) + '초', w - pad, 53);
+
+    if (stick && stick.far >= 14) {
+      const r = cv.getBoundingClientRect();
+      ctx.strokeStyle = COL.dim; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(stick.x0 - r.left, stick.y0 - r.top, 56, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = COL.dim; ctx.beginPath(); ctx.arc(stick.x0 - r.left + inp.x * 56, stick.y0 - r.top + inp.y * 56, 18, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
+  // 판에서 일어난 일을 소리와 흔들림으로 바꾼다
+  function consumeEvents(dt) {
+    for (const ev of g.events) {
+      if (ev === 'absorb') Sound.absorb();
+      else if (ev === 'purify') Sound.purify();
+      else if (ev === 'frenzy') Sound.beat();
+      else if (ev === 'boom') { Sound.boom(); shake = 0.45; }
+      else if (ev === 'warn') Sound.siren();
+      else if (ev === 'raise') Sound.raise();
+      else if (ev === 'rebirth') Sound.rebirth();
+      else if (ev === 'block') { Sound.clash(); shake = Math.max(shake, 0.25); }
+      else if (ev === 'necrohit') { Sound.hurt(); shake = Math.max(shake, 0.3); }
+      else if (ev === 'rush') Sound.rush();
+    }
+    g.events.length = 0;
+    // 과부하인 키메라가 있는 동안 심장 박동이 이어진다
+    beatT -= dt;
+    if (beatT <= 0 && g.units.some(u => u.state === 'ok' && S.isFrenzy(u))) { Sound.beat(); beatT = 0.7; }
+    shake = Math.max(0, shake - dt);
+  }
+
+  function showEnd() {
+    mode = 'over';
+    document.getElementById('endTitle').textContent = g.over === 'win' ? '버텼다' : '쓰러졌다';
+    document.getElementById('endTime').textContent = g.t.toFixed(0) + '초';
+    document.getElementById('endKills').textContent = g.kills + '마리 (돌격병 ' + g.eliteKills + ')';
+    document.getElementById('endFeed').textContent = g.absorbs + '번';
+    document.getElementById('endMolt').textContent = g.molts + '번 터지고 ' + g.rebirths + '번 계승';
+    document.getElementById('endLevel').textContent = g.maxLevel + '등급';
+    endEl.hidden = false;
+    document.getElementById('againBtn').focus();
+  }
+
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000 || 0);
+    last = now;
+    if (mode === 'play') {
+      readInput();
+      S.step(g, dt, inp);   // 느려짐은 규칙 쪽에서 처리한다
+      consumeEvents(dt);
+      if (g.over) showEnd();
+    }
+    draw(now);
+    requestAnimationFrame(frame);
+  }
+
+  resize();
+  g = S.newGame(seed);   // 제목 화면 뒤에 판의 첫 모습을 깔아 둔다
+  requestAnimationFrame(frame);
+})();
+
+</script>

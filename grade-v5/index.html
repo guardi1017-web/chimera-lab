@@ -1,0 +1,723 @@
+<title>키메라 실험실</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=Gowun+Dodum&display=swap">
+<style>
+  /* 배치: 화면 전체가 판이다. 글은 시작과 끝의 덮개에만 있고, 판 중에는 위쪽 띠 하나만 남는다. */
+  :root {
+    --ground: #15121c;   /* 밤의 실험실 바닥 */
+    --grid: #2a2536;
+    --ink: #ece4d4;      /* 양피지 */
+    --dim: #8f869c;
+    --necro: #a077ff;    /* 네크로맨서와 MP */
+    --bone: #d8cfbb;     /* 소환수의 몸 */
+    --beast: #e8893a;    /* 맹수 */
+    --armor: #6fa6dc;    /* 갑주 */
+    --shooter: #83c06b;  /* 사수 */
+    --danger: #e5524c;   /* 위험, 실패, 흠 */
+    --great: #f2d35e;    /* 합성 대성공 */
+    --veil: rgba(21, 18, 28, 0.9);
+    --font-display: "Gowun Batang", "Nanum Myeongjo", serif;
+    --font-body: "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    color-scheme: dark;
+  }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--ground); color: var(--ink); font-family: var(--font-body); font-size: 16px; line-height: 1.55; overflow: hidden; }
+  #stage { position: relative; height: 100%; }
+  #game { display: block; width: 100%; height: 100%; touch-action: none; }
+  .veil {
+    position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; gap: 16px;
+    background: var(--veil);
+    padding-block: 24px;
+    padding-left: max(24px, env(safe-area-inset-left, 0px));
+    padding-right: max(24px, env(safe-area-inset-right, 0px));
+    overflow-y: auto;
+  }
+  .veil > * { max-width: 26rem; width: 100%; margin-inline: auto; }
+  h1, h2 { font-family: var(--font-display); font-weight: 700; margin: 0; text-wrap: balance; }
+  h1 { font-size: 2.25rem; }
+  h2 { font-size: 2rem; }
+  p { margin: 0; }
+  .how { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+  .how li { display: grid; grid-template-columns: 1.5rem 1fr; gap: 12px; align-items: baseline; }
+  .step { font-family: var(--font-display); color: var(--necro); text-align: center; }
+  .great { color: var(--great); }
+  .fail { color: var(--danger); }
+  .kinds { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; padding: 0; list-style: none; color: var(--dim); }
+  .kinds li { display: flex; gap: 8px; align-items: center; }
+  .swatch { width: 1rem; height: 1rem; flex: none; }
+  .swatch.beast { background: var(--beast); clip-path: polygon(100% 50%, 0 100%, 25% 50%, 0 0); }
+  .swatch.armor { background: var(--armor); }
+  .swatch.shooter { background: var(--shooter); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 20px; margin: 0; font-variant-numeric: tabular-nums; }
+  dt { color: var(--dim); }
+  dd { margin: 0; }
+  .note { color: var(--dim); }
+  button {
+    font: inherit; font-family: var(--font-display); font-size: 1.25rem; color: var(--ground); background: var(--ink);
+    border: 0; padding: 14px 20px; cursor: pointer;
+  }
+  button:focus-visible { outline: 3px solid var(--necro); outline-offset: 3px; }
+</style>
+
+<div id="stage">
+  <canvas id="game" aria-label="키메라 실험 판"></canvas>
+
+  <section class="veil" id="title">
+    <h1>키메라 실험실</h1>
+    <p>네크로맨서는 직접 싸우지 못한다. 소환수가 대신 싸우고, 부릴 수 있는 것은 셋뿐이다. 90초를 버텨라.</p>
+    <ol class="how">
+      <li><span class="step">1</span><span>누르고 끌면 움직인다. 소환수는 따라와 알아서 싸운다.</span></li>
+      <li><span class="step">2</span><span>적을 잡으면 혼이 남는다. 밟으면 같은 등급의 소환수로 되살아난다. 혼 아래 보라색 점만큼 MP가 든다.</span></li>
+      <li><span class="step">3</span><span>소환수 둘을 차례로 톡 누르면 합성된다. 등급이 같으면 다음 등급의 몬스터가 무작위로 나온다. <span class="great">대성공</span>은 두 등급 오르고, <span class="fail">실패</span>하면 흠이 하나 생겨 다음 합성에도 따라간다.</span></li>
+      <li><span class="step">4</span><span>등급이 다른 둘을 누르면 높은 쪽이 낮은 쪽을 삼켜 체력을 채우고 자리를 비운다.</span></li>
+    </ol>
+    <ul class="kinds">
+      <li><span class="swatch beast"></span>맹수는 빠르다</li>
+      <li><span class="swatch armor"></span>갑주는 단단하다</li>
+      <li><span class="swatch shooter"></span>사수는 멀리서 쏜다</li>
+    </ul>
+    <button id="startBtn" type="button">시작</button>
+  </section>
+
+  <section class="veil" id="end" hidden>
+    <h2 id="endTitle">쓰러졌다</h2>
+    <dl>
+      <dt>버틴 시간</dt><dd id="endTime">0초</dd>
+      <dt>잡은 적</dt><dd id="endKills">0마리</dd>
+      <dt>합성</dt><dd id="endFused">0번</dd>
+      <dt>가장 높은 등급</dt><dd id="endGrade">1등급</dd>
+      <dt>도감</dt><dd id="endDex">0 / 30종</dd>
+    </dl>
+    <p class="note" id="endNew"></p>
+    <button id="againBtn" type="button">한 판 더</button>
+  </section>
+</div>
+
+<script>
+// 키메라 실험 3: 등급 합성. 같은 등급 둘을 합치면 다음 등급의 몬스터가 무작위로 나온다.
+// 규칙만 담는다(화면·DOM 없음). 같은 시드면 같은 판이 나온다.
+(function (root) {
+  'use strict';
+  const W = 18, H = 30, DURATION = 90, MAX_GRADE = 10;
+  const ARCHS = ['beast', 'armor', 'shooter'];
+
+  // 몬스터 표: 등급마다 셋(맹수 / 갑주 / 사수). 적도 소환수도 이 표에서 나온다.
+  const MON = [
+    null,
+    { beast: '굶주린 쥐',   armor: '해골 병사',     shooter: '뼈 궁수' },
+    { beast: '늑대',        armor: '방패병',        shooter: '석궁병' },
+    { beast: '흑랑',        armor: '철갑 기사',     shooter: '독침 사수' },
+    { beast: '서리 표범',   armor: '묘지 수호자',   shooter: '저주 사냥꾼' },
+    { beast: '그림자 맹수', armor: '강철 골렘',     shooter: '망령 궁수' },
+    { beast: '쌍두 사냥개', armor: '흑요석 거인',   shooter: '눈알 마법사' },
+    { beast: '만티코어',    armor: '죽음의 기사',   shooter: '리치' },
+    { beast: '지옥 사자',   armor: '심연의 수문장', shooter: '뼈 발리스타' },
+    { beast: '펜리르',      armor: '타이탄',        shooter: '대리치' },
+    { beast: '종말의 짐승', armor: '불멸의 군주',   shooter: '심연의 눈' },
+  ];
+  // 1등급 기준 능력. 등급이 하나 오를 때마다 체력과 피해가 gradeMul배.
+  const BASE = {
+    beast:   { hp: 45,  dmg: 7, cd: 0.5, spd: 6.6, range: 0.3, taken: 1,   taunt: false },
+    armor:   { hp: 110, dmg: 6, cd: 0.9, spd: 5.4, range: 0.3, taken: 0.7, taunt: true },
+    shooter: { hp: 40,  dmg: 7, cd: 0.9, spd: 5.6, range: 5,   taken: 1,   taunt: false },
+  };
+  const FOE = {
+    beast:   { hpK: 0.4, dmg: 4, cd: 0.7, spd: 4.5, range: 0.25, r: 0.42 },
+    armor:   { hpK: 0.7, dmg: 8, cd: 1.2, spd: 2.2, range: 0.3,  r: 0.6 },
+    shooter: { hpK: 0.45, dmg: 5, cd: 1.8, spd: 2.8, range: 5.5, r: 0.42 },
+  };
+  // 실패한 합성이 남기는 흠. 다음 합성에도 그대로 따라간다.
+  const DEFECTS = {
+    lame:   { name: '절름발이', note: '느리다' },
+    oneeye: { name: '외눈',     note: '자주 빗나간다' },
+    onearm: { name: '외팔',     note: '공격이 느리다' },
+    frail:  { name: '허약',     note: '체력이 적다' },
+  };
+  const CFG = {
+    maxUnits: 3,
+    maxMp: 10, startMp: 3, mpPerKill: 0.8,      // 적을 잡으면 등급 × 이 값만큼 찬다
+    costPerGrade: 2,                            // 되살리는 MP = 등급 × 이 값
+    greatChance: 0.15,                          // 대성공: 두 등급 오른다
+    failChance: 0.2,                            // 실패: 다음 등급이지만 흠이 하나 생긴다
+    gradeMul: 2.2,
+    foeGradeMul: 1.35,
+    spawnStart: 1.5, spawnEnd: 0.95,
+    soulTtl: 9,
+  };
+  const NECRO_SPEED = 5.0, LEASH = 6.5, PICK_RADIUS = 1.1;
+
+  function mulberry(seed) {
+    let s = seed >>> 0;
+    return function () {
+      s = (s + 0x6D2B79F5) >>> 0;
+      let t = s;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  const has = (u, d) => u.defects.indexOf(d) >= 0;
+
+  function nameOf(u) { return u.defects.map(d => DEFECTS[d].name).concat(MON[u.g][u.arch]).join(' '); }
+  function radiusOf(g) { return 0.5 + 0.1 * (g - 1); }
+  function costOf(g) { return g * CFG.costPerGrade; }
+
+  function stats(u) {
+    const b = BASE[u.arch], m = Math.pow(CFG.gradeMul, u.g - 1);
+    return {
+      maxHp: b.hp * m * (has(u, 'frail') ? 0.65 : 1),
+      dmg: b.dmg * m,
+      cd: b.cd * (has(u, 'onearm') ? 1.5 : 1),
+      spd: b.spd * (has(u, 'lame') ? 0.6 : 1),
+      miss: has(u, 'oneeye') ? 0.3 : 0,
+      range: b.range, ranged: u.arch === 'shooter', taken: b.taken, taunt: b.taunt,
+    };
+  }
+
+  function makeUnit(g, grade, arch, defects, x, y) {
+    const u = { uid: g.nextUid++, x, y, g: grade, arch, defects: defects.slice(), hp: 0, r: radiusOf(grade), cd: 0, down: 0, pop: 0.5, face: -Math.PI / 2 };
+    u.hp = stats(u).maxHp;
+    g.found[grade + ':' + arch] = true;
+    g.maxGrade = Math.max(g.maxGrade, grade);
+    return u;
+  }
+
+  function newGame(seed) {
+    const g = {
+      W, H, DURATION, t: 0, over: null, rand: mulberry(seed || 1), nextUid: 1,
+      necro: { x: W / 2, y: H * 0.6, hp: 100, maxHp: 100, r: 0.5, hurt: 0, mp: CFG.startMp, maxMp: CFG.maxMp },
+      units: [], enemies: [], souls: [], fx: [],
+      selected: null,
+      found: {}, maxGrade: 1,
+      spawnT: 1.2, kills: 0, raised: 0, fusions: 0, greats: 0, fails: 0, absorbs: 0,
+    };
+    // 네크로맨서는 직접 싸우지 못한다. 1등급 하나를 데리고 시작한다.
+    g.units.push(makeUnit(g, 1, 'armor', [], g.necro.x, g.necro.y + 1.5));
+    return g;
+  }
+
+  function moveToward(o, tx, ty, d) {
+    const dx = tx - o.x, dy = ty - o.y, m = Math.hypot(dx, dy);
+    if (m < 1e-4) return;
+    const k = Math.min(1, d / m);
+    o.x += dx * k; o.y += dy * k;
+    o.face = Math.atan2(dy, dx);
+  }
+
+  function spawn(g, dt) {
+    g.spawnT -= dt;
+    if (g.spawnT > 0 || g.enemies.length >= 36) return;
+    const k = g.t / DURATION, r = g.rand(), r2 = g.rand();
+    g.spawnT = (CFG.spawnStart + (CFG.spawnEnd - CFG.spawnStart) * k) * (0.8 + 0.4 * g.rand());
+    let arch = 'beast';
+    if (g.t >= 12 && g.t < 35) arch = r < 0.65 ? 'beast' : 'shooter';
+    else if (g.t >= 35) arch = r < 0.42 ? 'beast' : r < 0.7 ? 'shooter' : 'armor';
+    let grade = 1;
+    if (g.t >= 18 && g.t < 45) grade = r2 < 0.65 ? 1 : 2;
+    else if (g.t >= 45) grade = r2 < 0.35 ? 1 : r2 < 0.75 ? 2 : 3;
+    const n = arch === 'beast' && grade === 1 && g.t > 30 ? 2 : 1;
+    for (let i = 0; i < n; i++) {
+      let x = 0, y = 0;
+      for (let tries = 0; tries < 6; tries++) {
+        const side = Math.floor(g.rand() * 4), u = g.rand();
+        x = side === 0 ? 0.4 : side === 1 ? W - 0.4 : u * W;
+        y = side === 2 ? 0.4 : side === 3 ? H - 0.4 : u * H;
+        if (Math.hypot(x - g.necro.x, y - g.necro.y) > 7) break;
+      }
+      const f = FOE[arch], m = Math.pow(CFG.foeGradeMul, grade - 1), hp = BASE[arch].hp * f.hpK * m;
+      g.enemies.push({ arch, g: grade, x, y, hp, maxHp: hp, dmg: f.dmg * m, r: f.r + 0.08 * (grade - 1), cd: 0.4, face: 0 });
+    }
+  }
+
+  function hurtUnit(g, u, dmg) {
+    const s = stats(u);
+    if (s.taken < 0.99) g.fx.push({ k: 'block', x: u.x, y: u.y, face: u.face, r: u.r, t: 0.18 });
+    u.hp -= dmg * s.taken;
+    if (u.hp <= 0) { u.hp = 0; u.down = 6; g.fx.push({ k: 'down', x: u.x, y: u.y, t: 0.5 }); }
+  }
+
+  function killEnemy(g, e) {
+    g.kills++;
+    g.necro.mp = Math.min(g.necro.maxMp, g.necro.mp + CFG.mpPerKill * e.g);
+    g.fx.push({ k: 'die', x: e.x, y: e.y, arch: e.arch, t: 0.35 });
+    if (g.souls.length < 10) g.souls.push({ x: clamp(e.x, 0.8, W - 0.8), y: clamp(e.y, 0.8, H - 0.8), arch: e.arch, g: e.g, ttl: CFG.soulTtl });
+  }
+
+  function canRaise(g, soul) { return g.units.length < CFG.maxUnits && g.necro.mp >= costOf(soul.g); }
+
+  // 혼을 밟으면 그 적이 같은 등급의 소환수로 되살아난다. 자리나 MP가 모자라면 혼은 남는다.
+  function raise(g, soul) {
+    if (!canRaise(g, soul)) return false;
+    g.necro.mp -= costOf(soul.g);
+    const u = makeUnit(g, soul.g, soul.arch, [], soul.x, soul.y);
+    g.units.push(u);
+    g.raised++;
+    g.fx.push({ k: 'raise', x: u.x, y: u.y, arch: u.arch, t: 0.45 });
+    return true;
+  }
+
+  // 합성. 같은 등급이면 다음 등급의 몬스터가 무작위로 나온다(대성공 +2, 실패는 흠 하나).
+  // 등급이 다르면 높은 쪽이 낮은 쪽을 삼켜 체력을 채우고 자리만 비운다.
+  function fuse(g, a, b) {
+    g.selected = null;
+    if (a.g !== b.g) {
+      const hi = a.g > b.g ? a : b, lo = hi === a ? b : a;
+      hi.hp = stats(hi).maxHp; hi.down = 0; hi.pop = 0.4;
+      g.units = g.units.filter(u => u !== lo);
+      g.absorbs++;
+      g.fx.push({ k: 'fuse', x: hi.x, y: hi.y, r: hi.r, result: 'absorb', name: '', t: 0.5 });
+      return 'absorb';
+    }
+    const roll = g.rand();
+    let result = 'normal', grade = a.g + 1;
+    const defects = a.defects.slice();
+    for (const d of b.defects) if (defects.indexOf(d) < 0) defects.push(d);   // 흠은 둘 다 따라간다
+    if (roll < CFG.failChance) {
+      const left = Object.keys(DEFECTS).filter(d => defects.indexOf(d) < 0);
+      if (left.length) defects.push(left[Math.floor(g.rand() * left.length)]);
+      result = 'fail'; g.fails++;
+    } else if (roll < CFG.failChance + CFG.greatChance) {
+      grade = a.g + 2; result = 'great'; g.greats++;
+    }
+    grade = Math.min(MAX_GRADE, grade);
+    const arch = ARCHS[Math.floor(g.rand() * ARCHS.length)];
+    const u = makeUnit(g, grade, arch, defects, b.x, b.y);
+    u.pop = 0.7; u.cd = 0.3;
+    g.units = g.units.filter(x => x !== a && x !== b);
+    g.units.push(u);
+    g.fusions++;
+    g.fx.push({ k: 'fuse', x: u.x, y: u.y, r: u.r, result, name: nameOf(u), grade, t: 1.1 });
+    return result;
+  }
+
+  // 소환수를 톡 누른다: 첫 번째는 고르기, 다른 소환수를 또 누르면 둘을 합성한다.
+  function tapUnit(g, uid) {
+    if (g.over) return null;
+    const u = g.units.find(u => u.uid === uid);
+    if (!u) return null;
+    if (g.selected === null) { g.selected = uid; return 'select'; }
+    if (g.selected === uid) { g.selected = null; return 'clear'; }
+    const a = g.units.find(x => x.uid === g.selected);
+    if (!a) { g.selected = uid; return 'select'; }
+    return fuse(g, a, u);
+  }
+
+  function step(g, dt, inp) {
+    if (g.over) return;
+    g.t += dt;
+    const n = g.necro;
+    let mx = (inp && inp.x) || 0, my = (inp && inp.y) || 0;
+    const m = Math.hypot(mx, my);
+    if (m > 1) { mx /= m; my /= m; }
+    n.x = clamp(n.x + mx * NECRO_SPEED * dt, 0.6, W - 0.6);
+    n.y = clamp(n.y + my * NECRO_SPEED * dt, 0.6, H - 0.6);
+    n.hurt = Math.max(0, n.hurt - dt);
+
+    spawn(g, dt);
+
+    g.units.forEach((u, idx) => {
+      u.pop = Math.max(0, u.pop - dt);
+      if (u.down > 0) {
+        u.down -= dt;
+        if (u.down <= 0) { u.down = 0; u.hp = stats(u).maxHp * 0.5; u.pop = 0.3; }
+        return;
+      }
+      const s = stats(u);
+      u.cd -= dt;
+      let best = null, bd = 1e9;
+      for (const e of g.enemies) {
+        if (e.hp <= 0 || dist(e, n) > LEASH) continue;
+        const d = dist(e, u);
+        if (d < bd) { bd = d; best = e; }
+      }
+      if (best) {
+        const reach = s.range + best.r + u.r;
+        if (bd > reach) moveToward(u, best.x, best.y, s.spd * dt);
+        else u.face = Math.atan2(best.y - u.y, best.x - u.x);
+        if (bd <= reach + 0.1 && u.cd <= 0) {
+          u.cd = s.cd;
+          const missed = s.miss > 0 && g.rand() < s.miss;
+          if (s.ranged) g.fx.push({ k: 'shot', x: u.x, y: u.y, tx: best.x + (missed ? 0.9 : 0), ty: best.y - (missed ? 0.9 : 0), arch: 'shooter', t: 0.2 });
+          else if (!missed) g.fx.push({ k: 'hit', x: best.x, y: best.y, big: u.g >= 3, t: 0.15 });
+          if (missed) g.fx.push({ k: 'miss', x: best.x, y: best.y - best.r - 0.3, t: 0.4 });
+          else {
+            best.hp -= s.dmg;
+            if (best.hp <= 0) killEnemy(g, best);
+          }
+        }
+      } else {
+        const a = Math.PI / 2 + idx * Math.PI * 2 / 3;
+        const tx = n.x + Math.cos(a) * (1.3 + u.r), ty = n.y + Math.sin(a) * (1.3 + u.r);
+        if (Math.hypot(tx - u.x, ty - u.y) > 0.15) moveToward(u, tx, ty, s.spd * dt);
+      }
+    });
+
+    for (const e of g.enemies) {
+      if (e.hp <= 0) continue;
+      const f = FOE[e.arch];
+      e.cd -= dt;
+      // 적은 네크로맨서를 노린다. 길을 막은 소환수나 적을 끄는 갑주가 있으면 그쪽과 싸운다.
+      let tgt = n, isNecro = true, td = dist(e, n);
+      for (const u of g.units) {
+        if (u.down > 0) continue;
+        const d = dist(e, u);
+        const pull = stats(u).taunt ? 4 : (e.arch === 'shooter' ? 0 : u.r + e.r + 0.5);
+        if (d < pull && (isNecro || d < td)) { tgt = u; isNecro = false; td = d; }
+      }
+      const reach = f.range + tgt.r + e.r;
+      if (td > reach * (e.arch === 'shooter' ? 0.9 : 1)) moveToward(e, tgt.x, tgt.y, f.spd * dt);
+      else e.face = Math.atan2(tgt.y - e.y, tgt.x - e.x);
+      if (td <= reach + 0.1 && e.cd <= 0) {
+        e.cd = f.cd;
+        if (e.arch === 'shooter') g.fx.push({ k: 'shot', x: e.x, y: e.y, tx: tgt.x, ty: tgt.y, arch: 'danger', t: 0.12 });
+        if (isNecro) { n.hp -= e.dmg; n.hurt = 0.25; }
+        else hurtUnit(g, tgt, e.dmg);
+      }
+    }
+
+    // 서로 겹치지 않게 살짝 민다.
+    const bodies = g.enemies.filter(e => e.hp > 0).concat(g.units.filter(u => u.down <= 0));
+    for (let i = 0; i < bodies.length; i++) {
+      for (let j = i + 1; j < bodies.length; j++) {
+        const a = bodies[i], b = bodies[j];
+        const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy), min = (a.r + b.r) * 0.9;
+        if (d < min && d > 1e-4) {
+          const push = (min - d) * 0.5, ux = dx / d, uy = dy / d;
+          a.x -= ux * push; a.y -= uy * push; b.x += ux * push; b.y += uy * push;
+        }
+      }
+    }
+
+    for (const s of g.souls) {
+      s.ttl -= dt;
+      if (s.ttl > 0 && dist(s, n) < PICK_RADIUS && raise(g, s)) s.ttl = 0;
+    }
+    g.souls = g.souls.filter(s => s.ttl > 0);
+    g.enemies = g.enemies.filter(e => e.hp > 0);
+    for (const f of g.fx) f.t -= dt;
+    g.fx = g.fx.filter(f => f.t > 0);
+
+    if (n.hp <= 0) { n.hp = 0; g.over = 'lose'; }
+    else if (g.t >= DURATION) { g.t = DURATION; g.over = 'win'; }
+  }
+
+  const api = { W, H, DURATION, MAX_GRADE, ARCHS, MON, DEFECTS, CFG, newGame, step, stats, nameOf, costOf, canRaise, tapUnit };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.ChimeraSim = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+// 화면과 입력. 규칙은 sim.js에 있고 여기서는 상태를 그리기만 한다.
+(function () {
+  'use strict';
+  const S = window.ChimeraSim;
+  const cv = document.getElementById('game');
+  const ctx = cv.getContext('2d');
+  const css = getComputedStyle(document.documentElement);
+  const C = n => css.getPropertyValue(n).trim();
+  const COL = {
+    ground: C('--ground'), grid: C('--grid'), ink: C('--ink'), dim: C('--dim'), necro: C('--necro'),
+    bone: C('--bone'), beast: C('--beast'), armor: C('--armor'), shooter: C('--shooter'), danger: C('--danger'), great: C('--great'),
+  };
+  const FONT = C('--font-body'), FONT_D = C('--font-display');
+  const titleEl = document.getElementById('title'), endEl = document.getElementById('end');
+  const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const VIEW_W = 13;   // 화면 가로에 들어오는 판의 폭
+  const DEX_KEY = 'chimera-lab-dex-v1';
+
+  let g = null, mode = 'title', inp = { x: 0, y: 0 }, stick = null, keys = {}, last = 0;
+  let scale = 1, dpr = 1, camX = 0, camY = 0, slow = 0, seed = (Date.now() % 100000) + 1;
+
+  // 도감: 만나 본 몬스터는 이 기기에 남는다(저장이 막혀 있으면 이번 판 것만 보인다).
+  function loadDex() { try { return JSON.parse(localStorage.getItem(DEX_KEY)) || {}; } catch (e) { return {}; } }
+  function saveDex(d) { try { localStorage.setItem(DEX_KEY, JSON.stringify(d)); } catch (e) { /* 저장 없이도 판은 돈다 */ } }
+  let dex = loadDex();
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const r = cv.getBoundingClientRect();
+    cv.width = Math.max(1, Math.round(r.width * dpr));
+    cv.height = Math.max(1, Math.round(r.height * dpr));
+    scale = cv.width / VIEW_W;
+  }
+  window.addEventListener('resize', resize);
+
+  function start() {
+    g = S.newGame(seed++);
+    mode = 'play'; slow = 0;
+    titleEl.hidden = true; endEl.hidden = true;
+    inp.x = inp.y = 0; stick = null;
+  }
+  document.getElementById('startBtn').addEventListener('click', start);
+  document.getElementById('againBtn').addEventListener('click', start);
+
+  // 누르고 끌면 이동, 소환수를 짧게 톡 누르면 고르기(둘을 차례로 누르면 합성).
+  cv.addEventListener('pointerdown', e => {
+    if (mode !== 'play') return;
+    cv.setPointerCapture(e.pointerId);
+    stick = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, at: performance.now(), far: 0 };
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!stick || e.pointerId !== stick.id) return;
+    stick.x = e.clientX; stick.y = e.clientY;
+    stick.far = Math.max(stick.far, Math.hypot(stick.x - stick.x0, stick.y - stick.y0));
+  });
+  cv.addEventListener('pointerup', e => {
+    if (!stick || e.pointerId !== stick.id) return;
+    if (mode === 'play' && performance.now() - stick.at < 300 && stick.far < 14) {
+      const r = cv.getBoundingClientRect();
+      const wx = (e.clientX - r.left) * dpr / scale + camX, wy = (e.clientY - r.top) * dpr / scale + camY;
+      let best = null, bd = 1e9;
+      for (const u of g.units) { const d = Math.hypot(u.x - wx, u.y - wy) - u.r; if (d < 1.0 && d < bd) { bd = d; best = u; } }
+      if (best) {
+        const res = S.tapUnit(g, best.uid);
+        if (!reduced && (res === 'normal' || res === 'great' || res === 'fail')) slow = res === 'great' ? 0.8 : 0.5;
+      }
+    }
+    stick = null;
+  });
+  cv.addEventListener('pointercancel', e => { if (stick && e.pointerId === stick.id) stick = null; });
+  window.addEventListener('keydown', e => { keys[e.key] = true; });
+  window.addEventListener('keyup', e => { keys[e.key] = false; });
+
+  function readInput() {
+    let x = 0, y = 0;
+    if (stick) {
+      const R = 56;
+      x = (stick.x - stick.x0) / R; y = (stick.y - stick.y0) / R;
+      const m = Math.hypot(x, y);
+      if (m < 0.15) { x = 0; y = 0; } else if (m > 1) { x /= m; y /= m; }
+    }
+    if (keys.ArrowLeft || keys.a) x -= 1;
+    if (keys.ArrowRight || keys.d) x += 1;
+    if (keys.ArrowUp || keys.w) y -= 1;
+    if (keys.ArrowDown || keys.s) y += 1;
+    inp.x = x; inp.y = y;
+  }
+
+  function circle(x, y, r) { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); }
+  function bar(x, y, w, f, col) {
+    ctx.fillStyle = COL.grid; ctx.fillRect(x - w / 2, y, w, 0.14);
+    ctx.fillStyle = col; ctx.fillRect(x - w / 2, y, w * Math.max(0, f), 0.14);
+  }
+  // 종류는 모양으로도 구별한다: 맹수는 화살촉, 갑주는 네모, 사수는 마름모.
+  function shape(arch, r) {
+    ctx.beginPath();
+    if (arch === 'beast') { ctx.moveTo(r * 1.35, 0); ctx.lineTo(-r, r * 0.9); ctx.lineTo(-r * 0.45, 0); ctx.lineTo(-r, -r * 0.9); ctx.closePath(); }
+    else if (arch === 'armor') { ctx.rect(-r * 0.95, -r * 0.95, r * 1.9, r * 1.9); }
+    else { ctx.moveTo(r * 1.25, 0); ctx.lineTo(0, r * 1.05); ctx.lineTo(-r * 1.25, 0); ctx.lineTo(0, -r * 1.05); ctx.closePath(); }
+  }
+  const sx = x => (x - camX) * scale / dpr, sy = y => (y - camY) * scale / dpr;
+
+  // 소환수: 몸은 뼈 색, 테두리와 장식은 종류 색. 등급이 오를수록 커지고 등의 뿔이 늘어난다.
+  function drawUnit(u) {
+    const k = 1 + (reduced ? 0 : u.pop * 0.9), r = u.r * k, col = COL[u.arch];
+    ctx.save();
+    ctx.translate(u.x, u.y);
+    ctx.globalAlpha = u.down > 0 ? 0.3 : 1;
+    ctx.rotate(u.face);
+    const horns = Math.min(u.g - 1, 9);
+    ctx.strokeStyle = col; ctx.lineWidth = r * 0.14; ctx.lineCap = 'round';
+    for (let i = 0; i < horns; i++) {
+      const a = Math.PI + (i - (horns - 1) / 2) * 0.3;
+      ctx.beginPath(); ctx.moveTo(Math.cos(a) * r * 0.7, Math.sin(a) * r * 0.7); ctx.lineTo(Math.cos(a) * r * 1.55, Math.sin(a) * r * 1.55); ctx.stroke();
+    }
+    ctx.fillStyle = COL.bone; ctx.strokeStyle = col; ctx.lineWidth = r * 0.2; ctx.lineJoin = 'round';
+    shape(u.arch, r); ctx.fill(); ctx.stroke();
+    if (u.arch === 'armor') { ctx.lineWidth = r * 0.24; ctx.beginPath(); ctx.arc(0, 0, r * 1.5, -0.8, 0.8); ctx.stroke(); }
+    if (u.arch === 'shooter') { ctx.lineWidth = r * 0.14; ctx.beginPath(); ctx.arc(r * 0.9, 0, r * 0.75, -1.25, 1.25); ctx.stroke(); }
+    if (u.arch === 'beast') { ctx.fillStyle = col; for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(r * 0.2, s * r * 0.45); ctx.lineTo(-r * 0.15, s * r * 1.05); ctx.lineTo(r * 0.55, s * r * 0.6); ctx.closePath(); ctx.fill(); } }
+    ctx.restore();
+
+    // 흠: 몸 아래 붉은 표시(절름발이 꺾인 선, 외눈 빗금 친 원, 외팔 막대 하나, 허약 빈 마름모)
+    ctx.strokeStyle = COL.danger; ctx.lineWidth = 0.07;
+    u.defects.forEach((d, i) => {
+      const x = u.x + (i - (u.defects.length - 1) / 2) * 0.42, y = u.y + u.r + 0.42, q = 0.15;
+      ctx.beginPath();
+      if (d === 'lame') { ctx.moveTo(x - q, y - q); ctx.lineTo(x, y); ctx.lineTo(x - q, y + q); ctx.lineTo(x + q, y + q); }
+      else if (d === 'oneeye') { ctx.arc(x, y, q, 0, Math.PI * 2); ctx.moveTo(x - q, y + q); ctx.lineTo(x + q, y - q); }
+      else if (d === 'onearm') { ctx.moveTo(x - q, y); ctx.lineTo(x + q, y); }
+      else { ctx.moveTo(x, y - q); ctx.lineTo(x + q, y); ctx.lineTo(x, y + q); ctx.lineTo(x - q, y); ctx.closePath(); }
+      ctx.stroke();
+    });
+    const mh = S.stats(u).maxHp;
+    if (u.down <= 0 && u.hp < mh) bar(u.x, u.y - u.r - 0.45, Math.max(1, u.r * 1.6), u.hp / mh, COL.bone);
+    if (u.down > 0) {
+      ctx.strokeStyle = COL.bone; ctx.lineWidth = 0.08;
+      ctx.beginPath(); ctx.arc(u.x, u.y, u.r + 0.25, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - u.down / 6)); ctx.stroke();
+    }
+  }
+
+  function drawEnemy(e) {
+    ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(e.face);
+    ctx.fillStyle = COL[e.arch]; ctx.strokeStyle = COL.ground; ctx.lineWidth = 0.07;
+    shape(e.arch, e.r); ctx.fill(); ctx.stroke();
+    ctx.restore();
+    if (e.hp < e.maxHp) bar(e.x, e.y - e.r - 0.35, 0.9, e.hp / e.maxHp, COL.danger);
+  }
+
+  function label(text, x, y, size, col, font) {
+    ctx.font = '700 ' + size + 'px ' + (font || FONT);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineWidth = Math.max(3, size / 5); ctx.strokeStyle = COL.ground; ctx.lineJoin = 'round';
+    ctx.strokeText(text, x, y); ctx.fillStyle = col; ctx.fillText(text, x, y);
+  }
+
+  function draw(now) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = COL.ground; ctx.fillRect(0, 0, cv.width, cv.height);
+    if (!g) return;
+    const vh = cv.height / scale, n = g.necro;
+    camX = Math.max(0, Math.min(S.W - VIEW_W, n.x - VIEW_W / 2));
+    camY = vh >= S.H ? (S.H - vh) / 2 : Math.max(0, Math.min(S.H - vh, n.y - vh / 2));
+    ctx.setTransform(scale, 0, 0, scale, -camX * scale, -camY * scale);
+
+    ctx.strokeStyle = COL.grid; ctx.lineWidth = 0.03;
+    for (let x = 0; x <= S.W; x += 3) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, S.H); ctx.stroke(); }
+    for (let y = 0; y <= S.H; y += 3) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(S.W, y); ctx.stroke(); }
+    ctx.lineWidth = 0.08; ctx.strokeRect(0, 0, S.W, S.H);
+
+    // 혼: 잡은 적의 윤곽. 아래 점은 되살리는 데 드는 MP. 지금 되살릴 수 없으면 흐리다.
+    for (const s of g.souls) {
+      if (s.ttl < 3 && Math.floor(now / 120) % 2 === 0) continue;
+      const ok = S.canRaise(g, s), cost = S.costOf(s.g);
+      ctx.save(); ctx.translate(s.x, s.y);
+      ctx.globalAlpha = ok ? 1 : 0.35;
+      ctx.strokeStyle = COL[s.arch]; ctx.lineWidth = 0.1;
+      ctx.setLineDash([0.22, 0.16]); ctx.lineDashOffset = reduced ? 0 : -now / 500;
+      shape(s.arch, 0.5 + 0.08 * (s.g - 1)); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = COL.necro;
+      for (let i = 0; i < cost; i++) ctx.fillRect((i - (cost - 1) / 2) * 0.24 - 0.08, 0.86 + 0.08 * (s.g - 1), 0.16, 0.16);
+      ctx.restore();
+    }
+
+    for (const e of g.enemies) drawEnemy(e);
+
+    // 고른 소환수: 도는 고리. 같은 등급(합성하면 등급이 오른다)까지는 굵은 선, 다른 등급(삼킨다)까지는 옅은 선.
+    const sel = g.selected === null ? null : g.units.find(u => u.uid === g.selected);
+    if (sel) {
+      ctx.save(); ctx.strokeStyle = COL.necro;
+      for (const u of g.units) {
+        if (u === sel) continue;
+        const same = u.g === sel.g;
+        ctx.lineWidth = same ? 0.14 : 0.05; ctx.setLineDash(same ? [] : [0.2, 0.2]); ctx.globalAlpha = same ? 1 : 0.6;
+        ctx.beginPath(); ctx.moveTo(sel.x, sel.y); ctx.lineTo(u.x, u.y); ctx.stroke();
+      }
+      ctx.globalAlpha = 1; ctx.lineWidth = 0.13; ctx.setLineDash([0.35, 0.25]); ctx.lineDashOffset = reduced ? 0 : -now / 400;
+      circle(sel.x, sel.y, sel.r + 0.55); ctx.stroke(); ctx.restore();
+    }
+    for (const u of g.units) drawUnit(u);
+
+    ctx.fillStyle = n.hurt > 0 ? COL.danger : COL.necro;
+    circle(n.x, n.y, n.r); ctx.fill();
+    ctx.strokeStyle = COL.ink; ctx.lineWidth = 0.08; circle(n.x, n.y, n.r + 0.16); ctx.stroke();
+    ctx.fillStyle = COL.ground; circle(n.x, n.y, 0.16); ctx.fill();
+
+    for (const f of g.fx) {
+      if (f.k === 'hit') { ctx.strokeStyle = COL.ink; ctx.lineWidth = f.big ? 0.14 : 0.08; circle(f.x, f.y, 0.25 + (0.15 - f.t) * (f.big ? 6 : 3)); ctx.stroke(); }
+      else if (f.k === 'shot') { ctx.strokeStyle = COL[f.arch]; ctx.lineWidth = f.arch === 'shooter' ? 0.16 : 0.07; ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.lineTo(f.tx, f.ty); ctx.stroke(); }
+      else if (f.k === 'die') { ctx.strokeStyle = COL[f.arch]; ctx.lineWidth = 0.1; circle(f.x, f.y, 0.4 + (0.35 - f.t) * 3); ctx.stroke(); }
+      else if (f.k === 'block') { ctx.strokeStyle = COL.armor; ctx.lineWidth = 0.22; ctx.beginPath(); ctx.arc(f.x, f.y, f.r * 1.6, f.face - 1.1, f.face + 1.1); ctx.stroke(); }
+      else if (f.k === 'raise') { ctx.strokeStyle = COL[f.arch]; ctx.lineWidth = 0.14; circle(f.x, f.y, 0.5 + (0.45 - f.t) * 3); ctx.stroke(); }
+      else if (f.k === 'miss') { ctx.strokeStyle = COL.dim; ctx.lineWidth = 0.07; ctx.beginPath(); ctx.moveTo(f.x - 0.2, f.y - 0.2); ctx.lineTo(f.x + 0.2, f.y + 0.2); ctx.moveTo(f.x + 0.2, f.y - 0.2); ctx.lineTo(f.x - 0.2, f.y + 0.2); ctx.stroke(); }
+      else if (f.k === 'fuse') {
+        const life = f.result === 'absorb' ? 0.5 : 1.1, k = Math.min(1, (life - f.t) / 0.6);
+        const col = f.result === 'great' ? COL.great : f.result === 'fail' ? COL.danger : COL.necro;
+        if (k < 1) {
+          ctx.strokeStyle = col; ctx.lineWidth = f.result === 'great' ? 0.28 : 0.18;
+          circle(f.x, f.y, f.r + 0.2 + k * 2.2); ctx.stroke();
+          ctx.lineWidth = 0.08; circle(f.x, f.y, f.r + 0.2 + k * 4); ctx.stroke();
+          if (f.result === 'great') {
+            for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; ctx.beginPath(); ctx.moveTo(f.x + Math.cos(a) * (f.r + 0.4 + k), f.y + Math.sin(a) * (f.r + 0.4 + k)); ctx.lineTo(f.x + Math.cos(a) * (f.r + 1.1 + k * 2.4), f.y + Math.sin(a) * (f.r + 1.1 + k * 2.4)); ctx.stroke(); }
+          }
+        }
+      }
+      else if (f.k === 'down') { ctx.strokeStyle = COL.danger; ctx.lineWidth = 0.1; circle(f.x, f.y, 0.6 + (0.5 - f.t) * 2); ctx.stroke(); }
+    }
+
+    // 여기부터 화면 좌표(글자가 또렷하게 나오게)
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const px = scale / dpr;
+    for (const e of g.enemies) if (e.g > 1) label(String(e.g), sx(e.x), sy(e.y), Math.max(11, e.r * px * 0.9), COL.ground);
+    for (const s of g.souls) { ctx.globalAlpha = S.canRaise(g, s) ? 1 : 0.4; label(String(s.g), sx(s.x), sy(s.y), 13, COL[s.arch]); ctx.globalAlpha = 1; }
+    for (const u of g.units) label(String(u.g), sx(u.x), sy(u.y), Math.max(13, u.r * px * 0.95), COL.ground);
+    if (sel) label(S.nameOf(sel), sx(sel.x), sy(sel.y - sel.r) - 26, 15, COL.ink);
+    // 합성 결과: 새 몬스터의 이름을 그 자리에서 한 번 보여 준다
+    for (const f of g.fx) {
+      if (f.k !== 'fuse' || !f.name) continue;
+      const col = f.result === 'great' ? COL.great : f.result === 'fail' ? COL.danger : COL.ink;
+      const head = f.result === 'great' ? '대성공 · ' + f.grade + '등급' : f.result === 'fail' ? '실패 · ' + f.grade + '등급' : f.grade + '등급';
+      label(head, sx(f.x), sy(f.y - f.r) - 52, 13, col);
+      label(f.name, sx(f.x), sy(f.y - f.r) - 30, 20, col, FONT_D);
+    }
+
+    // 화면 고정 표시: 남은 시간, 체력, MP, 소환수 자리
+    const w = cv.width / dpr, pad = 16, bw = w - pad * 2;
+    ctx.fillStyle = COL.grid; ctx.fillRect(pad, 12, bw, 6);
+    ctx.fillStyle = COL.ink; ctx.fillRect(pad, 12, bw * (1 - g.t / S.DURATION), 6);
+    ctx.fillStyle = COL.grid; ctx.fillRect(pad, 24, bw, 10);
+    ctx.fillStyle = n.hp / n.maxHp < 0.3 ? COL.danger : COL.necro; ctx.fillRect(pad, 24, bw * n.hp / n.maxHp, 10);
+    const seg = 18, sg = 4;
+    for (let i = 0; i < n.maxMp; i++) {
+      const f = Math.max(0, Math.min(1, n.mp - i));
+      ctx.fillStyle = COL.grid; ctx.fillRect(pad + i * (seg + sg), 42, seg, 12);
+      ctx.fillStyle = COL.necro; ctx.fillRect(pad + i * (seg + sg), 42, seg * f, 12);
+    }
+    for (let i = 0; i < S.CFG.maxUnits; i++) {
+      ctx.beginPath(); ctx.arc(w - pad - 10 - i * 26, 78, 9, 0, Math.PI * 2);
+      if (i < S.CFG.maxUnits - g.units.length) { ctx.strokeStyle = COL.dim; ctx.lineWidth = 2; ctx.stroke(); }
+      else { ctx.fillStyle = COL.bone; ctx.fill(); }
+    }
+    ctx.font = '600 14px ' + FONT; ctx.textBaseline = 'middle'; ctx.fillStyle = COL.ink;
+    ctx.textAlign = 'right'; ctx.fillText(Math.ceil(S.DURATION - g.t) + '초', w - pad, 49);
+
+    if (stick && stick.far >= 14) {
+      const r = cv.getBoundingClientRect();
+      ctx.strokeStyle = COL.dim; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(stick.x0 - r.left, stick.y0 - r.top, 56, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = COL.dim; ctx.beginPath(); ctx.arc(stick.x0 - r.left + inp.x * 56, stick.y0 - r.top + inp.y * 56, 18, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
+  function showEnd() {
+    mode = 'over';
+    const fresh = Object.keys(g.found).filter(k => !dex[k]);
+    for (const k of Object.keys(g.found)) dex[k] = true;
+    saveDex(dex);
+    document.getElementById('endTitle').textContent = g.over === 'win' ? '버텼다' : '쓰러졌다';
+    document.getElementById('endTime').textContent = g.t.toFixed(0) + '초';
+    document.getElementById('endKills').textContent = g.kills + '마리';
+    document.getElementById('endFused').textContent = g.fusions + '번 (대성공 ' + g.greats + ', 실패 ' + g.fails + ')';
+    document.getElementById('endGrade').textContent = g.maxGrade + '등급';
+    document.getElementById('endDex').textContent = Object.keys(dex).length + ' / ' + (S.MAX_GRADE * S.ARCHS.length) + '종';
+    const names = fresh.map(k => { const p = k.split(':'); return p[0] + '등급 ' + S.MON[+p[0]][p[1]]; });
+    document.getElementById('endNew').textContent = names.length ? '새로 만난 몬스터: ' + names.join(', ') : '새로 만난 몬스터는 없다.';
+    endEl.hidden = false;
+    document.getElementById('againBtn').focus();
+  }
+
+  function frame(now) {
+    let dt = Math.min(0.05, (now - last) / 1000 || 0);
+    last = now;
+    // 합성하는 순간 잠깐 느려진다. 무엇이 나왔는지 볼 틈을 준다.
+    if (slow > 0) { slow -= dt; dt *= 0.2; }
+    if (mode === 'play') {
+      readInput();
+      S.step(g, dt, inp);
+      if (g.over) showEnd();
+    }
+    draw(now);
+    requestAnimationFrame(frame);
+  }
+
+  resize();
+  g = S.newGame(seed);   // 제목 화면 뒤에 판의 첫 모습을 깔아 둔다
+  requestAnimationFrame(frame);
+})();
+
+</script>

@@ -1,0 +1,102 @@
+<title>키메라 실험실</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=Gowun+Dodum&display=swap">
+<style>
+  /* 배치: 화면 전체가 판이다. 글은 시작과 끝의 덮개에만 있고, 판 중에는 위쪽 띠 하나만 남는다. */
+  :root {
+    --ground: #15121c;   /* 밤의 실험실 바닥 */
+    --grid: #2a2536;
+    --ink: #ece4d4;      /* 양피지 */
+    --dim: #8f869c;
+    --necro: #a077ff;    /* 네크로맨서와 MP */
+    --bone: #d8cfbb;     /* 소환수의 몸 */
+    --beast: #e8893a;    /* 맹수 */
+    --armor: #6fa6dc;    /* 갑주 */
+    --shooter: #83c06b;  /* 사수 */
+    --danger: #e5524c;   /* 위험, 실패, 흠 */
+    --great: #f2d35e;    /* 합성 대성공 */
+    --veil: rgba(21, 18, 28, 0.9);
+    --font-display: "Gowun Batang", "Nanum Myeongjo", serif;
+    --font-body: "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    color-scheme: dark;
+  }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--ground); color: var(--ink); font-family: var(--font-body); font-size: 16px; line-height: 1.55; overflow: hidden; }
+  #stage { position: relative; height: 100%; }
+  #game { display: block; width: 100%; height: 100%; touch-action: none; }
+  .veil {
+    position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; gap: 16px;
+    background: var(--veil);
+    padding-block: 24px;
+    padding-left: max(24px, env(safe-area-inset-left, 0px));
+    padding-right: max(24px, env(safe-area-inset-right, 0px));
+    overflow-y: auto;
+  }
+  .veil > * { max-width: 26rem; width: 100%; margin-inline: auto; }
+  h1, h2 { font-family: var(--font-display); font-weight: 700; margin: 0; text-wrap: balance; }
+  h1 { font-size: 2.25rem; }
+  h2 { font-size: 2rem; }
+  p { margin: 0; }
+  .how { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+  .how li { display: grid; grid-template-columns: 1.5rem 1fr; gap: 12px; align-items: baseline; }
+  .step { font-family: var(--font-display); color: var(--necro); text-align: center; }
+  .great { color: var(--great); }
+  .fail { color: var(--danger); }
+  .kinds { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; padding: 0; list-style: none; color: var(--dim); }
+  .kinds li { display: flex; gap: 8px; align-items: center; }
+  .swatch { width: 1rem; height: 1rem; flex: none; }
+  .swatch.beast { background: var(--beast); clip-path: polygon(100% 50%, 0 100%, 25% 50%, 0 0); }
+  .swatch.armor { background: var(--armor); }
+  .swatch.shooter { background: var(--shooter); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 20px; margin: 0; font-variant-numeric: tabular-nums; }
+  dt { color: var(--dim); }
+  dd { margin: 0; }
+  .note { color: var(--dim); }
+  button {
+    font: inherit; font-family: var(--font-display); font-size: 1.25rem; color: var(--ground); background: var(--ink);
+    border: 0; padding: 14px 20px; cursor: pointer;
+  }
+  button:focus-visible { outline: 3px solid var(--necro); outline-offset: 3px; }
+</style>
+
+<div id="stage">
+  <canvas id="game" aria-label="키메라 실험 판"></canvas>
+
+  <section class="veil" id="title">
+    <h1>키메라 실험실</h1>
+    <p>네크로맨서는 직접 싸우지 못한다. 소환수가 대신 싸우고, 부릴 수 있는 것은 셋뿐이다. 90초를 버텨라.</p>
+    <ol class="how">
+      <li><span class="step">1</span><span>누르고 끌면 움직인다. 소환수는 따라와 알아서 싸운다.</span></li>
+      <li><span class="step">2</span><span>적을 잡으면 혼이 남는다. 밟으면 같은 등급의 소환수로 되살아난다. 혼 아래 보라색 점만큼 MP가 든다.</span></li>
+      <li><span class="step">3</span><span>소환수 둘을 차례로 톡 누르면 합성된다. 등급이 같으면 다음 등급의 몬스터가 무작위로 나온다. <span class="great">대성공</span>은 두 등급 오르고, <span class="fail">실패</span>하면 흠이 하나 생겨 다음 합성에도 따라간다.</span></li>
+      <li><span class="step">4</span><span>등급이 다른 둘을 누르면 높은 쪽이 낮은 쪽을 삼켜 체력을 채우고 자리를 비운다.</span></li>
+    </ol>
+    <ul class="kinds">
+      <li><span class="swatch beast"></span>맹수는 빠르다</li>
+      <li><span class="swatch armor"></span>갑주는 단단하다</li>
+      <li><span class="swatch shooter"></span>사수는 멀리서 쏜다</li>
+    </ul>
+    <button id="startBtn" type="button">시작</button>
+  </section>
+
+  <section class="veil" id="end" hidden>
+    <h2 id="endTitle">쓰러졌다</h2>
+    <dl>
+      <dt>버틴 시간</dt><dd id="endTime">0초</dd>
+      <dt>잡은 적</dt><dd id="endKills">0마리</dd>
+      <dt>합성</dt><dd id="endFused">0번</dd>
+      <dt>가장 높은 등급</dt><dd id="endGrade">1등급</dd>
+      <dt>도감</dt><dd id="endDex">0 / 30종</dd>
+    </dl>
+    <p class="note" id="endNew"></p>
+    <button id="againBtn" type="button">한 판 더</button>
+  </section>
+</div>
+
+<script>
+/*__SIM__*/
+</script>
+<script>
+/*__RENDER__*/
+</script>
