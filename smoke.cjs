@@ -69,6 +69,14 @@ if (game.over || !game.units.length) throw new Error('새 판이 열리지 않�
   now += 360; flush();
   if (game.pinned !== a.uid) throw new Error('한 번 톡이 누른 순간의 키메라가 아니라 나중 위치의 키메라를 찍었다');
 }
+// 위쪽 키메라 칸을 누르면 그 키메라가 찍힌다
+{
+  const b = game.units[1];
+  const e = { pointerId: 1, clientX: 16 + (Math.min(104, (390 - 32 - 56) / 3) + 6) * 1 + 20, clientY: 56 };
+  ev['game:pointerdown'][0](e); for (const f of ev['game:pointerup']) f(e);
+  if (game.pinned !== b.uid) throw new Error('위쪽 칸을 눌러도 찍히지 않는다');
+  now += 400; flush();
+}
 // 320ms 간격의 두 번 톡톡도 자폭으로 읽힌다
 let edgeChecked = false;
 {

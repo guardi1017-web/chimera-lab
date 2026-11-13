@@ -75,7 +75,7 @@
     <p>네크로맨서는 직접 싸우지 못한다. 키메라 셋이 대신 싸운다. 90초를 버텨라.</p>
     <ol class="how">
       <li><span class="step">1</span><span>누르고 끌면 움직인다. 적이 남긴 혼을 밟으면 키메라로 되살아난다.</span></li>
-      <li><span class="step">2</span><span>셋이 다 차면, 혼을 밟을 때 연결선이 닿은 키메라가 그 혼을 먹는다. 유전자가 쌓여 몸이 커지고 기술이 바뀐다.</span></li>
+      <li><span class="step">2</span><span>셋이 다 차면, 혼을 밟을 때 연결선이 닿은 키메라가 그 혼을 먹는다. 한 번 먹은 키메라가 계속 먹는다. 바꾸려면 위쪽의 키메라 칸을 누른다.</span></li>
       <li><span class="step">3</span><span>먹을수록 <span class="hot">불안정도</span>가 오른다. 80%부터 광기에 들고, 다 차면 적진에 뛰어들어 터진다. 화면을 두 번 톡톡 치면 바로 터뜨린다.</span></li>
       <li><span class="step">4</span><span>터진 자리의 <span class="hot">심장</span>을 밟으면 유전자를 물려받은 새 키메라가 깨어난다. 빨리 주울수록 온전하다.</span></li>
       <li><span class="step">5</span><span>20초, 45초, 70초에 돌격병이 붉은 길을 예고하고 달려든다. 불안정도가 찬 키메라를 터뜨리면 한 방에 잡는다. 잡으면 남는 <span class="gold">순혈 코어</span>는 불안정도를 0으로 식힌다.</span></li>
@@ -114,11 +114,11 @@
     maxUnits: 3,
     absorbRange: 3.2,          // 자리가 찼을 때 이 안의 혼에 다가가면 느려지고 연결선이 생긴다
     pickRadius: 1.1,
-    slowScale: 0.25, slowMax: 1.6, slowRecharge: 0.6,   // 느려짐은 실제 시간으로 최대 1.6초, 벗어나 있으면 다시 찬다
+    slowScale: 0.25, slowMax: 2.2, slowRecharge: 0.8,   // 느려짐은 실제 시간으로 최대 2.2초, 벗어나 있으면 다시 찬다
     // 혼의 품질: 1 불량(잡몹), 2 신선(중형), 3 순혈 코어(돌격병)
     soul: {
-      1: { gene: 1, inst: 30, heal: 0 },
-      2: { gene: 2, inst: 15, heal: 0.5 },
+      1: { gene: 1, inst: 24, heal: 0 },
+      2: { gene: 2, inst: 12, heal: 0.5 },
       3: { gene: 3, inst: -1, heal: 1 },   // inst -1 = 불안정도를 0으로 식힌다
     },
     soulTtl: 10, soulCap: 12,
@@ -647,7 +647,10 @@
         s.ttl = 0;
       } else if (g.feedT <= 0 && s === g.linkItem) {
         const tgt = feedTarget(g, s);
-        if (tgt) { absorb(g, tgt, s); s.ttl = 0; g.feedT = CFG.feedGap; }
+        if (tgt) {
+          if (g.pinned === null) g.pinned = tgt.uid;   // 처음 먹은 키메라가 먹일 대상으로 남는다
+          absorb(g, tgt, s); s.ttl = 0; g.feedT = CFG.feedGap;
+        }
       }
     }
     g.souls = g.souls.filter(s => s.ttl > 0);
@@ -755,6 +758,12 @@
     stick.x = e.clientX; stick.y = e.clientY;
     stick.far = Math.max(stick.far, Math.hypot(stick.x - stick.x0, stick.y - stick.y0));
   });
+  // 위쪽 키메라 칸 셋의 자리(화면 좌표). 그리기와 누르기가 같은 값을 쓴다.
+  function hudSlots(w) {
+    const pad = 16, slotW = Math.min(104, (w - pad * 2 - 56) / 3), out = [];
+    for (let i = 0; i < S.CFG.maxUnits; i++) out.push({ x: pad + i * (slotW + 6), y: 44, w: slotW, h: 24 });
+    return out;
+  }
   function tapAt(cx, cy) {
     const now = performance.now();
     if (lastTap && now - lastTap.t < TAP_MS) {
@@ -763,6 +772,11 @@
       return;
     }
     const r = cv.getBoundingClientRect();
+    const hud = hudSlots(r.width);
+    for (let i = 0; i < hud.length; i++) {
+      const b = hud[i], lx = cx - r.left, ly = cy - r.top;
+      if (g.units[i] && lx >= b.x - 4 && lx <= b.x + b.w + 4 && ly >= b.y - 14 && ly <= b.y + b.h + 22) { S.pin(g, g.units[i].uid); return; }
+    }
     const wx = (cx - r.left) * dpr / scale + camX, wy = (cy - r.top) * dpr / scale + camY;
     const game = g;
     // 누른 순간 손가락 아래에 있던 키메라를 기억해 둔다(확정될 때는 이미 움직였을 수 있다)
@@ -1024,19 +1038,19 @@
     ctx.fillStyle = COL.ink; ctx.fillRect(pad, 12, bw * (1 - g.t / S.DURATION), 6);
     ctx.fillStyle = COL.grid; ctx.fillRect(pad, 24, bw, 10);
     ctx.fillStyle = n.hp / n.maxHp < 0.3 ? COL.danger : COL.necro; ctx.fillRect(pad, 24, bw * n.hp / n.maxHp, 10);
-    const slotW = Math.min(96, (bw - 56) / 3);
-    for (let i = 0; i < S.CFG.maxUnits; i++) {
-      const u = g.units[i], x0 = pad + i * (slotW + 6), y0 = 44;
-      ctx.fillStyle = COL.grid; ctx.fillRect(x0, y0, slotW, 16);
+    const slots = hudSlots(w);
+    for (let i = 0; i < slots.length; i++) {
+      const u = g.units[i], x0 = slots[i].x, y0 = slots[i].y, slotW = slots[i].w, sh = slots[i].h;
+      ctx.fillStyle = COL.grid; ctx.fillRect(x0, y0, slotW, sh);
       if (!u) continue;
-      ctx.fillStyle = COL.danger; ctx.fillRect(x0, y0, slotW * Math.min(1, u.inst / 100), 16);
-      ctx.fillStyle = COL.ink; ctx.fillRect(x0 + slotW * 0.8, y0, 1.5, 16);   // 과부하가 시작되는 80% 눈금
-      ctx.fillStyle = COL[u.main]; ctx.fillRect(x0, y0 + 16, slotW, 3);
-      if (g.pinned === u.uid) { ctx.strokeStyle = COL.necro; ctx.lineWidth = 2; ctx.strokeRect(x0 - 2, y0 - 2, slotW + 4, 23); }
-      ctx.font = '700 12px ' + FONT; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = COL.ink; ctx.fillText(S.levelOf(u) + '등급', x0 + 5, y0 + 8.5);
+      ctx.fillStyle = COL.danger; ctx.fillRect(x0, y0, slotW * Math.min(1, u.inst / 100), sh);
+      ctx.fillStyle = COL.ink; ctx.fillRect(x0 + slotW * 0.8, y0, 1.5, sh);   // 과부하가 시작되는 80% 눈금
+      ctx.fillStyle = COL[u.main]; ctx.fillRect(x0, y0 + sh, slotW, 4);
+      if (g.pinned === u.uid) { ctx.strokeStyle = COL.necro; ctx.lineWidth = 3; ctx.strokeRect(x0 - 2.5, y0 - 2.5, slotW + 5, sh + 9); }
+      ctx.font = '700 13px ' + FONT; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = COL.ink; ctx.fillText(S.levelOf(u) + '등급', x0 + 6, y0 + sh / 2 + 0.5);
     }
     ctx.font = '600 14px ' + FONT; ctx.textBaseline = 'middle'; ctx.fillStyle = COL.ink;
-    ctx.textAlign = 'right'; ctx.fillText(Math.ceil(S.DURATION - g.t) + '초', w - pad, 53);
+    ctx.textAlign = 'right'; ctx.fillText(Math.ceil(S.DURATION - g.t) + '초', w - pad, 57);
 
     if (stick && stick.far >= 14) {
       const r = cv.getBoundingClientRect();

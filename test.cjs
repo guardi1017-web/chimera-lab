@@ -21,9 +21,9 @@ const ok = (c, msg) => { if (!c) throw new Error(msg); };
   g.pinned = g.units[0].uid;
   const u = g.units[0];
   soulAt(g, 'armor', 1);
-  eq(u.inst, 30, '불량 혼: 불안정도 +30'); eq(S.geneTotal(u), 2, '불량 혼: 유전자 +1'); eq(g.units.length, 3, '먹어도 자리는 셋');
+  eq(u.inst, C.soul[1].inst, '불량 혼: 불안정도가 오른다'); eq(S.geneTotal(u), 2, '불량 혼: 유전자 +1'); eq(g.units.length, 3, '먹어도 자리는 셋');
   u.hp = 1; soulAt(g, 'ranger', 2);
-  eq(u.inst, 45, '신선한 혼: 불안정도 +15'); eq(S.geneTotal(u), 4, '신선한 혼: 유전자 +2'); ok(u.hp > S.stats(u).maxHp * 0.45, '신선한 혼: 체력 회복');
+  eq(u.inst, C.soul[1].inst + C.soul[2].inst, '신선한 혼: 불안정도가 덜 오른다'); eq(S.geneTotal(u), 4, '신선한 혼: 유전자 +2'); ok(u.hp > S.stats(u).maxHp * 0.45, '신선한 혼: 체력 회복');
   eq(u.genes.beast, 1, '유전자는 종류별로 쌓인다'); eq(u.genes.ranger, 2, '유전자는 종류별로 쌓인다'); eq(u.main, 'ranger', '가장 많은 유전자가 주 유전자');
   const calm = S.stats(u).dmg; u.inst = 85;
   ok(S.isFrenzy(u) && Math.abs(S.stats(u).dmg / calm - 1.5) < 1e-9, '과부하: 피해 1.5배');
@@ -129,6 +129,18 @@ const ok = (c, msg) => { if (!c) throw new Error(msg); };
     const total = S.geneTotal(r0);
     g.souls.push({ x: g.necro.x, y: g.necro.y, type: 'beast', q: 1, ttl: 5 }); S.step(g, 1 / 600, { x: 0, y: 0 });
     ok(r0.state !== 'rush' || S.geneTotal(r0) === total, '뛰어드는 중에는 먹지 않는다');
+  }
+
+  // 따로 찍지 않아도, 처음 먹은 키메라가 먹일 대상으로 남는다
+  {
+    const g = fresh(); soulAt(g, 'armor', 1); soulAt(g, 'ranger', 1);
+    soulAt(g, 'beast', 1);
+    const first = g.units.find(u => S.geneTotal(u) === 2);
+    ok(first && g.pinned === first.uid, '처음 먹은 키메라가 찍힌다');
+    for (const u of g.units) if (u !== first) { u.x = g.necro.x; u.y = g.necro.y; }
+    first.x = g.necro.x + 3;
+    soulAt(g, 'beast', 1);
+    eq(S.geneTotal(first), 3, '더 가까운 키메라가 있어도 같은 키메라가 계속 먹는다');
   }
 
   // 손으로 터뜨리기: 불안정도가 가장 높은 키메라

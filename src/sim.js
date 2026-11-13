@@ -10,11 +10,11 @@
     maxUnits: 3,
     absorbRange: 3.2,          // 자리가 찼을 때 이 안의 혼에 다가가면 느려지고 연결선이 생긴다
     pickRadius: 1.1,
-    slowScale: 0.25, slowMax: 1.6, slowRecharge: 0.6,   // 느려짐은 실제 시간으로 최대 1.6초, 벗어나 있으면 다시 찬다
+    slowScale: 0.25, slowMax: 2.2, slowRecharge: 0.8,   // 느려짐은 실제 시간으로 최대 2.2초, 벗어나 있으면 다시 찬다
     // 혼의 품질: 1 불량(잡몹), 2 신선(중형), 3 순혈 코어(돌격병)
     soul: {
-      1: { gene: 1, inst: 30, heal: 0 },
-      2: { gene: 2, inst: 15, heal: 0.5 },
+      1: { gene: 1, inst: 24, heal: 0 },
+      2: { gene: 2, inst: 12, heal: 0.5 },
       3: { gene: 3, inst: -1, heal: 1 },   // inst -1 = 불안정도를 0으로 식힌다
     },
     soulTtl: 10, soulCap: 12,
@@ -543,7 +543,10 @@
         s.ttl = 0;
       } else if (g.feedT <= 0 && s === g.linkItem) {
         const tgt = feedTarget(g, s);
-        if (tgt) { absorb(g, tgt, s); s.ttl = 0; g.feedT = CFG.feedGap; }
+        if (tgt) {
+          if (g.pinned === null) g.pinned = tgt.uid;   // 처음 먹은 키메라가 먹일 대상으로 남는다
+          absorb(g, tgt, s); s.ttl = 0; g.feedT = CFG.feedGap;
+        }
       }
     }
     g.souls = g.souls.filter(s => s.ttl > 0);
