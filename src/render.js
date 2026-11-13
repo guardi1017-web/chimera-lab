@@ -306,7 +306,14 @@
     // 봉쇄 초소: 폭발로만 부서진다. 옅은 원이 사격 범위, 위의 칸이 남은 내구도.
     for (const p of g.posts) {
       if (p.dead) { ctx.strokeStyle = COL.grid; ctx.lineWidth = 0.1; circle(p.x, p.y, p.r); ctx.stroke(); continue; }
-      ctx.save(); ctx.globalAlpha = 0.12; ctx.strokeStyle = COL.danger; ctx.lineWidth = 0.06; circle(p.x, p.y, S.CFG.postRange); ctx.stroke(); ctx.restore();
+      // 사정거리: 이 원 안에 네크로맨서가 들어가면 쏜다. 들어가 있는 동안은 진하게 보인다.
+      const inside = Math.hypot(p.x - n.x, p.y - n.y) < S.CFG.postRange;
+      ctx.save();
+      ctx.globalAlpha = inside ? 0.16 : 0.06; ctx.fillStyle = COL.danger; circle(p.x, p.y, S.CFG.postRange); ctx.fill();
+      ctx.globalAlpha = inside ? 0.95 : 0.55; ctx.strokeStyle = COL.danger; ctx.lineWidth = inside ? 0.12 : 0.08;
+      ctx.setLineDash([0.45, 0.3]); ctx.lineDashOffset = reduced ? 0 : -now / 700;
+      circle(p.x, p.y, S.CFG.postRange); ctx.stroke();
+      ctx.restore();
       ctx.fillStyle = COL.dim; ctx.strokeStyle = COL.ink; ctx.lineWidth = 0.1;
       ctx.beginPath(); for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3 + Math.PI / 6; ctx[i ? 'lineTo' : 'moveTo'](p.x + Math.cos(a) * p.r, p.y + Math.sin(a) * p.r); } ctx.closePath(); ctx.fill(); ctx.stroke();
       ctx.fillStyle = Math.floor(now / 400) % 2 ? COL.danger : COL.great; circle(p.x, p.y, 0.22); ctx.fill();
