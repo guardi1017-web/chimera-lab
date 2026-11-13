@@ -1,5 +1,5 @@
 // 키메라 실험 7차: 유전자 누적 + 불안정도 탈피(자폭 뒤 심장 계승) + 돌격조.
-// 한 판의 목적: 봉쇄 초소를 탈피 폭발로 모두 부수고, 나타난 대장을 잡는다. 이기면 키메라 하나를 다음 구역으로 데려간다.
+// 한 판의 목적: 봉쇄 초소를 탈피 폭발로 모두 부수고, 나타난 대장을 잡는다. 구역마다 키메라는 처음부터 키운다.
 // 규칙만 담는다(화면·DOM 없음). 같은 시드면 같은 판이 나온다.
 (function (root) {
   'use strict';
@@ -27,9 +27,9 @@
     moltBonus: 0.1, mutantBonus: 0.2,
     statPerGene: 0.35,
     eliteFirst: 20, eliteEvery: 25, eliteWarn: 1.5,   // 돌격조는 20초에 처음, 그 뒤 25초마다
-    postHits: 2, postRange: 4.2, postDmg: 6, postCd: 1.2,   // 초소: 폭발 두 번(불안정도가 찬 폭발은 한 번)에 부서진다
-    bossHp: 900, bossBlastCap: 0.35,                   // 대장: 폭발 한 번에 최대 체력의 35%까지만
-    districtScale: 0.35,                               // 구역이 하나 오를 때마다 적의 체력과 피해가 이만큼 더
+    postHits: 2, postRange: 4.2, postDmg: 4, postCd: 1.4,   // 초소: 폭발 두 번(불안정도가 찬 폭발은 한 번)에 부서진다
+    bossHp: 700, bossBlastCap: 0.35,                   // 대장: 폭발 한 번에 최대 체력의 35%까지만
+    districtScale: 0.25,                               // 구역이 하나 오를 때마다 적의 체력과 피해가 이만큼 더
     eliteHp: 260, eliteHpStep: 0.5,
     chargeSpeed: 13, chargeDmg: 30, eliteDmg: 14, rechargeEvery: 7, aimTime: 1.2,
     spawnStart: 1.8, spawnEnd: 1.05, foeGradeMul: 1.35,

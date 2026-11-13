@@ -78,7 +78,7 @@
   <section class="veil" id="title">
     <h1>키메라 실험실</h1>
     <p>봉쇄된 서울의 밤. 네크로맨서는 직접 싸우지 못하고, 키메라 셋이 대신 싸운다.</p>
-    <p class="goal"><strong>목적:</strong> <span class="gold">봉쇄 초소</span>를 폭발로 모두 부수면 진압 대장이 나온다. 대장을 잡으면 구역을 차지하고, 키메라들을 그대로 데리고 다음 구역으로 간다. 쓰러지면 모두 잃고 1구역부터다.</p>
+    <p class="goal"><strong>목적:</strong> <span class="gold">봉쇄 초소</span>를 폭발로 모두 부수면 진압 대장이 나온다. 대장을 잡으면 구역을 차지하고 다음 구역이 열린다. 구역마다 키메라는 처음부터 키운다.</p>
     <ol class="how">
       <li><span class="step">1</span><span>누르고 끌면 움직인다. 적이 남긴 혼을 밟으면 키메라가 된다.</span></li>
       <li><span class="step">2</span><span>셋이 차면 연결선이 닿은 키메라가 혼을 먹어 커진다. 먹일 대상은 위쪽 칸을 눌러 바꾼다.</span></li>
@@ -111,7 +111,7 @@
 
 <script>
 // 키메라 실험 7차: 유전자 누적 + 불안정도 탈피(자폭 뒤 심장 계승) + 돌격조.
-// 한 판의 목적: 봉쇄 초소를 탈피 폭발로 모두 부수고, 나타난 대장을 잡는다. 이기면 키메라 하나를 다음 구역으로 데려간다.
+// 한 판의 목적: 봉쇄 초소를 탈피 폭발로 모두 부수고, 나타난 대장을 잡는다. 구역마다 키메라는 처음부터 키운다.
 // 규칙만 담는다(화면·DOM 없음). 같은 시드면 같은 판이 나온다.
 (function (root) {
   'use strict';
@@ -139,9 +139,9 @@
     moltBonus: 0.1, mutantBonus: 0.2,
     statPerGene: 0.35,
     eliteFirst: 20, eliteEvery: 25, eliteWarn: 1.5,   // 돌격조는 20초에 처음, 그 뒤 25초마다
-    postHits: 2, postRange: 4.2, postDmg: 6, postCd: 1.2,   // 초소: 폭발 두 번(불안정도가 찬 폭발은 한 번)에 부서진다
-    bossHp: 900, bossBlastCap: 0.35,                   // 대장: 폭발 한 번에 최대 체력의 35%까지만
-    districtScale: 0.35,                               // 구역이 하나 오를 때마다 적의 체력과 피해가 이만큼 더
+    postHits: 2, postRange: 4.2, postDmg: 4, postCd: 1.4,   // 초소: 폭발 두 번(불안정도가 찬 폭발은 한 번)에 부서진다
+    bossHp: 700, bossBlastCap: 0.35,                   // 대장: 폭발 한 번에 최대 체력의 35%까지만
+    districtScale: 0.25,                               // 구역이 하나 오를 때마다 적의 체력과 피해가 이만큼 더
     eliteHp: 260, eliteHpStep: 0.5,
     chargeSpeed: 13, chargeDmg: 30, eliteDmg: 14, rechargeEvery: 7, aimTime: 1.2,
     spawnStart: 1.8, spawnEnd: 1.05, foeGradeMul: 1.35,
@@ -761,6 +761,7 @@
   const TAP_MS = 340;  // 이 안에 한 번 더 치면 두 번 톡톡(자폭), 아니면 한 번 톡(찍기)
 
   let g = null, mode = 'title', inp = { x: 0, y: 0 }, stick = null, keys = {}, last = 0;
+  let retryDistrict = 1;   // 끝 화면의 '다시' 버튼이 여는 구역
   let scale = 1, dpr = 1, camX = 0, camY = 0, shake = 0, beatT = 0, lastTap = null, seed = (Date.now() % 100000) + 1;
 
   // ---- 소리: 외부 파일 없이 Web Audio로 만든다. 첫 터치(시작 버튼) 뒤에만 켜진다. ----
@@ -818,7 +819,7 @@
     inp.x = inp.y = 0; stick = null;
   }
   document.getElementById('startBtn').addEventListener('click', () => start());
-  document.getElementById('againBtn').addEventListener('click', () => start());
+  document.getElementById('againBtn').addEventListener('click', () => start({ district: retryDistrict }));
 
   // 누르고 끌면 이동. 두 번 톡톡 치면 자폭(탈피). 키메라를 한 번 톡 누르면 먹일 대상으로 찍는다.
   cv.addEventListener('pointerdown', e => {
@@ -1202,22 +1203,21 @@
     document.getElementById('endMolt').textContent = g.molts + '번 터지고 ' + g.rebirths + '번 계승';
     document.getElementById('endLevel').textContent = g.maxLevel + '등급';
     document.getElementById('endBest').textContent = bestDistrict(won ? g.district : g.district - 1) + '구역';
-    const list = document.getElementById('aceList'), askEl = document.getElementById('aceAsk');
+    // 이기면 다음 구역으로(키메라는 데려가지 않고 처음부터 키운다). 지면 그 구역을 다시 한다.
+    const list = document.getElementById('aceList'), askEl = document.getElementById('aceAsk'), again = document.getElementById('againBtn');
     list.textContent = '';
-    const alive = won ? g.units.filter(u => u.state === 'ok') : [];
-    askEl.hidden = !alive.length; list.hidden = !alive.length;
-    if (alive.length) {
-      const total = alive.reduce((n, u) => n + S.geneTotal(u), 0), top = Math.max.apply(null, alive.map(u => S.levelOf(u)));
-      askEl.textContent = '키메라 ' + alive.length + '마리(가장 높은 ' + top + '등급, 유전자 모두 ' + total + '개)가 그대로 따라간다. 쓰러지면 모두 잃는다.';
+    askEl.hidden = true; list.hidden = !won;
+    if (won) {
       const b = document.createElement('button');
       b.type = 'button';
       b.textContent = (g.district + 1) + '구역으로';
-      const squad = S.squadOf(g), next = g.district + 1;
-      b.addEventListener('click', () => start({ district: next, squad }));
+      const next = g.district + 1;
+      b.addEventListener('click', () => start({ district: next }));
       list.appendChild(b);
     }
-    document.getElementById('againBtn').textContent = won && alive.length ? '그만하고 1구역부터' : '1구역부터 다시';
-    document.getElementById('againBtn').className = won && alive.length ? '' : 'solo';   // 고를 것이 없으면 이 버튼이 주된 행동이다
+    retryDistrict = won ? 1 : g.district;
+    again.textContent = won ? '1구역부터 다시' : g.district + '구역 다시';
+    again.className = won ? '' : 'solo';   // 졌을 때는 이 버튼이 주된 행동이다
     endEl.hidden = false;
     document.getElementById('againBtn').focus();
   }

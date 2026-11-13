@@ -96,19 +96,19 @@ boss.hp = 0.5; boss.bleed = 100; boss.bleedT = 1;
 frames(3);
 if (game.over !== 'win' || els.end.hidden !== false) throw new Error('대장을 잡았는데 끝 화면이 뜨지 않았다');
 if (!/1구역 정복/.test(els.endTitle.textContent)) throw new Error('정복 제목이 아니다: ' + els.endTitle.textContent);
-const aces = els.aceList.kids;
-if (aces.length !== 1 || els.aceList.hidden || els.aceAsk.hidden) throw new Error('다음 구역 버튼이 없다');
-console.log('구역 정복 화면: ' + els.endTitle.textContent + ' · 초소 ' + els.endPosts.textContent + ' · 최고 ' + els.endBest.textContent + ' · 버튼 "' + aces[0].textContent + '" · ' + els.aceAsk.textContent);
-const carried = game.units.filter(u => u.state === 'ok'), total = carried.reduce((s, u) => s + S.geneTotal(u), 0);
-for (const f of aces[0].handlers.click) f({});
+const nextBtn = els.aceList.kids;
+if (nextBtn.length !== 1 || els.aceList.hidden) throw new Error('다음 구역 버튼이 없다');
+console.log('구역 정복 화면: ' + els.endTitle.textContent + ' · 초소 ' + els.endPosts.textContent + ' · 최고 ' + els.endBest.textContent + ' · 버튼 "' + nextBtn[0].textContent + '", "' + els.againBtn.textContent + '"');
+for (const f of nextBtn[0].handlers.click) f({});
 frames(3);
-if (game.district !== 2 || !lastOpts || !lastOpts.squad) throw new Error('다음 구역으로 넘어가지 않았다');
-if (game.units.length !== carried.length || game.units.reduce((s, u) => s + S.geneTotal(u), 0) !== total) throw new Error('데려간 키메라들이 그대로가 아니다');
+if (game.district !== 2) throw new Error('다음 구역으로 넘어가지 않았다');
+if (lastOpts.squad || lastOpts.ace) throw new Error('키메라를 데려가면 안 된다');
+if (game.units.length !== 1 || S.geneTotal(game.units[0]) !== 1) throw new Error('다음 구역은 맹수 하나로 처음부터 시작해야 한다');
 if (els.end.hidden !== true) throw new Error('다음 구역이 시작됐는데 끝 화면이 남아 있다');
 if (game.posts.length !== 4) throw new Error('2구역의 초소는 넷이어야 한다');
-console.log('다음 구역: ' + game.district + '구역, 초소 ' + game.posts.length + '곳, 데려간 키메라 ' + game.units.length + '마리(유전자 모두 ' + total + '개)');
+console.log('다음 구역: ' + game.district + '구역, 초소 ' + game.posts.length + '곳, 맹수 하나로 처음부터');
 
-// ---- 지면 1구역부터 ----
+// ---- 지면 그 구역을 다시 ----
 game.necro.hp = 0;
 frames(3);
 if (game.over !== 'lose' || els.end.hidden !== false) throw new Error('쓰러졌는데 끝 화면이 뜨지 않았다');
@@ -116,6 +116,6 @@ if (els.aceList.hidden !== true) throw new Error('졌는데 다음 구역 버튼
 console.log('패배 화면: ' + els.endTitle.textContent + ' · 최고 ' + els.endBest.textContent + ' · 버튼 "' + els.againBtn.textContent + '"');
 fire('againBtn', 'click', { fake: 'event' });
 frames(3);
-if (game.district !== 1 || game.units.length !== 1 || S.geneTotal(game.units[0]) !== 1) throw new Error('다시 하기가 1구역 맨몸으로 돌아가지 않았다');
+if (game.district !== 2 || game.units.length !== 1 || S.geneTotal(game.units[0]) !== 1) throw new Error('다시 하기가 2구역을 처음부터 열지 않았다');
 if (store['chimera-lab-best-v1'] !== '1') throw new Error('최고 기록이 저장되지 않았다: ' + store['chimera-lab-best-v1']);
-console.log('다시 하기: 1구역, 맹수 하나로 시작. 최고 기록 저장 확인');
+console.log('다시 하기: 쓰러진 2구역을 맹수 하나로 다시. 최고 기록 저장 확인');

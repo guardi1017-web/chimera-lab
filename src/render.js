@@ -17,6 +17,7 @@
   const TAP_MS = 340;  // 이 안에 한 번 더 치면 두 번 톡톡(자폭), 아니면 한 번 톡(찍기)
 
   let g = null, mode = 'title', inp = { x: 0, y: 0 }, stick = null, keys = {}, last = 0;
+  let retryDistrict = 1;   // 끝 화면의 '다시' 버튼이 여는 구역
   let scale = 1, dpr = 1, camX = 0, camY = 0, shake = 0, beatT = 0, lastTap = null, seed = (Date.now() % 100000) + 1;
 
   // ---- 소리: 외부 파일 없이 Web Audio로 만든다. 첫 터치(시작 버튼) 뒤에만 켜진다. ----
@@ -74,7 +75,7 @@
     inp.x = inp.y = 0; stick = null;
   }
   document.getElementById('startBtn').addEventListener('click', () => start());
-  document.getElementById('againBtn').addEventListener('click', () => start());
+  document.getElementById('againBtn').addEventListener('click', () => start({ district: retryDistrict }));
 
   // 누르고 끌면 이동. 두 번 톡톡 치면 자폭(탈피). 키메라를 한 번 톡 누르면 먹일 대상으로 찍는다.
   cv.addEventListener('pointerdown', e => {
@@ -458,22 +459,21 @@
     document.getElementById('endMolt').textContent = g.molts + '번 터지고 ' + g.rebirths + '번 계승';
     document.getElementById('endLevel').textContent = g.maxLevel + '등급';
     document.getElementById('endBest').textContent = bestDistrict(won ? g.district : g.district - 1) + '구역';
-    const list = document.getElementById('aceList'), askEl = document.getElementById('aceAsk');
+    // 이기면 다음 구역으로(키메라는 데려가지 않고 처음부터 키운다). 지면 그 구역을 다시 한다.
+    const list = document.getElementById('aceList'), askEl = document.getElementById('aceAsk'), again = document.getElementById('againBtn');
     list.textContent = '';
-    const alive = won ? g.units.filter(u => u.state === 'ok') : [];
-    askEl.hidden = !alive.length; list.hidden = !alive.length;
-    if (alive.length) {
-      const total = alive.reduce((n, u) => n + S.geneTotal(u), 0), top = Math.max.apply(null, alive.map(u => S.levelOf(u)));
-      askEl.textContent = '키메라 ' + alive.length + '마리(가장 높은 ' + top + '등급, 유전자 모두 ' + total + '개)가 그대로 따라간다. 쓰러지면 모두 잃는다.';
+    askEl.hidden = true; list.hidden = !won;
+    if (won) {
       const b = document.createElement('button');
       b.type = 'button';
       b.textContent = (g.district + 1) + '구역으로';
-      const squad = S.squadOf(g), next = g.district + 1;
-      b.addEventListener('click', () => start({ district: next, squad }));
+      const next = g.district + 1;
+      b.addEventListener('click', () => start({ district: next }));
       list.appendChild(b);
     }
-    document.getElementById('againBtn').textContent = won && alive.length ? '그만하고 1구역부터' : '1구역부터 다시';
-    document.getElementById('againBtn').className = won && alive.length ? '' : 'solo';   // 고를 것이 없으면 이 버튼이 주된 행동이다
+    retryDistrict = won ? 1 : g.district;
+    again.textContent = won ? '1구역부터 다시' : g.district + '구역 다시';
+    again.className = won ? '' : 'solo';   // 졌을 때는 이 버튼이 주된 행동이다
     endEl.hidden = false;
     document.getElementById('againBtn').focus();
   }
