@@ -334,6 +334,16 @@
         ctx.restore();
       }
     }
+    // 조준 표시: 지금 두 번 톡톡 치면 뛰어들 곳. 폭탄이 반 넘게 익었을 때만 보인다(익을수록 진하다).
+    {
+      const nb = S.nextBlast(g);
+      if (nb && nb.target && nb.unit.inst >= 40) {
+        const t = nb.target, rr = (t.r || 0.5) + 0.45, ripe = nb.unit.inst >= S.CFG.frenzyAt;
+        ctx.save(); ctx.globalAlpha = ripe ? 1 : 0.55; ctx.strokeStyle = COL.danger; ctx.lineWidth = ripe ? 0.13 : 0.08;
+        for (let i = 0; i < 4; i++) { const a0 = i * Math.PI / 2 + (reduced ? 0 : now / 500); ctx.beginPath(); ctx.arc(t.x, t.y, rr, a0 + 0.25, a0 + Math.PI / 2 - 0.25); ctx.stroke(); }
+        ctx.restore();
+      }
+    }
     for (const u of g.units) drawUnit(u, now);
 
     ctx.fillStyle = n.hurt > 0 ? COL.danger : COL.necro;

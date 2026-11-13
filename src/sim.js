@@ -21,7 +21,7 @@
     soulTtl: 10, soulCap: 12,
     frenzyAt: 80, frenzyMul: 1.5,
     blastRadius: 3.2, blastEliteFrac: 0.1, blastKnock: 3, blastStun: 1.2,
-    rushSpeed: 14, rushMax: 1.0,
+    rushSpeed: 14, rushMax: 1.0, rushReach: 10, rushBigBonus: 1.5,   // 뛰어들 수 있는 거리, 큰 표적에게 주는 거리 덤
     // 덜 익은 폭탄(불안정도 80% 미만)은 약하고 대가가 있다: 반경이 좁고, 잡몹을 즉사시키지 못하고, 심장이 유전자를 덜 지킨다
     blastMinRadius: 0.5, blastWeakMul: 3, heartWeakKeep: 0.6,
     heartWeakWait: 3,          // 덜 익은 채 터진 심장은 식을 때까지(최대 4초) 주울 수 없다
@@ -309,17 +309,25 @@
   }
 
   // 탈피: 가장 붐비는 적 무리로 뛰어들어 터진다.
+  function pickBlastTarget(g, u) {
+    // 뛰어들 곳: 네크로맨서에게 가장 가까운 적. 플레이어가 서 있는 자리로 어디에 터뜨릴지 정한다.
+    // 초소·돌격조·대장은 조금 더 멀어도 먼저 고른다(잡몹 한 마리가 폭탄을 가로채지 않게).
+    let best = null, bd = 1e9;
+    for (const e of g.enemies.concat(g.posts)) {
+      if (e.dead || dist(e, u) > CFG.rushReach) continue;
+      const d = dist(e, g.necro) - (e.post || e.elite ? CFG.rushBigBonus : 0);
+      if (d < bd) { bd = d; best = e; }
+    }
+    return best;
+  }
+  // 지금 두 번 톡톡 치면 누가 어디로 뛰어드는지(화면의 조준 표시용)
+  function nextBlast(g) {
+    const c = g.units.filter(u => u.state === 'ok').sort((a, b) => (b.inst - a.inst) || (geneTotal(a) - geneTotal(b)))[0];
+    return c ? { unit: c, target: pickBlastTarget(g, c) } : null;
+  }
   function startMolt(g, u) {
     if (u.state !== 'ok') return false;
-    // 뛰어들 곳: 적이 가장 붐비는 자리. 초소와 돌격조는 더 무겁게 친다.
-    let best = null, score = 0;
-    const things = g.enemies.concat(g.posts);
-    for (const e of things) {
-      if (e.dead || dist(e, u) > 10) continue;
-      let n = 0;
-      for (const o of things) if (!o.dead && dist(o, e) < CFG.blastRadius) n += o.post ? 5 : o.elite ? 4 : 1;
-      if (n > score) { score = n; best = e; }
-    }
+    const best = pickBlastTarget(g, u);
     u.state = 'rush'; u.rushT = 0; u.down = 0; u.target = best;
     u.charge = Math.min(1, u.inst / CFG.frenzyAt);   // 폭발의 세기는 터지는 순간의 불안정도로 정해진다
     u.tx = best ? best.x : u.x; u.ty = best ? best.y : u.y;
@@ -633,7 +641,7 @@
     if (!g.over && n.hp <= 0) { n.hp = 0; g.over = 'lose'; g.events.push('lose'); }
   }
 
-  const api = { W, H, DURATION, MAX_LEVEL, KINDS, CFG, newGame, step, stats, geneTotal, levelOf, isFrenzy, heartKeep, scaleGenes, detonate, pin, absorb, feedTarget, spawnBoss, aceOf, squadOf };
+  const api = { W, H, DURATION, MAX_LEVEL, KINDS, CFG, newGame, step, stats, geneTotal, levelOf, isFrenzy, heartKeep, scaleGenes, detonate, pin, absorb, feedTarget, spawnBoss, aceOf, squadOf, nextBlast };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.ChimeraSim = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -171,6 +171,21 @@ const ok = (c, msg) => { if (!c) throw new Error(msg); };
     eq(S.geneTotal(first), 3, '더 가까운 키메라가 있어도 같은 키메라가 계속 먹는다');
   }
 
+  // 어디로 뛰어드나: 네크로맨서에게 가장 가까운 적. 큰 표적은 조금 멀어도 먼저
+  {
+    const g = fresh(); const u = g.units[0], n = g.necro; u.inst = 90;
+    const crowd = [foe(g, n.x - 6, n.y - 4), foe(g, n.x - 6.5, n.y - 4), foe(g, n.x - 6, n.y - 4.5)], nearOne = foe(g, n.x + 2, n.y - 1);
+    S.detonate(g); ok(u.target === nearOne, '붐비는 먼 무리가 아니라 가까운 적에게 뛰어든다');
+    const g2 = fresh(); const u2 = g2.units[0], n2 = g2.necro; u2.inst = 90;
+    const post = { post: true, x: n2.x - 3, y: n2.y - 8, r: 0.9, hp: 2, maxHp: 2, cd: 99, dead: false }; g2.posts = [post];
+    const elite = foe(g2, n2.x + 2.5, n2.y, { elite: true, hp: 260, maxHp: 260, r: 0.95, mode: 'chase', rechargeT: 99, stun: 99 });
+    S.detonate(g2); ok(u2.target === elite, '돌격조가 가까이 있으면 멀리 있는 초소가 아니라 돌격조에게 뛰어든다');
+    const g3 = fresh(); const u3 = g3.units[0], n3 = g3.necro; u3.inst = 90;
+    const post3 = { post: true, x: n3.x, y: n3.y - 3, r: 0.9, hp: 2, maxHp: 2, cd: 99, dead: false }; g3.posts = [post3];
+    foe(g3, n3.x + 2, n3.y);
+    S.detonate(g3); ok(u3.target === post3, '초소 옆에 서 있으면 조금 더 가까운 잡몹이 있어도 초소에게 뛰어든다');
+  }
+
   // 손으로 터뜨리기: 불안정도가 가장 높은 키메라
   g = fresh(); soulAt(g, 'armor', 1); soulAt(g, 'ranger', 1);
   g.units[1].inst = 60; g.units[2].inst = 20;
