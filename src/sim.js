@@ -27,9 +27,9 @@
     moltBonus: 0.1, mutantBonus: 0.2,
     statPerGene: 0.35,
     eliteFirst: 20, eliteEvery: 25, eliteWarn: 1.5,   // 돌격조는 20초에 처음, 그 뒤 25초마다
-    postHits: 2, postRange: 4.2, postDmg: 4, postCd: 1.4,   // 초소: 폭발 두 번(불안정도가 찬 폭발은 한 번)에 부서진다
-    bossHp: 700, bossBlastCap: 0.35,                   // 대장: 폭발 한 번에 최대 체력의 35%까지만
-    districtScale: 0.25,                               // 구역이 하나 오를 때마다 적의 체력과 피해가 이만큼 더
+    postHits: 2, postRange: 4.2, postDmg: 6, postCd: 1.2,   // 초소: 폭발 두 번(불안정도가 찬 폭발은 한 번)에 부서진다
+    bossHp: 900, bossBlastCap: 0.35,                   // 대장: 폭발 한 번에 최대 체력의 35%까지만
+    districtScale: 0.35,                               // 구역이 하나 오를 때마다 적의 체력과 피해가 이만큼 더
     eliteHp: 260, eliteHpStep: 0.5,
     chargeSpeed: 13, chargeDmg: 30, eliteDmg: 14, rechargeEvery: 7, aimTime: 1.2,
     spawnStart: 1.8, spawnEnd: 1.05, foeGradeMul: 1.35,
@@ -108,9 +108,10 @@
 
   // 초소 자리: 시작 지점(아래쪽)에서 먼 순서. 가장 가까운 것도 사격 범위의 두 배쯤 떨어져 있다.
   const POST_SPOTS = [[4, 16], [14, 13], [8, 7.5], [15, 4.5], [3, 3.5], [9, 1.5]];
-  function aceOf(u) { return { genes: Object.assign({}, u.genes), main: u.main, molts: u.molts, mutant: u.mutant }; }
+  function aceOf(u) { return { genes: Object.assign({}, u.genes), main: u.main, molts: u.molts, mutant: u.mutant, inst: u.inst || 0 }; }
+  function squadOf(g) { return g.units.filter(u => u.state === 'ok').map(aceOf); }
 
-  // opts.district: 몇 번째 구역인지(1부터). opts.ace: 지난 구역에서 데려온 키메라.
+  // opts.district: 몇 번째 구역인지(1부터). opts.squad: 지난 구역에서 데려온 키메라들(최대 셋).
   function newGame(seed, opts) {
     opts = opts || {};
     const district = Math.max(1, opts.district || 1);
@@ -128,11 +129,14 @@
       posts: [], postsTotal: 0, postsDown: 0, boss: null,
     };
     // 네크로맨서는 직접 싸우지 못한다. 데려온 키메라가 있으면 그 키메라와, 없으면 맹수 하나와 시작한다.
-    if (opts.ace) {
-      const u = makeUnit(g, opts.ace.genes, opts.ace.main, g.necro.x, g.necro.y + 1.5);
-      u.molts = opts.ace.molts || 0; u.mutant = !!opts.ace.mutant; u.hp = stats(u).maxHp;
+    const squad = (opts.squad || (opts.ace ? [opts.ace] : [])).slice(0, CFG.maxUnits);
+    squad.forEach((ace, i) => {
+      const a = Math.PI / 2 + i * Math.PI * 2 / 3;
+      const u = makeUnit(g, ace.genes, ace.main, g.necro.x + Math.cos(a) * 1.5, g.necro.y + Math.sin(a) * 1.5);
+      u.molts = ace.molts || 0; u.mutant = !!ace.mutant; u.inst = Math.min(99, ace.inst || 0); u.hp = stats(u).maxHp;
       g.units.push(u);
-    } else g.units.push(makeUnit(g, { beast: 1 }, 'beast', g.necro.x, g.necro.y + 1.5));
+    });
+    if (!squad.length) g.units.push(makeUnit(g, { beast: 1 }, 'beast', g.necro.x, g.necro.y + 1.5));
     // 봉쇄 초소: 구역이 오를수록 많아진다(셋에서 다섯까지)
     // 구역은 아래에서 시작해 위로 밀고 올라간다. 가까운 초소부터 놓는다.
     const spots = POST_SPOTS;
@@ -425,9 +429,8 @@
       const tgt = near ? feedTarget(g, near) : null;
       if (near && tgt) { g.link = { x: near.x, y: near.y, uid: tgt.uid }; g.linkItem = near; }
     }
-    if (g.link && g.slowLeft > 0) { g.slowing = true; g.slowLeft -= dtReal; }
-    else { g.slowing = false; if (!g.link) g.slowLeft = Math.min(CFG.slowMax, g.slowLeft + CFG.slowRecharge * dtReal); }
-    const dt = dtReal * (g.slowing ? CFG.slowScale : 1);
+    g.slowing = false;   // 느려짐은 뺐다(먹일 대상을 미리 정해 두는 구조라 고를 틈이 필요 없다)
+    const dt = dtReal;
     g.feedT = Math.max(0, g.feedT - dtReal);
 
     g.t += dt;
@@ -620,7 +623,7 @@
     if (!g.over && n.hp <= 0) { n.hp = 0; g.over = 'lose'; g.events.push('lose'); }
   }
 
-  const api = { W, H, DURATION, MAX_LEVEL, KINDS, CFG, newGame, step, stats, geneTotal, levelOf, isFrenzy, heartKeep, scaleGenes, detonate, pin, absorb, feedTarget, spawnBoss, aceOf };
+  const api = { W, H, DURATION, MAX_LEVEL, KINDS, CFG, newGame, step, stats, geneTotal, levelOf, isFrenzy, heartKeep, scaleGenes, detonate, pin, absorb, feedTarget, spawnBoss, aceOf, squadOf };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.ChimeraSim = api;
 })(typeof window !== 'undefined' ? window : globalThis);

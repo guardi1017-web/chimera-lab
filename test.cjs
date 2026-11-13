@@ -153,9 +153,9 @@ const ok = (c, msg) => { if (!c) throw new Error(msg); };
   g.souls.push({ x: g.necro.x + 2.5, y: g.necro.y, type: 'beast', q: 1, ttl: 9 });
   const t0 = g.t, x0 = g.necro.x, y0 = g.necro.y;
   S.step(g, 0.1, { x: 0, y: 1 });
-  ok(g.slowing && g.link, '자리가 찼고 혼이 가까우면 느려지고 연결된다');
-  ok(Math.abs((g.necro.y - y0) - 0.5) < 1e-9, '느려진 동안에도 네크로맨서는 제 속도로 움직인다');
-  ok(Math.abs((g.t - t0) - 0.1 * C.slowScale) < 1e-9, '느려진 동안 판의 시간은 0.25배');
+  ok(!g.slowing && g.link, '자리가 찼고 혼이 가까우면 연결된다(느려지지는 않는다)');
+  ok(Math.abs((g.necro.y - y0) - 0.5) < 1e-9, '네크로맨서는 제 속도로 움직인다');
+  ok(Math.abs((g.t - t0) - 0.1) < 1e-9, '판의 시간은 느려지지 않는다');
   ok(Math.abs(g.necro.x - x0) < 1e-9, '옆으로는 움직이지 않았다');
   for (let i = 0; i < 40; i++) S.step(g, 0.1, { x: 0, y: 0 });
   ok(!g.slowing, '느려짐은 오래가지 않는다');
@@ -233,6 +233,15 @@ const ok = (c, msg) => { if (!c) throw new Error(msg); };
     const a = g3.units[0];
     ok(g3.units.length === 1 && a.genes.armor === 5 && a.main === 'armor' && a.molts === 2 && a.mutant && a.inst === 0, '데려온 키메라로 시작한다(유전자·탈피·변이 유지, 불안정도 0)');
     ok(Math.abs(g3.scale - (1 + 2 * C.districtScale)) < 1e-9 && g3.district === 3, '구역이 오르면 적이 세진다');
+    // 셋을 모두 데려간다: 유전자와 불안정도까지 그대로
+    const gs = fresh(); gs.feedT = 0;
+    for (const t of ['armor', 'ranger']) { gs.souls.push({ x: gs.necro.x, y: gs.necro.y, type: t, q: 1, ttl: 5 }); S.step(gs, 1 / 60, { x: 0, y: 0 }); }
+    gs.units[0].genes.beast = 6; gs.units[0].inst = 72; gs.units[1].molts = 3; gs.units[2].state = 'rush';
+    const squad = S.squadOf(gs);
+    eq(squad.length, 2, '뛰어드는 중인 키메라는 데려가지 못한다');
+    const g4 = S.newGame(8, { district: 2, squad });
+    ok(g4.units.length === 2 && g4.units[0].genes.beast === 6 && g4.units[0].inst === 72 && g4.units[1].molts === 3, '데려간 키메라들이 유전자·불안정도·탈피 횟수 그대로 시작한다');
+    ok(g4.units.every(u => u.hp === S.stats(u).maxHp && u.state === 'ok'), '다음 구역은 체력을 가득 채우고 시작한다');
   }
   console.log('규칙 확인: 초소 폭파, 대장, 구역 정복, 키메라 데려가기');
   console.log('규칙 확인: 되살리기, 흡수와 불안정도, 과부하, 탈피 폭발, 심장 계승, 수동 자폭, 느려짐과 연결, 돌격병과 갑주 방어');

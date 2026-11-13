@@ -60,7 +60,7 @@ for (let i = 0; i < 60 * 40; i++) {
   if (i % 400 === 60 && game.units.length) { const before = game.pinned; tap(game.units[0].x, game.units[0].y); now += 360; flush(); if (game.pinned !== before) pins++; }
   if (i % 400 === 250 && game.units.length) { const before = game.molts; tap(game.necro.x + 3, game.necro.y + 3); now += 120; tap(game.necro.x + 3, game.necro.y + 3); if (game.units.some(u => u.state === 'rush') || game.molts > before) booms++; }
 }
-if (!pins || !booms || !sawSlow || !sawLink || !tones) throw new Error('입력·느려짐·소리 가운데 동작하지 않는 것이 있다');
+if (!pins || !booms || sawSlow || !sawLink || !tones) throw new Error('입력·연결선·소리 가운데 동작하지 않는 것이 있다(또는 느려짐이 남아 있다)');
 
 // 한 번 톡의 대상은 누른 순간의 키메라다
 {
@@ -83,7 +83,7 @@ if (!pins || !booms || !sawSlow || !sawLink || !tones) throw new Error('입력·
   tap(game.necro.x + 3, game.necro.y + 3); now += 320; tap(game.necro.x + 3, game.necro.y + 3);
   if (!(game.units.some(u => u.state === 'rush') || game.molts > before)) throw new Error('320ms 간격의 두 번 톡톡이 자폭으로 읽히지 않는다');
 }
-console.log('입력 확인: 찍기 ' + pins + '번, 자폭 ' + booms + '번, 느려짐·연결선, 누른 순간의 키메라, 위쪽 칸, 320ms 두 번 톡톡, 소리 호출 ' + tones + '번');
+console.log('입력 확인: 찍기 ' + pins + '번, 자폭 ' + booms + '번, 연결선, 누른 순간의 키메라, 위쪽 칸, 320ms 두 번 톡톡, 소리 호출 ' + tones + '번');
 
 // ---- 목적을 이뤄 구역을 차지하고, 키메라를 골라 다음 구역으로 ----
 frames(120);
@@ -97,22 +97,22 @@ frames(3);
 if (game.over !== 'win' || els.end.hidden !== false) throw new Error('대장을 잡았는데 끝 화면이 뜨지 않았다');
 if (!/1구역 정복/.test(els.endTitle.textContent)) throw new Error('정복 제목이 아니다: ' + els.endTitle.textContent);
 const aces = els.aceList.kids;
-if (!aces.length || els.aceList.hidden || els.aceAsk.hidden) throw new Error('데려갈 키메라 목록이 없다');
-console.log('구역 정복 화면: ' + els.endTitle.textContent + ' · 초소 ' + els.endPosts.textContent + ' · 최고 ' + els.endBest.textContent + ' · 고를 키메라 ' + aces.length + '마리 → "' + aces[0].textContent + '"');
-const picked = game.units.filter(u => u.state === 'ok')[0], total = S.geneTotal(picked);
+if (aces.length !== 1 || els.aceList.hidden || els.aceAsk.hidden) throw new Error('다음 구역 버튼이 없다');
+console.log('구역 정복 화면: ' + els.endTitle.textContent + ' · 초소 ' + els.endPosts.textContent + ' · 최고 ' + els.endBest.textContent + ' · 버튼 "' + aces[0].textContent + '" · ' + els.aceAsk.textContent);
+const carried = game.units.filter(u => u.state === 'ok'), total = carried.reduce((s, u) => s + S.geneTotal(u), 0);
 for (const f of aces[0].handlers.click) f({});
 frames(3);
-if (game.district !== 2 || !lastOpts || !lastOpts.ace) throw new Error('다음 구역으로 넘어가지 않았다');
-if (game.units.length !== 1 || S.geneTotal(game.units[0]) !== total || game.units[0].inst !== 0) throw new Error('데려간 키메라가 그대로가 아니다');
+if (game.district !== 2 || !lastOpts || !lastOpts.squad) throw new Error('다음 구역으로 넘어가지 않았다');
+if (game.units.length !== carried.length || game.units.reduce((s, u) => s + S.geneTotal(u), 0) !== total) throw new Error('데려간 키메라들이 그대로가 아니다');
 if (els.end.hidden !== true) throw new Error('다음 구역이 시작됐는데 끝 화면이 남아 있다');
 if (game.posts.length !== 4) throw new Error('2구역의 초소는 넷이어야 한다');
-console.log('다음 구역: ' + game.district + '구역, 초소 ' + game.posts.length + '곳, 데려간 키메라 유전자 ' + total + '개');
+console.log('다음 구역: ' + game.district + '구역, 초소 ' + game.posts.length + '곳, 데려간 키메라 ' + game.units.length + '마리(유전자 모두 ' + total + '개)');
 
 // ---- 지면 1구역부터 ----
 game.necro.hp = 0;
 frames(3);
 if (game.over !== 'lose' || els.end.hidden !== false) throw new Error('쓰러졌는데 끝 화면이 뜨지 않았다');
-if (els.aceList.hidden !== true) throw new Error('졌는데 데려갈 키메라를 묻는다');
+if (els.aceList.hidden !== true) throw new Error('졌는데 다음 구역 버튼이 보인다');
 console.log('패배 화면: ' + els.endTitle.textContent + ' · 최고 ' + els.endBest.textContent + ' · 버튼 "' + els.againBtn.textContent + '"');
 fire('againBtn', 'click', { fake: 'event' });
 frames(3);

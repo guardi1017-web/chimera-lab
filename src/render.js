@@ -462,13 +462,14 @@
     list.textContent = '';
     const alive = won ? g.units.filter(u => u.state === 'ok') : [];
     askEl.hidden = !alive.length; list.hidden = !alive.length;
-    for (const u of alive) {
+    if (alive.length) {
+      const total = alive.reduce((n, u) => n + S.geneTotal(u), 0), top = Math.max.apply(null, alive.map(u => S.levelOf(u)));
+      askEl.textContent = '키메라 ' + alive.length + '마리(가장 높은 ' + top + '등급, 유전자 모두 ' + total + '개)가 그대로 따라간다. 쓰러지면 모두 잃는다.';
       const b = document.createElement('button');
-      b.type = 'button'; b.className = 'ace';
-      const genes = S.KINDS.filter(k => u.genes[k] > 0).map(k => KIND_NAME[k] + ' ' + u.genes[k]).join(' · ');
-      b.textContent = S.levelOf(u) + '등급 · ' + genes + (u.molts ? ' · 탈피 ' + u.molts : '');
-      const ace = S.aceOf(u), next = g.district + 1;
-      b.addEventListener('click', () => start({ district: next, ace }));
+      b.type = 'button';
+      b.textContent = (g.district + 1) + '구역으로';
+      const squad = S.squadOf(g), next = g.district + 1;
+      b.addEventListener('click', () => start({ district: next, squad }));
       list.appendChild(b);
     }
     document.getElementById('againBtn').textContent = won && alive.length ? '그만하고 1구역부터' : '1구역부터 다시';
