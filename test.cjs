@@ -81,7 +81,7 @@ const ok = (c, msg) => { if (!c) throw new Error(msg); };
     const e0 = foe(g, b0.x + 1.5, b0.y, { elite: true, hp: 260, maxHp: 260, r: 0.95, mode: 'chase', rechargeT: 99, stun: 0, cd: 99, dmg: 0 });
     ok(S.detonate(g), '0%에서도 터뜨릴 수 있다');
     for (let i = 0; i < 90 && g.units.indexOf(b0) >= 0; i++) S.step(g, 1 / 60, { x: 0, y: 0 });
-    ok(!e0.dead && e0.hp < 260 * 0.6 && e0.stun > 0, '0% 폭발: 돌격병은 큰 피해와 기절');
+    ok(!e0.dead && e0.hp < 260 && e0.hp > 260 * 0.8 && e0.stun > 0, '0% 폭발: 돌격조는 조금 깎이고 기절만 한다');
   }
 
   // 연결선이 가리킨 것을 먹는다: 줍는 범위 안에 혼이 둘이면 가까운 쪽(연결된 쪽)부터
@@ -102,6 +102,34 @@ const ok = (c, msg) => { if (!c) throw new Error(msg); };
     g.souls.push(s2); g.hearts.push(h2);
     S.step(g, 1 / 60, { x: 0, y: 0 });
     ok(g.hearts.length === 0 && g.souls.length === 1, '자리가 찼을 때 심장과 혼이 함께 있으면 심장을 먼저 삼킨다');
+  }
+
+  // 덜 익은 폭탄은 약하고 대가가 있다
+  {
+    const g = fresh(); soulAt(g, 'armor', 1);
+    const b0 = g.units[0]; b0.genes.beast = 10; b0.inst = 0; g.units = [b0];
+    const tough = foe(g, b0.x + 1, b0.y, { hp: 9999, maxHp: 9999 }), weakNear = foe(g, b0.x + 1.2, b0.y + 0.3), edge = foe(g, b0.x + 1 + C.blastRadius * 0.8, b0.y);
+    g.pinned = null; S.detonate(g);
+    eq(b0.state, 'rush', '0%에서도 터뜨릴 수는 있다');
+    for (let i = 0; i < 90 && g.units.indexOf(b0) >= 0; i++) S.step(g, 1 / 60, { x: 0, y: 0 });
+    ok(!tough.dead && tough.hp < 9999, '덜 익은 폭탄: 잡몹을 즉사시키지 못하고 피해만 준다');
+    ok(weakNear.dead, '약한 잡몹은 그 피해로도 죽는다');
+    ok(!edge.dead && edge.hp === edge.maxHp, '덜 익은 폭탄: 반경이 좁다');
+    const h = g.hearts[0];
+    ok(Math.abs(h.keep - C.heartWeakKeep) < 1e-9 && h.molts === 0, '덜 익은 폭탄의 심장: 유전자 60%만, 탈피 보너스 없음');
+    g.souls = []; g.necro.x = h.x; g.necro.y = h.y; S.step(g, 1 / 60, { x: 0, y: 0 });
+    ok(g.hearts.length === 1 && g.units.length === 0, '덜 익은 심장은 식을 때까지 주울 수 없다');
+    for (let i = 0; i < 60 * (C.heartWeakWait + 0.2); i++) S.step(g, 1 / 60, { x: 0, y: 0 });
+    const rb = g.units[g.units.length - 1];
+    ok(S.geneTotal(rb) === Math.ceil(10 * C.heartWeakKeep) && rb.molts === 0, '덜 익은 채 터뜨리면 유전자를 잃는다 (10 → ' + S.geneTotal(rb) + ')');
+    // 다 익은 폭탄은 그대로: 넓게, 즉사, 유전자 100%, 탈피 +1
+    const g2 = fresh(); soulAt(g2, 'armor', 1);
+    const b1 = g2.units[0]; b1.genes.beast = 10; b1.inst = 85; g2.units = [b1];
+    const tough2 = foe(g2, b1.x + 1, b1.y, { hp: 9999, maxHp: 9999 }), edge2 = foe(g2, b1.x + 1 + C.blastRadius * 0.8, b1.y);
+    g2.pinned = null; S.detonate(g2);
+    for (let i = 0; i < 90 && g2.units.indexOf(b1) >= 0; i++) S.step(g2, 1 / 60, { x: 0, y: 0 });
+    ok(tough2.dead && edge2.dead, '다 익은 폭탄: 넓은 반경의 잡몹이 즉사한다');
+    ok(g2.hearts[0].keep === 1 && g2.hearts[0].molts === 1 && g2.hearts[0].wait === 0, '다 익은 폭탄의 심장: 유전자 100%, 탈피 +1, 바로 주울 수 있다');
   }
 
   // 자리가 찼을 때 심장을 밟으면 연결된 키메라가 삼킨다
@@ -213,14 +241,16 @@ const ok = (c, msg) => { if (!c) throw new Error(msg); };
     const g = fresh(); g.units = [];
     const p1 = { post: true, x: 4, y: 5, r: 0.9, hp: C.postHits, maxHp: C.postHits, cd: 99, dead: false }, p2 = { post: true, x: 14, y: 5, r: 0.9, hp: C.postHits, maxHp: C.postHits, cd: 99, dead: false };
     g.posts = [p1, p2]; g.postsTotal = 2;
-    blastAt(g, p1, 10); ok(!p1.dead && p1.hp === 1, '불안정도가 낮은 폭발: 초소가 한 번 깎인다');
-    blastAt(g, p1, 10); ok(p1.dead && g.postsDown === 1 && !g.boss, '두 번째 폭발에 부서진다. 아직 대장은 없다');
+    blastAt(g, p1, 10); ok(!p1.dead && p1.hp === C.postHits, '불안정도 40% 미만의 폭발은 초소에 통하지 않는다');
+    blastAt(g, p1, 45); ok(!p1.dead && p1.hp === 1, '반쯤 익은 폭발: 초소가 한 번 깎인다');
+    blastAt(g, p1, 45); ok(p1.dead && g.postsDown === 1 && !g.boss, '두 번째에 부서진다. 아직 대장은 없다');
     blastAt(g, p2, 90); ok(p2.dead && g.postsDown === 2, '불안정도가 찬 폭발: 한 번에 부서진다');
     ok(g.boss && g.enemies.indexOf(g.boss) >= 0 && g.boss.mode === 'warn', '초소를 다 부수면 대장이 예고와 함께 나타난다');
     // 대장은 찬 폭발로도 한 번에 죽지 않는다
     const boss = g.boss; boss.mode = 'chase'; boss.stun = 99; boss.x = 9; boss.y = 9;
     blastAt(g, boss, 100);
-    ok(!boss.dead && Math.abs(boss.hp - boss.maxHp * (1 - C.bossBlastCap)) < 1, '대장: 폭발 한 번에 최대 체력의 35%까지만');
+    ok(!boss.dead && Math.abs(boss.hp - boss.maxHp * (1 - C.bossBlastCap)) < 1, '대장: 다 익은 폭발 한 번에 최대 체력의 35%');
+    { const hp0 = boss.hp; blastAt(g, boss, 0); ok(hp0 - boss.hp < boss.maxHp * 0.05, '대장: 덜 익은 폭발은 거의 통하지 않는다'); }
     ok(!g.over, '대장이 살아 있으면 판은 끝나지 않는다');
     boss.hp = 0.5; boss.bleed = 100; boss.bleedT = 1; S.step(g, 1 / 60, { x: 0, y: 0 });
     eq(g.over, 'win', '대장을 잡으면 구역을 차지한다');
@@ -262,6 +292,12 @@ function bot(g, policy, mem) {
     let b = null, bd = 1e9;
     for (const p of want) { const d = Math.hypot(p.x - n.x, p.y - n.y) - (p.genes ? 4 : 0) - (p.q === 3 ? 3 : 0); if (d < bd) { bd = d; b = p; } }
     if (b && bd < 10) { const d = Math.hypot(b.x - n.x, b.y - n.y) + 0.01; x += (b.x - n.x) / d * 1.8; y += (b.y - n.y) / d * 1.8; }
+    // 'spam': 익히지 않고 틈만 나면 터뜨린다(초소와 대장에게도). 이것이 'play'보다 나으면 안 된다
+    if (policy === 'spam' && g.t - mem.last > 1.2 && g.enemies.length) {
+      const goal = g.posts.filter(p => !p.dead).concat(g.boss && !g.boss.dead ? [g.boss] : []).sort((a, b) => Math.hypot(a.x - n.x, a.y - n.y) - Math.hypot(b.x - n.x, b.y - n.y))[0];
+      if (goal) { const d = Math.hypot(goal.x - n.x, goal.y - n.y) + 0.01; x += (goal.x - n.x) / d * 1.5; y += (goal.y - n.y) / d * 1.5; }
+      if (g.units.some(u => u.state === 'ok')) { S.detonate(g); mem.last = g.t; }
+    }
     if (policy === 'play') {
       const el = g.enemies.find(e => e.elite && Math.hypot(e.x - n.x, e.y - n.y) < 6 && (e.mode === 'chase' || e.mode === 'aim'));
       if (el && g.t - mem.last > 4 && g.units.some(u => u.state === 'ok' && u.inst >= 45)) { S.detonate(g); mem.last = g.t; }
@@ -296,8 +332,8 @@ function run(seed, policy) {
   }
   return g;
 }
-const label = { play: '먹이고 터뜨림 ', nomolt: '자리만 채움   ', idle: '아무것도 안 함' };
-for (const policy of ['play', 'nomolt', 'idle']) {
+const label = { play: '익혀서 터뜨림 ', spam: '마구 터뜨림   ', nomolt: '자리만 채움   ', idle: '아무것도 안 함' };
+for (const policy of ['play', 'spam', 'nomolt', 'idle']) {
   const N = 40, a = { win: 0, t: 0, kills: 0, absorbs: 0, molts: 0, rebirths: 0, elite: 0, lvl: 0, posts: 0, boss: 0 };
   for (let s = 1; s <= N; s++) {
     const g = run(s, policy);

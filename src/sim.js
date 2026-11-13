@@ -20,8 +20,12 @@
     },
     soulTtl: 10, soulCap: 12,
     frenzyAt: 80, frenzyMul: 1.5,
-    blastRadius: 3.2, blastEliteFrac: 0.45, blastKnock: 3, blastStun: 1.2,
+    blastRadius: 3.2, blastEliteFrac: 0.1, blastKnock: 3, blastStun: 1.2,
     rushSpeed: 14, rushMax: 1.0,
+    // 덜 익은 폭탄(불안정도 80% 미만)은 약하고 대가가 있다: 반경이 좁고, 잡몹을 즉사시키지 못하고, 심장이 유전자를 덜 지킨다
+    blastMinRadius: 0.5, blastWeakMul: 3, heartWeakKeep: 0.6,
+    heartWeakWait: 4,          // 덜 익은 채 터진 심장은 식을 때까지(최대 4초) 주울 수 없다
+    postMinCharge: 0.5,        // 불안정도 40% 미만의 폭발은 초소에 통하지 않는다
     feedGap: 0.35, feedGapAfterRebirth: 0.8,           // 흡수 사이의 실제 시간 간격(초). 혼 더미 위에서 한꺼번에 먹지 않게
     heartTtl: 12, heartFullFor: 4, heartMinKeep: 0.8,   // 심장은 4초 안에 주우면 유전자 100%, 12초째에는 80%
     moltBonus: 0.1, mutantBonus: 0.2,
@@ -323,20 +327,25 @@
     return true;
   }
   function explode(g, u) {
-    const eliteFrac = CFG.blastEliteFrac + (1 - CFG.blastEliteFrac) * (u.charge || 0);
+    const c = u.charge || 0, st = stats(u);   // c: 0(불안정도 0%) ~ 1(80% 이상)
+    const R = CFG.blastRadius * (CFG.blastMinRadius + (1 - CFG.blastMinRadius) * c);
+    const eliteFrac = CFG.blastEliteFrac + (1 - CFG.blastEliteFrac) * c;
     for (const e of g.enemies) {
-      if (e.dead || dist(e, u) > CFG.blastRadius + e.r) continue;
+      if (e.dead || dist(e, u) > R + e.r) continue;
       if (e.elite) {
         if (e.mode !== 'charge') knock(e, u.x, u.y, CFG.blastKnock);
         e.stun = Math.max(e.stun, CFG.blastStun);
         if (e.mode === 'charge' || e.mode === 'aim' || e.mode === 'warn') { e.mode = 'chase'; e.rechargeT = CFG.rechargeEvery; }
-        damageEnemy(g, e, e.maxHp * (e.boss ? Math.min(CFG.bossBlastCap, eliteFrac) : eliteFrac) + 0.01, null, null);
-      } else killEnemy(g, e);
+        damageEnemy(g, e, e.maxHp * (e.boss ? CFG.bossBlastCap * (0.1 + 0.9 * c) : eliteFrac) + 0.01, null, null);
+      } else if (c >= 1) killEnemy(g, e);                              // 다 익은 폭탄: 잡몹 즉사
+      else damageEnemy(g, e, st.dmg * (CFG.blastWeakMul + 4 * c), null, null);   // 덜 익은 폭탄: 평타 몇 대 값
     }
     // 초소는 폭발로만 부서진다. 불안정도가 찬 폭발은 한 번에, 아니면 두 번.
     for (const p of g.posts) {
-      if (p.dead || dist(p, u) > CFG.blastRadius + p.r) continue;
-      p.hp -= (u.charge || 0) >= 1 ? CFG.postHits : 1;
+      if (p.dead || dist(p, u) > R + p.r) continue;
+      const hit = c >= 1 ? CFG.postHits : c >= CFG.postMinCharge ? 1 : 0;
+      if (!hit) { g.events.push('postbounce'); g.fx.push({ k: 'block', x: p.x, y: p.y, face: Math.atan2(u.y - p.y, u.x - p.x), r: p.r, t: 0.25 }); continue; }
+      p.hp -= hit;
       if (p.hp <= 0) {
         p.dead = true; g.postsDown++;
         g.fx.push({ k: 'die', x: p.x, y: p.y, arch: 'armor', big: true, t: 0.35 });
@@ -344,11 +353,11 @@
         if (g.postsDown >= g.postsTotal && !g.boss) spawnBoss(g);
       } else g.events.push('posthit');
     }
-    g.hearts.push({ x: clamp(u.x, 0.8, W - 0.8), y: clamp(u.y, 0.8, H - 0.8), genes: Object.assign({}, u.genes), main: u.main, molts: u.molts, mutant: u.mutant, age: 0, ttl: CFG.heartTtl });
+    g.hearts.push({ x: clamp(u.x, 0.8, W - 0.8), y: clamp(u.y, 0.8, H - 0.8), genes: Object.assign({}, u.genes), main: u.main, molts: u.molts + (c >= 1 ? 1 : 0), mutant: u.mutant, keep: CFG.heartWeakKeep + (1 - CFG.heartWeakKeep) * c, wait: CFG.heartWeakWait * (1 - c), age: 0, ttl: CFG.heartTtl });
     g.units = g.units.filter(x => x !== u);
     if (g.pinned === u.uid) g.pinned = null;
     g.molts++;
-    g.fx.push({ k: 'boom', x: u.x, y: u.y, r: CFG.blastRadius, t: 0.5 });
+    g.fx.push({ k: 'boom', x: u.x, y: u.y, r: R, weak: c < 1, t: 0.5 });
     g.events.push('boom');
   }
   // 초소를 다 부수면 대장이 나타난다. 돌격조처럼 예고하고 달려들지만 훨씬 단단하다.
@@ -387,12 +396,13 @@
     if (out[main] < 1) { const big = KINDS.slice().sort((a, b) => out[b] - out[a])[0]; out[big]--; out[main]++; }
     return out;
   }
-  function heartKeep(h) { return h.age <= CFG.heartFullFor ? 1 : Math.max(CFG.heartMinKeep, 1 - (1 - CFG.heartMinKeep) * (h.age - CFG.heartFullFor) / (CFG.heartTtl - CFG.heartFullFor)); }
+  // 심장이 지키는 유전자 비율 = 터질 때의 익은 정도(60~100%) × 주운 빠르기(100~80%)
+  function heartKeep(h) { return (h.keep === undefined ? 1 : h.keep) * (h.age <= CFG.heartFullFor ? 1 : Math.max(CFG.heartMinKeep, 1 - (1 - CFG.heartMinKeep) * (h.age - CFG.heartFullFor) / (CFG.heartTtl - CFG.heartFullFor))); }
   // 심장 계승: 터지기 전의 유전자를 물려받은 새 키메라가 불안정도 0으로 깨어난다.
   function rebirth(g, h) {
     const genes = scaleGenes(h.genes, h.main, heartKeep(h));
     const u = makeUnit(g, genes, h.main, h.x, h.y);
-    u.molts = h.molts + 1; u.mutant = h.mutant;
+    u.molts = h.molts; u.mutant = h.mutant;   // 탈피 보너스는 다 익은 폭탄으로 터졌을 때만 심장에 실린다
     u.hp = stats(u).maxHp; u.pop = 0.8;
     g.units.push(u);
     g.rebirths++;
@@ -425,7 +435,7 @@
     g.link = null; g.linkItem = null;   // linkItem: 연결선이 가리키는 바로 그 혼(또는 심장). 자리가 찼을 때는 이것만 먹는다
     if (full) {
       let near = null, nd = CFG.absorbRange;
-      for (const it of g.hearts.concat(g.souls)) { const d = dist(it, n) - (it.genes ? 0.8 : 0); if (d < nd) { nd = d; near = it; } }
+      for (const it of g.hearts.filter(h => !(h.wait > 0)).concat(g.souls)) { const d = dist(it, n) - (it.genes ? 0.8 : 0); if (d < nd) { nd = d; near = it; } }
       const tgt = near ? feedTarget(g, near) : null;
       if (near && tgt) { g.link = { x: near.x, y: near.y, uid: tgt.uid }; g.linkItem = near; }
     }
@@ -574,8 +584,8 @@
     // 심장을 혼보다 먼저 본다. 폭발로 쏟아진 혼이 계승할 자리를 먼저 차지하면 안 된다.
     // 심장: 자리가 비었으면 계승, 찼으면 연결된 키메라가 유전자를 통째로 삼킨다
     for (const h of g.hearts) {
-      h.ttl -= dt; h.age += dt;
-      if (h.ttl <= 0 || dist(h, n) >= CFG.pickRadius) continue;
+      h.ttl -= dt; h.age += dt; h.wait = Math.max(0, (h.wait || 0) - dt);
+      if (h.ttl <= 0 || h.wait > 0 || dist(h, n) >= CFG.pickRadius) continue;
       if (g.units.length < CFG.maxUnits) { rebirth(g, h); h.ttl = 0; g.feedT = CFG.feedGapAfterRebirth; }
       else if (g.feedT <= 0 && h === g.linkItem) {
         const tgt = feedTarget(g, h);

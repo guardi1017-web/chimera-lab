@@ -292,8 +292,9 @@
     }
     // 변이 심장: 터진 키메라가 남긴 것. 고리가 남은 시간이고, 금빛일 때 주우면 유전자를 다 물려받는다.
     for (const h of g.hearts) {
-      const pulse = reduced ? 1 : 1 + 0.18 * Math.abs(Math.sin(now / 180)), full = h.age <= S.CFG.heartFullFor;
+      const pulse = reduced || h.wait > 0 ? 1 : 1 + 0.18 * Math.abs(Math.sin(now / 180)), full = h.age <= S.CFG.heartFullFor && !(h.wait > 0);
       ctx.save(); ctx.translate(h.x, h.y);
+      if (h.wait > 0) ctx.globalAlpha = 0.35;   // 덜 익은 채 터진 심장: 식을 때까지 주울 수 없다
       ctx.fillStyle = COL.danger; ctx.strokeStyle = full ? COL.great : COL.ink; ctx.lineWidth = 0.1;
       ctx.beginPath(); ctx.moveTo(0, 0.55 * pulse); ctx.lineTo(0.5 * pulse, 0); ctx.lineTo(0.25 * pulse, -0.4 * pulse); ctx.lineTo(0, -0.18 * pulse); ctx.lineTo(-0.25 * pulse, -0.4 * pulse); ctx.lineTo(-0.5 * pulse, 0); ctx.closePath();
       ctx.fill(); ctx.stroke();
@@ -348,8 +349,8 @@
       }
       else if (f.k === 'boom') {
         const k = 1 - f.t / 0.5;
-        ctx.save(); ctx.globalAlpha = (1 - k) * 0.6; ctx.fillStyle = COL.danger; circle(f.x, f.y, f.r * (0.4 + k * 0.6)); ctx.fill();
-        ctx.globalAlpha = 1 - k; ctx.strokeStyle = COL.great; ctx.lineWidth = 0.3; circle(f.x, f.y, f.r * (0.3 + k)); ctx.stroke(); ctx.restore();
+        ctx.save(); ctx.globalAlpha = (1 - k) * (f.weak ? 0.3 : 0.6); ctx.fillStyle = f.weak ? COL.dim : COL.danger; circle(f.x, f.y, f.r * (0.4 + k * 0.6)); ctx.fill();
+        ctx.globalAlpha = 1 - k; ctx.strokeStyle = f.weak ? COL.dim : COL.great; ctx.lineWidth = 0.3; circle(f.x, f.y, f.r * (0.3 + k)); ctx.stroke(); ctx.restore();
       }
       else if (f.k === 'wave') { const k = 1 - f.t / 0.3; ctx.strokeStyle = COL.armor; ctx.lineWidth = 0.22 * (1 - k) + 0.05; circle(f.x, f.y, f.r * k); ctx.stroke(); }
       else if (f.k === 'leap') { ctx.strokeStyle = COL.beast; ctx.lineWidth = 0.3 * (f.t / 0.25); ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.lineTo(f.tx, f.ty); ctx.stroke(); }
@@ -432,7 +433,7 @@
       else if (ev === 'necrohit') { Sound.hurt(); shake = Math.max(shake, 0.3); }
       else if (ev === 'rush') Sound.rush();
       else if (ev === 'postdown') { Sound.clash(); Sound.purify(); shake = Math.max(shake, 0.4); }
-      else if (ev === 'posthit') Sound.clash();
+      else if (ev === 'posthit' || ev === 'postbounce') Sound.clash();
       else if (ev === 'boss') { Sound.siren(); shake = Math.max(shake, 0.3); }
     }
     g.events.length = 0;
