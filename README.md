@@ -5,6 +5,7 @@
 
 - 해 보기: https://guardi1017-web.github.io/chimera-lab/
 - 기획 명세: [`docs/superpowers/specs/2026-11-13-chimera-lab-design.md`](docs/superpowers/specs/2026-11-13-chimera-lab-design.md)
+- 이어 만들기 지시(집 PC): [`docs/instructions-2026-11-13-next.md`](docs/instructions-2026-11-13-next.md)
 
 ## 조작
 - 누르고 끌면 네크로맨서가 움직인다. 키메라는 따라와 알아서 싸운다.
