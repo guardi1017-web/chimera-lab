@@ -24,7 +24,7 @@ const ok = (c, msg) => { if (!c) throw new Error(msg); };
   eq(u.inst, C.soul[1].inst, '불량 혼: 불안정도가 오른다'); eq(S.geneTotal(u), 2, '불량 혼: 유전자 +1'); eq(g.units.length, 3, '먹어도 자리는 셋');
   u.hp = 1; soulAt(g, 'ranger', 2);
   eq(u.inst, C.soul[1].inst + C.soul[2].inst, '신선한 혼: 불안정도가 덜 오른다'); eq(S.geneTotal(u), 4, '신선한 혼: 유전자 +2'); ok(u.hp > S.stats(u).maxHp * 0.45, '신선한 혼: 체력 회복');
-  eq(u.genes.beast, 1, '유전자는 종류별로 쌓인다'); eq(u.genes.ranger, 2, '유전자는 종류별로 쌓인다'); eq(u.main, 'ranger', '가장 많은 유전자가 주 유전자');
+  eq(u.genes.beast, 1, '유전자는 종류별로 쌓인다'); eq(u.genes.ranger, 2, '유전자는 종류별로 쌓인다'); eq(u.main, 'beast', '종류는 소환한 그대로(사수 유전자가 더 많아도 맹수)');
   const calm = S.stats(u).dmg; u.inst = 85;
   ok(S.isFrenzy(u) && Math.abs(S.stats(u).dmg / calm - 1.5) < 1e-9, '과부하: 피해 1.5배');
   ok(Math.abs(S.stats(u).cd * 1.5 - (u.inst = 0, S.stats(u).cd)) < 1e-9, '과부하: 공격 속도 1.5배');
@@ -138,15 +138,20 @@ const ok = (c, msg) => { if (!c) throw new Error(msg); };
     g.pinned = g.units[1].uid;
     g.hearts.push({ x: g.necro.x, y: g.necro.y, genes: { beast: 4, armor: 0, ranger: 0 }, main: 'beast', molts: 2, mutant: false, age: 0, ttl: 12 });
     S.step(g, 1 / 60, { x: 0, y: 0 });
-    ok(g.units.length === 3 && g.hearts.length === 0 && g.units[1].genes.beast === 4 && g.units[1].main === 'beast', '만석 심장: 찍어 둔 키메라가 유전자를 삼킨다');
+    ok(g.units.length === 3 && g.hearts.length === 0 && g.units[1].genes.beast === 4 && g.units[1].main === 'armor', '만석 심장: 찍어 둔 키메라가 유전자를 삼킨다(종류는 그대로)');
   }
 
-  // 주 유전자가 바뀌어 최대 체력이 줄어도 체력은 음수가 되지 않는다
+  // 다른 유전자를 많이 먹어도 종류는 그대로, 체력은 깎이지 않는다
   {
     const g = fresh(); soulAt(g, 'armor', 1); soulAt(g, 'ranger', 1);
     const a = g.units[1]; g.pinned = a.uid; a.hp = 10;
     soulAt(g, 'ranger', 1); soulAt(g, 'ranger', 1);
-    ok(a.main === 'ranger' && a.hp >= 10 && a.hp <= S.stats(a).maxHp, '주 유전자가 바뀌어도 체력은 깎이지 않는다 (hp=' + a.hp.toFixed(1) + ')');
+    ok(a.main === 'armor' && a.genes.ranger > a.genes.armor && a.hp >= 10 && a.hp <= S.stats(a).maxHp, '사수 혼을 더 많이 먹어도 갑주는 갑주 (hp=' + a.hp.toFixed(1) + ')');
+    // 심장으로 깨어나도 같은 종류: 사수 유전자가 더 많은 갑주의 심장은 갑주로 깨어난다
+    const h = { x: g.necro.x, y: g.necro.y, genes: Object.assign({}, a.genes), main: 'armor', molts: 1, mutant: false, keep: 1, wait: 0, age: 0, ttl: 12 };
+    g.units = g.units.filter(x => x !== a); g.hearts.push(h); g.feedT = 0; S.step(g, 1 / 60, { x: 0, y: 0 });
+    const re = g.units.find(x => x.genes.ranger === a.genes.ranger && x !== a);
+    ok(re && re.main === 'armor', '심장으로 깨어나도 종류는 그대로');
   }
 
   // 뛰어드는 중인 키메라는 혼을 먹지 않는다

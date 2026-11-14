@@ -193,10 +193,8 @@
   function levelOf(u) { return Math.min(MAX_LEVEL, 1 + Math.floor(Math.sqrt(geneTotal(u) - 1))); }
   function radiusOf(u) { return 0.5 + 0.09 * (levelOf(u) - 1); }
   function isFrenzy(u) { return u.inst >= CFG.frenzyAt; }
-  // 주 유전자는 가장 많은 것. 같으면 지금의 주 유전자를 유지한다.
-  function refreshMain(u) {
-    for (const k of KINDS) if (u.genes[k] > u.genes[u.main]) u.main = k;
-  }
+  // 주 유전자(종류)는 소환할 때 밟은 혼으로 정해지고 끝까지 바뀌지 않는다(2026-11-15 사용자 결정: 군견 혼이 많아 모두 맹수로 바뀌던 문제).
+  // 심장으로 깨어나도 같은 종류. 다른 유전자는 섞인 유전자로만 붙는다.
 
   // 능력과 기술은 모두 유전자 개수에서 나온다. 주 유전자가 몸과 기술을, 섞인 유전자가 그 변형을 정한다.
   function stats(u) {
@@ -227,7 +225,6 @@
       inst: 0, molts: 0, mutant: false, hp: 0, r: 0.5, cd: 0, skillT: 2, hitsTaken: 0, down: 0, pop: 0.5, face: -Math.PI / 2,
       state: 'ok', rushT: 0, tx: x, ty: y,
     };
-    refreshMain(u);
     u.r = radiusOf(u);
     u.hp = stats(u).maxHp;
     g.maxLevel = Math.max(g.maxLevel, levelOf(u));
@@ -419,7 +416,6 @@
   function absorb(g, u, soul) {
     const c = CFG.soul[soul.q], before = stats(u).maxHp, wasFrenzy = isFrenzy(u);
     u.genes[soul.type] += c.gene;
-    refreshMain(u);
     if (c.inst < 0) { u.inst = 0; u.mutant = true; } else u.inst += c.inst;
     const after = stats(u).maxHp;
     if (u.down > 0 && c.heal > 0) u.down = 0;
@@ -726,7 +722,6 @@
           g.feedT = CFG.feedGap;
           const before = stats(tgt).maxHp, add = scaleGenes(h.genes, h.main, heartKeep(h));
           for (const k of KINDS) tgt.genes[k] += add[k];
-          refreshMain(tgt);
           const after = stats(tgt).maxHp;
           tgt.hp = Math.min(after, Math.max(tgt.hp, tgt.hp + (after - before))); tgt.r = radiusOf(tgt); tgt.pop = 0.6;
           g.absorbs++; g.maxLevel = Math.max(g.maxLevel, levelOf(tgt));
