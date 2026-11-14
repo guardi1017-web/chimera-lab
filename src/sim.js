@@ -33,6 +33,8 @@
     postHits: 2, postRange: 4.2, postDmg: 3, postCd: 1.5,   // 초소: 폭발 두 번(불안정도가 찬 폭발은 한 번)에 부서진다
     bossHp: 600, bossBlastCap: 0.35,                   // 대장: 폭발 한 번에 최대 체력의 35%까지만
     districtScale: 0.25,                               // 구역이 하나 오를 때마다 적의 체력과 피해가 이만큼 더
+    // 골드: 구역을 처음 정복할 때만 받는다(이미 깬 구역은 0). 판 밖(끝 화면)에서 시작 맹수의 유전자를 산다
+    gold: { perClear: 3, geneCost: 3, geneMax: 8 },
     eliteHp: 260, eliteHpStep: 0.5,
     chargeSpeed: 13, chargeDmg: 25, eliteDmg: 12, rechargeEvery: 7, aimTime: 1.2,
     spawnStart: 1.8, spawnEnd: 1.05, foeGradeMul: 1.35,
@@ -113,6 +115,7 @@
   const POST_SPOTS = [[4, 16], [14, 13], [8, 7.5], [15, 4.5], [3, 3.5], [9, 1.5]];
 
   // opts.district: 몇 번째 구역인지(1부터). 키메라는 구역마다 맹수 하나로 처음부터 키운다.
+  // opts.start: 골드로 산 시작 강화 { genes: 시작 맹수에 더할 유전자 수 }. 불안정도는 늘 0으로 시작한다.
   function newGame(seed, opts) {
     opts = opts || {};
     const district = Math.max(1, opts.district || 1);
@@ -125,11 +128,14 @@
       feedT: 0,                 // 0이 되어야 다음 혼을 먹일 수 있다(실제 시간)
       eliteIdx: 0, spawnT: 1.2,
       kills: 0, raised: 0, absorbs: 0, molts: 0, rebirths: 0, eliteKills: 0, blocks: 0, maxLevel: 1,
+      ripeBlasts: 0, firstFeedT: null, firstRipeT: null,   // 지표: 다 익은 폭발 수, 처음 먹인 시각, 처음 다 익은 폭발 시각
       district, scale: 1 + CFG.districtScale * (district - 1),
       posts: [], postsTotal: 0, postsDown: 0, boss: null,
     };
-    // 네크로맨서는 직접 싸우지 못한다. 맹수 하나와 시작한다.
-    g.units.push(makeUnit(g, { beast: 1 }, 'beast', g.necro.x, g.necro.y + 1.5));
+    // 네크로맨서는 직접 싸우지 못한다. 맹수 하나와 시작한다(골드로 산 만큼 유전자가 많다).
+    const want = Math.floor(+((opts.start && opts.start.genes) || 0));
+    const extra = Number.isFinite(want) ? clamp(want, 0, CFG.gold.geneMax) : 0;
+    g.units.push(makeUnit(g, { beast: 1 + extra }, 'beast', g.necro.x, g.necro.y + 1.5));
     // 봉쇄 초소: 구역이 오를수록 많아진다(셋에서 다섯까지)
     // 구역은 아래에서 시작해 위로 밀고 올라간다. 가까운 초소부터 놓는다.
     const spots = POST_SPOTS;
@@ -295,7 +301,7 @@
     if (u.down > 0 && c.heal > 0) u.down = 0;
     u.hp = Math.min(after, Math.max(u.hp, u.hp + (after - before)) + after * c.heal);
     u.r = radiusOf(u); u.pop = 0.5;
-    g.absorbs++;
+    g.absorbs++; if (g.firstFeedT === null) g.firstFeedT = g.t;
     g.maxLevel = Math.max(g.maxLevel, levelOf(u));
     g.fx.push({ k: 'absorb', x: soul.x, y: soul.y, uid: u.uid, type: soul.type, q: soul.q, t: 0.35 });
     g.events.push(soul.q === 3 ? 'purify' : 'absorb');
@@ -360,6 +366,7 @@
     g.units = g.units.filter(x => x !== u);
     if (g.pinned === u.uid) g.pinned = null;
     g.molts++;
+    if (c >= 1) { g.ripeBlasts++; if (g.firstRipeT === null) g.firstRipeT = g.t; }
     g.fx.push({ k: 'boom', x: u.x, y: u.y, r: R, weak: c < 1, t: 0.5 });
     g.events.push('boom');
   }
@@ -635,7 +642,42 @@
     if (!g.over && n.hp <= 0) { n.hp = 0; g.over = 'lose'; g.events.push('lose'); }
   }
 
-  const api = { W, H, DURATION, MAX_LEVEL, KINDS, CFG, newGame, step, stats, geneTotal, levelOf, isFrenzy, heartKeep, scaleGenes, detonate, pin, absorb, feedTarget, spawnBoss, nextBlast };
+  // ---- 저장(골드와 강화). 순수 함수만: 읽고 쓰는 것은 화면 쪽이 localStorage로 한다 ----
+  // 저장 모양: { v: 1, best: 정복한 가장 높은 구역, gold, up: { genes } }. 정복은 순서대로만 하므로 best로 처음 정복인지 안다.
+  const SAVE_V = 1, MAX_DISTRICT = Number.MAX_SAFE_INTEGER;   // 저장값 검증용 상한(사실상 없음)
+  function freshSave() { return { v: SAVE_V, best: 0, gold: 0, up: { genes: 0 } }; }
+  const wholeNum = (v, max) => (Number.isFinite(+v) ? clamp(Math.floor(+v), 0, max) : 0);
+  // 저장 글을 읽는다. 깨졌으면 기본값. 새 저장이 없을 때만 옛 최고 기록(legacyBest)을 옮기고 그만큼 골드를 소급해 준다.
+  function loadSave(text, legacyBest) {
+    if (text !== null && text !== undefined) {   // 빈 글도 '있었는데 깨진 저장'이다
+      try {
+        const o = JSON.parse(text);
+        if (o && o.v === SAVE_V) return { v: SAVE_V, best: wholeNum(o.best, MAX_DISTRICT), gold: wholeNum(o.gold, 1e6), up: { genes: wholeNum(o.up && o.up.genes, CFG.gold.geneMax) } };
+      } catch (e) { /* 깨진 저장은 기본값으로 */ }
+      return freshSave();   // 새 저장이 있었는데 깨졌으면 옛 기록으로 다시 옮기지 않는다(소급이 되풀이되지 않게)
+    }
+    const s = freshSave(), b = wholeNum(legacyBest, MAX_DISTRICT);
+    s.best = b; s.gold = b * CFG.gold.perClear;
+    return s;
+  }
+  // 구역을 정복했다: 처음 정복한 구역이면 best를 올리고 골드를 준다(둘을 함께). 이미 깬 구역이면 그대로.
+  function clearDistrict(save, district) {
+    const d = Math.floor(+district);
+    if (!Number.isFinite(d) || d <= save.best) return { save, gained: 0 };
+    const gained = (d - save.best) * CFG.gold.perClear;
+    return { save: { v: SAVE_V, best: d, gold: save.gold + gained, up: Object.assign({}, save.up) }, gained };
+  }
+  function geneCost(save) { return save.up.genes >= CFG.gold.geneMax ? null : CFG.gold.geneCost; }
+  // 시작 유전자 한 단계를 산다: 골드를 빼고 단계를 올리는 것을 함께. 못 사면 까닭을 돌려준다.
+  function buyGene(save) {
+    const cost = geneCost(save);
+    if (cost === null) return { ok: false, save, reason: 'max' };
+    if (save.gold < cost) return { ok: false, save, reason: 'gold' };
+    return { ok: true, save: { v: SAVE_V, best: save.best, gold: save.gold - cost, up: Object.assign({}, save.up, { genes: save.up.genes + 1 }) } };
+  }
+  const Save = { fresh: freshSave, load: loadSave, clear: clearDistrict, geneCost, buyGene };
+
+  const api = { W, H, DURATION, MAX_LEVEL, KINDS, CFG, newGame, step, stats, geneTotal, levelOf, isFrenzy, heartKeep, scaleGenes, detonate, pin, absorb, feedTarget, spawnBoss, nextBlast, Save };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.ChimeraSim = api;
 })(typeof window !== 'undefined' ? window : globalThis);

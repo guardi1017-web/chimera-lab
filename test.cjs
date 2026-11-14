@@ -291,6 +291,54 @@ const ok = (c, msg) => { if (!c) throw new Error(msg); };
     ok(Math.abs(g3.scale - (1 + 2 * C.districtScale)) < 1e-9 && g3.district === 3, '구역이 오르면 적이 세진다');
   }
   console.log('규칙 확인: 초소 폭파, 대장, 구역 정복, 다음 구역은 처음부터');
+
+  // ---- 골드와 시작 강화 ----
+  {
+    const G = C.gold, V = S.Save;
+    let r, r0;
+    // 시작 맹수의 유전자: 산 만큼 더해지고, 불안정도는 0. 상한을 넘거나 이상한 값이면 잘린다
+    const g1 = S.newGame(3, { start: { genes: 3 } }), u1 = g1.units[0];
+    ok(g1.units.length === 1 && u1.main === 'beast' && S.geneTotal(u1) === 4 && u1.inst === 0 && u1.hp === S.stats(u1).maxHp, '시작 강화: 맹수 하나, 유전자 1+3, 불안정도 0, 체력 가득');
+    eq(S.geneTotal(S.newGame(3, { start: { genes: 999 } }).units[0]), 1 + G.geneMax, '시작 강화는 상한까지만');
+    eq(S.geneTotal(S.newGame(3, { start: { genes: -5 } }).units[0]), 1, '음수는 0으로');
+    eq(S.geneTotal(S.newGame(3, { start: { genes: 'x' } }).units[0]), 1, '숫자가 아니면 0으로');
+    eq(S.geneTotal(S.newGame(3).units[0]), 1, '강화가 없으면 예전처럼 유전자 1');
+    // 저장 읽기: 없으면 새 저장, 옛 최고 기록은 소급 지급, 깨졌으면 기본값(옛 기록으로 다시 옮기지 않는다)
+    let sv = V.load(null, null);
+    ok(sv.v === 1 && sv.best === 0 && sv.gold === 0 && sv.up.genes === 0, '저장이 없으면 새 저장');
+    sv = V.load(null, '2');
+    ok(sv.best === 2 && sv.gold === 2 * G.perClear, '옛 최고 기록(2구역)은 그만큼 골드를 소급해 준다');
+    sv = V.load('{깨짐', '5');
+    ok(sv.best === 0 && sv.gold === 0, '새 저장이 깨졌으면 기본값(옛 기록 소급을 되풀이하지 않는다)');
+    sv = V.load(JSON.stringify({ v: 1, best: 3, gold: 7, up: { genes: 2 } }), '9');
+    ok(sv.best === 3 && sv.gold === 7 && sv.up.genes === 2, '새 저장이 있으면 옛 기록은 보지 않는다');
+    sv = V.load(JSON.stringify({ v: 1, best: -1, gold: 'a', up: { genes: 99 } }), null);
+    ok(sv.best === 0 && sv.gold === 0 && sv.up.genes === G.geneMax, '이상한 값은 범위 안으로');
+    ok(V.load(JSON.stringify({ v: 2, best: 4 }), null).best === 0, '모르는 판의 저장은 기본값');
+    sv = V.load('', '2');
+    ok(sv.best === 0 && sv.gold === 0, '빈 글의 저장도 깨진 저장이다(옛 기록 소급을 되풀이하지 않는다)');
+    r0 = V.clear({ v: 1, best: 999, gold: 0, up: { genes: 0 } }, 1000);
+    ok(r0.save.best === 1000 && r0.gained === G.perClear, '999구역을 넘어서도 기록과 골드가 이어진다');
+    r0 = V.clear({ v: 1, best: 1e6, gold: 0, up: { genes: 0 } }, 1e6 + 1);
+    ok(r0.save.best === 1e6 + 1 && r0.gained === G.perClear, '정복 처리에는 구역 상한이 없다');
+    ok(V.clear(V.fresh(), 'x').gained === 0, '이상한 구역 번호는 무시');
+    // 정복: 처음 정복한 구역만 골드를 준다
+    r = V.clear(V.fresh(), 1);
+    ok(r.gained === G.perClear && r.save.best === 1 && r.save.gold === G.perClear, '1구역 처음 정복: 골드');
+    const after1 = r.save;
+    r = V.clear(after1, 1);
+    ok(r.gained === 0 && r.save === after1, '이미 깬 구역을 다시 깨면 골드 없음(쉬운 구역 돌기 차단)');
+    r = V.clear(after1, 2);
+    ok(r.gained === G.perClear && r.save.best === 2 && after1.best === 1, '다음 구역 정복: 골드, 원래 저장은 그대로');
+    // 구매: 골드를 빼고 단계를 올리는 것을 함께, 모자라거나 상한이면 거절
+    let b = V.buyGene({ v: 1, best: 2, gold: G.geneCost - 1, up: { genes: 0 } });
+    ok(!b.ok && b.reason === 'gold' && b.save.gold === G.geneCost - 1, '골드가 모자라면 못 산다');
+    b = V.buyGene({ v: 1, best: 2, gold: G.geneCost + 1, up: { genes: 0 } });
+    ok(b.ok && b.save.gold === 1 && b.save.up.genes === 1 && b.save.best === 2, '사면 골드가 줄고 단계가 오른다');
+    b = V.buyGene({ v: 1, best: 9, gold: 999, up: { genes: G.geneMax } });
+    ok(!b.ok && b.reason === 'max' && V.geneCost(b.save) === null, '상한이면 못 산다');
+  }
+  console.log('규칙 확인: 골드(처음 정복만), 시작 유전자 강화, 저장 읽기·소급·깨진 저장, 구매');
   console.log('규칙 확인: 되살리기, 흡수와 불안정도, 과부하, 탈피 폭발, 심장 계승, 수동 자폭, 연결, 돌격조와 갑주 방어');
 }
 
@@ -330,8 +378,8 @@ function bot(g, policy, mem) {
   x += (g.W / 2 - n.x) * 0.05; y += (g.H - 7 - n.y) * 0.05;   // 할 일이 없으면 시작 지점 근처(초소 사격 밖)에 머문다
   return { x, y };
 }
-function run(seed, policy) {
-  const g = S.newGame(seed), mem = { last: -9 };
+function run(seed, policy, opts) {
+  const g = S.newGame(seed, opts), mem = { last: -9 };
   let guard = 0;
   while (!g.over) {
     S.step(g, 1 / 60, bot(g, policy, mem));
@@ -360,6 +408,35 @@ for (const policy of ['play', 'spam', 'nomolt', 'idle']) {
   const f = v => (v / N).toFixed(1);
   console.log(`${label[policy]} 구역 정복 ${a.win}/${N} · 초소 ${f(a.posts)}/3 · 대장 등장 ${a.boss}판 · 걸린 시간 ${f(a.t)}초 · 잡은 적 ${f(a.kills)} · 흡수 ${f(a.absorbs)} · 탈피 ${f(a.molts)} · 계승 ${f(a.rebirths)} · 돌격조 처치 ${f(a.elite)} · 최고 등급 ${f(a.lvl)}`);
 }
+// '마구 터뜨림'(익히지 않고 틈만 나면 터뜨림)은 이기면 안 된다. 시작 강화를 다 사고 1구역에 돌아가도
+{
+  const N = 40;
+  for (const opts of [undefined, { district: 1, start: { genes: S.CFG.gold.geneMax } }]) {
+    let w = 0; for (let s = 1; s <= N; s++) if (run(s, 'spam', opts).over === 'win') w++;
+    if (w) throw new Error('마구 터뜨림이 이겼다 ' + w + '/' + N + ' ' + JSON.stringify(opts || {}));
+  }
+  console.log('구멍 확인: 마구 터뜨림 0/40 (강화 없음, 최대 강화로 1구역)');
+}
+
+// 참고: 골드로 산 시작 강화가 구역 배율(+25%)을 얼마나 상쇄하나. 'd구역 시작 때 그때까지 번 골드로 살 수 있는 만큼' vs 강화 없음.
+// 재미 판정이 아니다. 지표: 정복, 처음 먹인 시각, 다 익은 폭발 수, 다 익은 폭발 없이 끝난 판, 처음 다 익은 폭발 시각
+if (process.argv.includes('--gold')) {
+  const G = S.CFG.gold, N = 40;
+  const boughtFor = d => { let gold = (d - 1) * G.perClear, k = 0; while (k < G.geneMax && gold >= G.geneCost) { gold -= G.geneCost; k++; } return k; };
+  console.log('구역 | 강화 | 정복 | 처음 먹임 | 익은 폭발 | 익은 폭발 없음 | 처음 익은 폭발');
+  for (let d = 1; d <= 6; d++) for (const k of [...new Set([0, boughtFor(d)])]) {
+    const a = { win: 0, feed: [], ripe: 0, none: 0, firstRipe: [] };
+    for (let s = 1; s <= N; s++) {
+      const g = run(s, 'play', { district: d, start: { genes: k } });
+      if (g.over === 'win') a.win++;
+      if (g.firstFeedT !== null) a.feed.push(g.firstFeedT);
+      a.ripe += g.ripeBlasts; if (!g.ripeBlasts) a.none++; else a.firstRipe.push(g.firstRipeT);
+    }
+    const avg = v => v.length ? (v.reduce((x, y) => x + y, 0) / v.length).toFixed(1) + '초' : '-';
+    console.log(`${d}구역 | 유전자 +${k} | ${a.win}/${N} | ${avg(a.feed)} | ${(a.ripe / N).toFixed(1)} | ${a.none}/${N} | ${avg(a.firstRipe)}`);
+  }
+}
+
 const a = run(7, 'play'), b = run(7, 'play');
 if (a.kills !== b.kills || a.t !== b.t) throw new Error('같은 시드인데 결과가 다르다');
 console.log('재현성 확인: 같은 시드 같은 결과');
