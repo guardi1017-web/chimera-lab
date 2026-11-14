@@ -322,6 +322,7 @@ const ok = (c, msg) => { if (!c) throw new Error(msg); };
     r0 = V.clear({ v: 1, best: 1e6, gold: 0, up: { genes: 0 } }, 1e6 + 1);
     ok(r0.save.best === 1e6 + 1 && r0.gained === G.perClear, '정복 처리에는 구역 상한이 없다');
     ok(V.clear(V.fresh(), 'x').gained === 0, '이상한 구역 번호는 무시');
+    { const big = V.load(null, '333334'); ok(V.load(JSON.stringify(big), null).gold === big.gold, '많이 받은 골드도 다시 읽을 때 잘리지 않는다'); }
     // 정복: 처음 정복한 구역만 골드를 준다
     r = V.clear(V.fresh(), 1);
     ok(r.gained === G.perClear && r.save.best === 1 && r.save.gold === G.perClear, '1구역 처음 정복: 골드');

@@ -772,7 +772,7 @@
     if (text !== null && text !== undefined) {   // 빈 글도 '있었는데 깨진 저장'이다
       try {
         const o = JSON.parse(text);
-        if (o && o.v === SAVE_V) return { v: SAVE_V, best: wholeNum(o.best, MAX_DISTRICT), gold: wholeNum(o.gold, 1e6), up: { genes: wholeNum(o.up && o.up.genes, CFG.gold.geneMax) } };
+        if (o && o.v === SAVE_V) return { v: SAVE_V, best: wholeNum(o.best, MAX_DISTRICT), gold: wholeNum(o.gold, MAX_DISTRICT), up: { genes: wholeNum(o.up && o.up.genes, CFG.gold.geneMax) } };
       } catch (e) { /* 깨진 저장은 기본값으로 */ }
       return freshSave();   // 새 저장이 있었는데 깨졌으면 옛 기록으로 다시 옮기지 않는다(소급이 되풀이되지 않게)
     }
@@ -1431,13 +1431,19 @@ window.ChimeraView = view;
 
   // ---- 저장: 골드와 시작 강화(규칙은 sim.js의 S.Save, 여기서는 localStorage에 읽고 쓴다) ----
   const SAVE_KEY = 'chimera-lab-save-v1', LEGACY_KEY = 'chimera-lab-best-v1';
-  const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
   // 쓰기에 한 번 실패하면(사생활 모드, 용량 등) 그 뒤로는 메모리의 저장만 믿는다. 다시 읽으면 이 세션의 골드·강화가 지워진다.
   let canStore = true;
   // 그 세션 동안은 쓰기도 멈춘다: 저장소가 다시 살아나도 오래된 메모리 상태로 다른 탭의 저장을 덮어쓰지 않게.
   function persist() { if (!canStore) return; try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { canStore = false; } }
   // 저장을 바꾸기 직전에는 늘 저장소에서 다시 읽는다. 다른 탭에서 산 강화를 오래 열린 탭이 덮어쓰지 않게.
-  const reload = () => { if (save && !canStore) return; save = S.Save.load(lsGet(SAVE_KEY), lsGet(LEGACY_KEY)); };
+  // 읽기에 실패하면(예외) '저장 없음'과 다르게 다룬다: 메모리의 저장을 지키고, 그 세션은 메모리만 쓴다.
+  const reload = () => {
+    if (save && !canStore) return;
+    let text, legacy;
+    try { text = localStorage.getItem(SAVE_KEY); legacy = localStorage.getItem(LEGACY_KEY); }
+    catch (e) { canStore = false; if (!save) save = S.Save.fresh(); return; }
+    save = S.Save.load(text, legacy);
+  };
   let save = null;
   reload();
   persist();   // 옛 기록을 옮겼으면 바로 새 저장으로 남긴다(소급이 되풀이되지 않게)

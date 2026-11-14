@@ -652,7 +652,7 @@
     if (text !== null && text !== undefined) {   // 빈 글도 '있었는데 깨진 저장'이다
       try {
         const o = JSON.parse(text);
-        if (o && o.v === SAVE_V) return { v: SAVE_V, best: wholeNum(o.best, MAX_DISTRICT), gold: wholeNum(o.gold, 1e6), up: { genes: wholeNum(o.up && o.up.genes, CFG.gold.geneMax) } };
+        if (o && o.v === SAVE_V) return { v: SAVE_V, best: wholeNum(o.best, MAX_DISTRICT), gold: wholeNum(o.gold, MAX_DISTRICT), up: { genes: wholeNum(o.up && o.up.genes, CFG.gold.geneMax) } };
       } catch (e) { /* 깨진 저장은 기본값으로 */ }
       return freshSave();   // 새 저장이 있었는데 깨졌으면 옛 기록으로 다시 옮기지 않는다(소급이 되풀이되지 않게)
     }
