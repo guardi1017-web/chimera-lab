@@ -757,13 +757,17 @@
 })(typeof window !== 'undefined' ? window : globalThis);
 
 </script>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/" } }
+</script>
 <script type="module">
 // 3D 쿼터뷰(현대 도시의 밤). 규칙(sim.js)은 건드리지 않고 판을 그리는 쪽만 맡는다.
 // render.js가 window.ChimeraView를 찾아 쓴다. 글자·위쪽 표시·조이스틱·입력은 render.js의 2D 캔버스가 위에 겹쳐 그린다.
 // 판 좌표 (x, y) → 3D (x, 높이, y). 카메라는 직교 투영, 45도 돌려 (+x, +y) 쪽에서 내려다본다.
 // 그래서 판의 먼 쪽 두 변은 x = 0과 y = 0이고, 키 큰 건물은 그 바깥에만 세운다.
 // 폰 성능: 그림자·후처리 없음, 땅 위의 표시는 버퍼 하나로 한 번에 그린다.
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js';
+import * as THREE from 'three';   // 주소는 페이지의 importmap에 있다(build.cjs)
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const S = window.ChimeraSim;
 const css = getComputedStyle(document.documentElement);
@@ -1157,6 +1161,56 @@ const robe = mesh(GEO.cone, robeMat, 0, 0.6, 0); robe.scale.set(1.15, 1.2, 1.15)
 const headN = mesh(GEO.dot, lambert('bone'), 0, 1.35, 0); headN.scale.setScalar(0.24); necro.add(headN);
 scene.add(necro);
 
+// 주인공 모델(Tripo3D로 만든 assets/necromancer.glb: 뼈대와 서기·걷기·맞기 동작).
+// 불러오는 동안이나 불러오지 못하면 위의 원뿔을 그대로 쓴다.
+const hero = { root: null, mixer: null, act: {}, cur: null, mats: [], face: -Math.PI / 2, last: null };
+const HERO_H = 2.1;    // 판 위의 키(모델은 높이 1로 온다). 키메라보다 조금 크게
+new GLTFLoader().load('assets/necromancer.glb', gltf => {
+  const root = gltf.scene;
+  root.scale.setScalar(HERO_H);
+  root.traverse(o => {
+    if (!o.isMesh) return;
+    o.frustumCulled = false;   // 뼈로 움직이는 몸은 경계가 맞지 않아 잘릴 수 있다
+    // 밤 장면에서 묻히지 않게 텍스처를 조금 스스로 빛나게 한다(맞으면 붉게)
+    if (o.material.map) { o.material.emissiveMap = o.material.map; o.material.emissive = new THREE.Color(0xffffff); o.material.emissiveIntensity = 0.35; }
+    hero.mats.push(o.material);
+  });
+  const turn = new THREE.Group(); turn.add(root);
+  hero.mixer = new THREE.AnimationMixer(root);
+  for (const clip of gltf.animations) hero.act[clip.name] = hero.mixer.clipAction(clip);
+  if (hero.act.hurt) { hero.act.hurt.setLoop(THREE.LoopOnce, 1); hero.act.hurt.clampWhenFinished = false; }
+  hero.mixer.addEventListener('finished', () => { hero.cur = null; });
+  hero.root = turn;
+  necro.clear(); necro.add(turn);
+}, undefined, () => { /* 모델이 없으면 원뿔로 계속한다 */ });
+function playHero(name) {
+  const a = hero.act[name];
+  if (!a || hero.cur === name) return;
+  const prev = hero.cur && hero.act[hero.cur];
+  a.reset().play();
+  if (prev) prev.crossFadeTo(a, 0.18, false);
+  hero.cur = name;
+}
+function drawHero(n, now) {
+  const dt = hero.last == null ? 0 : Math.min(0.05, (now - hero.last) / 1000);
+  hero.last = now;
+  if (!hero.root) { robeMat.color.copy(n.hurt > 0 ? COL.danger : COL.necro); return; }
+  const prevX = hero.px == null ? n.x : hero.px, prevY = hero.py == null ? n.y : hero.py;
+  const vx = n.x - prevX, vy = n.y - prevY, moving = Math.hypot(vx, vy) > 0.002;
+  hero.px = n.x; hero.py = n.y;
+  if (moving) {   // 가는 쪽을 바라본다(모델의 앞은 +x)
+    const want = Math.atan2(vy, vx);
+    let d = want - hero.face; d = Math.atan2(Math.sin(d), Math.cos(d));
+    hero.face += d * Math.min(1, dt * 14);
+  }
+  hero.root.rotation.y = faceToY(hero.face);
+  if (n.hurt > 0 && hero.cur !== 'hurt' && hero.act.hurt && !hero.hurtLock) { playHero('hurt'); hero.hurtLock = true; }
+  if (n.hurt <= 0) hero.hurtLock = false;
+  if (hero.cur !== 'hurt' || !hero.act.hurt.isRunning()) playHero(moving ? 'walk' : 'idle');
+  for (const m of hero.mats) if (m.emissive) { if (n.hurt > 0) { m.emissive.copy(COL.danger); m.emissiveIntensity = 0.8; } else { m.emissive.setRGB(1, 1, 1); m.emissiveIntensity = 0.35; } }
+  hero.mixer.update(dt);
+}
+
 function drawFx(f) {
   const H = 0.05;
   if (f.k === 'hit') dec.ring(f.x, f.y, 0.25 + (0.15 - f.t) * (f.big ? 6 : 3), f.big ? 0.14 : 0.08, COL.ink, 1);
@@ -1247,7 +1301,7 @@ const view = {
     }
     for (const u of g.units) drawUnit(u, now, reduced);
     necro.position.set(n.x, 0, n.y);
-    robeMat.color.copy(n.hurt > 0 ? COL.danger : COL.necro);
+    drawHero(n, now);
     dec.ring(n.x, n.y, n.r + 0.16, 0.08, COL.ink, 1);
     for (const f of g.fx) drawFx(f);
     sweep();
