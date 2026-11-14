@@ -44,6 +44,7 @@ const tap = (wx, wy) => {
 };
 
 // ---- 첫 판: 입력과 흐름 ----
+if (els.startBtn.textContent !== '1구역으로') throw new Error('저장이 없으면 제목 버튼은 1구역: ' + els.startBtn.textContent);
 fire('startBtn', 'click', { fake: 'event' });
 frames(5);
 if (game.district !== 1 || game.units.length !== 1) throw new Error('시작 버튼으로 1구역이 열리지 않았다');
@@ -51,6 +52,7 @@ let pins = 0, booms = 0, sawLink = false;
 for (let i = 0; i < 60 * 40; i++) {
   frames(1);
   game.necro.hp = 100;   // 흐름을 끝까지 보려고 죽지 않게 한다
+  game.postsTotal = 99;   // 이 흐름에서는 대장이 나오지 않게 한다(억지로 먹여 키운 키메라가 대장을 잡으면 정복이 저장되어 뒤의 확인이 어긋난다)
   if (game.link) sawLink = true;
   if (i % 90 === 20) game.souls.push({ x: game.necro.x + 2, y: game.necro.y, type: S.KINDS[(i / 90 | 0) % 3], q: 1 + ((i / 90 | 0) % 3), ttl: 6 });
   if (i % 90 === 21) { const s = game.souls[game.souls.length - 1]; game.necro.x = s.x - 1.5; game.necro.y = s.y; }
@@ -63,8 +65,7 @@ if (!pins || !booms || !sawLink || !tones) throw new Error('입력·연결선·�
 
 // 한 번 톡의 대상은 누른 순간의 키메라다
 {
-  // 앞의 40초 동안 판이 끝났으면(죽지 않게 해 두어 가끔 이겨 버린다) 1구역을 새로 열고 확인한다
-  if (game.over) { fire('againBtn', 'click', { fake: 'event' }); frames(2); }
+  if (game.over) throw new Error('앞의 흐름에서 판이 끝나면 안 된다: ' + game.over);
   while (game.units.length < 2) { game.souls.push({ x: game.necro.x, y: game.necro.y, type: 'armor', q: 1, ttl: 5 }); frames(2); }
   for (const u of game.units) u.state = 'ok';
   const a = game.units[0], b = game.units[1];
@@ -91,6 +92,7 @@ if (!pins || !booms || !sawLink || !tones) throw new Error('입력·연결선·�
 console.log('입력 확인: 찍기 ' + pins + '번, 자폭 ' + booms + '번, 연결선, 누른 순간의 키메라, 위쪽 칸, 320ms 두 번 톡톡, 소리 호출 ' + tones + '번');
 
 // ---- 목적을 이뤄 구역을 차지하고, 키메라를 골라 다음 구역으로 ----
+game.postsTotal = game.posts.length;
 frames(120);
 for (const u of game.units) u.state = 'ok';
 for (const p of game.posts) p.dead = true;
@@ -101,6 +103,17 @@ boss.hp = 0.5; boss.bleed = 100; boss.bleedT = 1;
 frames(3);
 if (game.over !== 'win' || els.end.hidden !== false) throw new Error('대장을 잡았는데 끝 화면이 뜨지 않았다');
 if (!/1구역 정복/.test(els.endTitle.textContent)) throw new Error('정복 제목이 아니다: ' + els.endTitle.textContent);
+const readSave = () => JSON.parse(store['chimera-lab-save-v1']);
+if (readSave().best !== 1 || readSave().gold !== S.CFG.gold.perClear) throw new Error('처음 정복했는데 골드·기록이 저장되지 않았다: ' + store['chimera-lab-save-v1']);
+if (els.endGold.textContent !== S.CFG.gold.perClear + '골드 (+' + S.CFG.gold.perClear + ')') throw new Error('끝 화면의 골드 표시: ' + els.endGold.textContent);
+if (els.buyGene.disabled) throw new Error('골드가 있는데 시작 강화를 살 수 없다');
+fire('buyGene', 'click', {});
+if (readSave().gold !== S.CFG.gold.perClear - S.CFG.gold.geneCost || readSave().up.genes !== 1) throw new Error('사도 골드·단계가 바뀌지 않았다: ' + store['chimera-lab-save-v1']);
+if (!els.buyGene.disabled) throw new Error('골드가 모자란데 살 수 있게 보인다');
+console.log('골드: 처음 정복 +' + S.CFG.gold.perClear + ', 시작 유전자 1단계 구매, 버튼 "' + els.buyGene.textContent + '"');
+// 다른 탭이 그 사이에 강화를 더 사고 골드를 남겼다. 이 탭은 그것을 덮어쓰지 않고 이어받아야 한다
+const GC = S.CFG.gold.geneCost;
+store['chimera-lab-save-v1'] = JSON.stringify({ v: 1, best: 1, gold: GC + 2, up: { genes: 2 } });
 const nextBtn = els.aceList.kids;
 if (nextBtn.length !== 1 || els.aceList.hidden) throw new Error('다음 구역 버튼이 없다');
 console.log('구역 정복 화면: ' + els.endTitle.textContent + ' · 초소 ' + els.endPosts.textContent + ' · 최고 ' + els.endBest.textContent + ' · 버튼 "' + nextBtn[0].textContent + '", "' + els.againBtn.textContent + '"');
@@ -108,19 +121,78 @@ for (const f of nextBtn[0].handlers.click) f({});
 frames(3);
 if (game.district !== 2) throw new Error('다음 구역으로 넘어가지 않았다');
 if (lastOpts.squad || lastOpts.ace) throw new Error('키메라를 데려가면 안 된다');
-if (game.units.length !== 1 || S.geneTotal(game.units[0]) !== 1) throw new Error('다음 구역은 맹수 하나로 처음부터 시작해야 한다');
+if (game.units.length !== 1 || S.geneTotal(game.units[0]) !== 3) throw new Error('다른 탭에서 산 강화(+2)까지 넣어 맹수 하나(유전자 3)로 시작해야 한다: ' + S.geneTotal(game.units[0]));
 if (els.end.hidden !== true) throw new Error('다음 구역이 시작됐는데 끝 화면이 남아 있다');
 if (game.posts.length !== 4) throw new Error('2구역의 초소는 넷이어야 한다');
-console.log('다음 구역: ' + game.district + '구역, 초소 ' + game.posts.length + '곳, 맹수 하나로 처음부터');
+console.log('다음 구역: ' + game.district + '구역, 초소 ' + game.posts.length + '곳, 맹수 하나(다른 탭의 강화까지 유전자 3)로 처음부터');
 
-// ---- 지면 그 구역을 다시 ----
+// ---- 지면 그 구역을 다시. 골드·강화는 남고, 패배 화면에서도 산다 ----
 game.necro.hp = 0;
 frames(3);
 if (game.over !== 'lose' || els.end.hidden !== false) throw new Error('쓰러졌는데 끝 화면이 뜨지 않았다');
 if (els.aceList.hidden !== true) throw new Error('졌는데 다음 구역 버튼이 보인다');
-console.log('패배 화면: ' + els.endTitle.textContent + ' · 최고 ' + els.endBest.textContent + ' · 버튼 "' + els.againBtn.textContent + '"');
+if (readSave().best !== 1 || readSave().gold !== GC + 2 || readSave().up.genes !== 2) throw new Error('지면 기록·골드·강화가 바뀌면 안 된다: ' + store['chimera-lab-save-v1']);
+if (els.endGold.textContent !== (GC + 2) + '골드' || els.buyGene.disabled) throw new Error('패배 화면에서 남은 골드로 살 수 있어야 한다: ' + els.endGold.textContent);
+console.log('패배 화면: ' + els.endTitle.textContent + ' · 최고 ' + els.endBest.textContent + ' · ' + els.endGold.textContent + ' · 버튼 "' + els.againBtn.textContent + '"');
+fire('buyGene', 'click', {});
+if (readSave().gold !== 2 || readSave().up.genes !== 3) throw new Error('패배 화면 구매: ' + store['chimera-lab-save-v1']);
 fire('againBtn', 'click', { fake: 'event' });
 frames(3);
-if (game.district !== 2 || game.units.length !== 1 || S.geneTotal(game.units[0]) !== 1) throw new Error('다시 하기가 2구역을 처음부터 열지 않았다');
-if (store['chimera-lab-best-v1'] !== '1') throw new Error('최고 기록이 저장되지 않았다: ' + store['chimera-lab-best-v1']);
-console.log('다시 하기: 쓰러진 2구역을 맹수 하나로 다시. 최고 기록 저장 확인');
+if (game.district !== 2 || game.units.length !== 1 || S.geneTotal(game.units[0]) !== 4) throw new Error('다시 하기가 2구역을 강화된 맹수 하나(유전자 4)로 열지 않았다');
+console.log('다시 하기: 쓰러진 2구역을 강화된 맹수(유전자 4)로 다시. 지면 기록·골드·강화는 그대로, 패배 화면에서도 구매');
+
+// ---- 2구역을 처음 정복 → 골드, 그다음 "1구역부터 다시"도 강화된 맹수로 ----
+for (const p of game.posts) p.dead = true;
+game.postsDown = game.postsTotal;
+const boss2 = S.spawnBoss(game); frames(3);
+boss2.hp = 0.5; boss2.bleed = 100; boss2.bleedT = 1; frames(3);
+if (game.over !== 'win' || readSave().best !== 2 || readSave().gold !== 2 + S.CFG.gold.perClear) throw new Error('2구역 정복 저장: ' + store['chimera-lab-save-v1']);
+fire('againBtn', 'click', { fake: 'event' });
+frames(3);
+if (game.district !== 1 || S.geneTotal(game.units[0]) !== 4) throw new Error('"1구역부터 다시"가 강화된 맹수로 1구역을 열지 않았다');
+for (const p of game.posts) p.dead = true;
+game.postsDown = game.postsTotal;
+const boss3 = S.spawnBoss(game); frames(3);
+boss3.hp = 0.5; boss3.bleed = 100; boss3.bleedT = 1; frames(3);
+if (game.over !== 'win' || readSave().best !== 2 || readSave().gold !== 2 + S.CFG.gold.perClear || els.endGold.textContent !== (2 + S.CFG.gold.perClear) + '골드') throw new Error('이미 깬 1구역을 다시 깨면 골드가 없어야 한다: ' + store['chimera-lab-save-v1']);
+console.log('2구역 처음 정복 +' + S.CFG.gold.perClear + '골드, "1구역부터 다시"도 강화된 맹수, 이미 깬 1구역은 골드 없음');
+
+// ---- 저장 쓰기가 막혀도(사생활 모드·용량) 이 세션의 골드·강화는 지워지지 않는다 ----
+{
+  const before = readSave();
+  ls.setItem = () => { throw new Error('QuotaExceededError'); };
+  fire('againBtn', 'click', { fake: 'event' });   // 1구역부터 다시
+  frames(3);
+  for (const p of game.posts) p.dead = true;
+  game.postsDown = game.postsTotal;
+  // 아직 못 깬 3구역으로 가서 정복해 골드를 받는다(쓰기는 실패)
+  const b4 = S.spawnBoss(game); frames(3); b4.hp = 0.5; b4.bleed = 100; b4.bleedT = 1; frames(3);
+  for (const f of els.aceList.kids[0].handlers.click) f({});   // 2구역으로
+  frames(3);
+  for (const p of game.posts) p.dead = true;
+  game.postsDown = game.postsTotal;
+  const b5 = S.spawnBoss(game); frames(3); b5.hp = 0.5; b5.bleed = 100; b5.bleedT = 1; frames(3);
+  for (const f of els.aceList.kids[0].handlers.click) f({});   // 3구역으로
+  frames(3);
+  for (const p of game.posts) p.dead = true;
+  game.postsDown = game.postsTotal;
+  const b6 = S.spawnBoss(game); frames(3); b6.hp = 0.5; b6.bleed = 100; b6.bleedT = 1; frames(3);
+  const gold = before.gold + S.CFG.gold.perClear;
+  if (els.endGold.textContent !== gold + '골드 (+' + S.CFG.gold.perClear + ')') throw new Error('쓰기 실패 중 3구역 정복 골드: ' + els.endGold.textContent);
+  fire('buyGene', 'click', {});
+  if (els.endGold.textContent !== (gold - S.CFG.gold.geneCost) + '골드') throw new Error('쓰기 실패 중 구매하자 골드가 사라졌다: ' + els.endGold.textContent);
+  for (const f of els.aceList.kids[0].handlers.click) f({});   // 4구역으로
+  frames(3);
+  if (game.district !== 4 || S.geneTotal(game.units[0]) !== 1 + before.up.genes + 1) throw new Error('쓰기 실패 중에도 산 강화로 시작해야 한다: ' + S.geneTotal(game.units[0]));
+  if (JSON.stringify(readSave()) !== JSON.stringify(before)) throw new Error('쓰기가 막혔는데 저장소가 바뀌었다');
+  // 저장소가 다시 살아나도, 쓰기에 실패했던 이 세션은 다른 탭의 저장을 덮어쓰지 않는다
+  ls.setItem = (k, v) => { store[k] = v; };
+  const other = JSON.stringify({ v: 1, best: 9, gold: 1, up: { genes: 5 } });
+  store['chimera-lab-save-v1'] = other;
+  game.necro.hp = 0; frames(3);
+  fire('buyGene', 'click', {});
+  fire('againBtn', 'click', { fake: 'event' }); frames(3);
+  if (store['chimera-lab-save-v1'] !== other) throw new Error('쓰기에 실패했던 세션이 다른 탭의 저장을 덮어썼다: ' + store['chimera-lab-save-v1']);
+  console.log('저장 쓰기 실패: 이 세션의 골드·강화는 그대로 이어지고, 저장소가 살아나도 다른 탭의 저장을 덮어쓰지 않는다');
+}
+

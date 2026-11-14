@@ -70,10 +70,33 @@
   }
   window.addEventListener('resize', resize);
 
-  // opts: 다음 구역으로 갈 때 { district }. 없으면 1구역부터.
+  // ---- 저장: 골드와 시작 강화(규칙은 sim.js의 S.Save, 여기서는 localStorage에 읽고 쓴다) ----
+  const SAVE_KEY = 'chimera-lab-save-v1', LEGACY_KEY = 'chimera-lab-best-v1';
+  const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+  // 쓰기에 한 번 실패하면(사생활 모드, 용량 등) 그 뒤로는 메모리의 저장만 믿는다. 다시 읽으면 이 세션의 골드·강화가 지워진다.
+  let canStore = true;
+  // 그 세션 동안은 쓰기도 멈춘다: 저장소가 다시 살아나도 오래된 메모리 상태로 다른 탭의 저장을 덮어쓰지 않게.
+  function persist() { if (!canStore) return; try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { canStore = false; } }
+  // 저장을 바꾸기 직전에는 늘 저장소에서 다시 읽는다. 다른 탭에서 산 강화를 오래 열린 탭이 덮어쓰지 않게.
+  const reload = () => { if (save && !canStore) return; save = S.Save.load(lsGet(SAVE_KEY), lsGet(LEGACY_KEY)); };
+  let save = null;
+  reload();
+  persist();   // 옛 기록을 옮겼으면 바로 새 저장으로 남긴다(소급이 되풀이되지 않게)
+  const startBtn = document.getElementById('startBtn');
+  startBtn.textContent = (save.best + 1) + '구역으로';   // 다시 열면 아직 못 깬 다음 구역부터
+  window.addEventListener('storage', e => {   // 다른 탭이 저장을 바꾸면 따라간다
+    if (e.key !== SAVE_KEY) return;
+    reload();
+    if (mode === 'title') startBtn.textContent = (save.best + 1) + '구역으로';
+    else if (mode === 'over') refreshGold(0);
+  });
+
+  // opts: { district }. 없으면 아직 못 깬 다음 구역. 어느 경로로 시작하든 골드로 산 시작 강화를 넣는다.
   function start(opts) {
     Sound.on();
-    g = S.newGame(seed++, opts && opts.district ? opts : null);
+    reload();
+    const district = opts && opts.district ? opts.district : save.best + 1;
+    g = S.newGame(seed++, { district, start: { genes: save.up.genes } });
     mode = 'play'; shake = 0; lastTap = null;
     titleEl.hidden = true; endEl.hidden = true;
     inp.x = inp.y = 0; stick = null;
@@ -501,13 +524,20 @@
     shake = Math.max(0, shake - dt);
   }
 
-  const BEST_KEY = 'chimera-lab-best-v1';
-  function bestDistrict(reached) {
-    let best = 0;
-    try { best = +localStorage.getItem(BEST_KEY) || 0; } catch (e) { /* 저장 없이도 판은 돈다 */ }
-    if (reached > best) { best = reached; try { localStorage.setItem(BEST_KEY, String(best)); } catch (e) { /* 무시 */ } }
-    return best;
+  // 끝 화면의 골드 줄과 구매 버튼(판 밖에서만 산다)
+  const buyBtn = document.getElementById('buyGene');
+  function refreshGold(gained) {
+    document.getElementById('endGold').textContent = save.gold + '골드' + (gained ? ' (+' + gained + ')' : '');
+    const cost = S.Save.geneCost(save);
+    buyBtn.textContent = cost === null ? '시작 맹수 유전자 최대 (+' + save.up.genes + ')' : '시작 맹수 유전자 +1 · ' + cost + '골드 (지금 +' + save.up.genes + ')';
+    buyBtn.disabled = cost === null || save.gold < cost;
   }
+  buyBtn.addEventListener('click', () => {
+    reload();
+    const r = S.Save.buyGene(save);
+    if (r.ok) { save = r.save; persist(); }
+    refreshGold(0);
+  });
   const KIND_NAME = { beast: '맹수', armor: '갑주', ranger: '사수' };
   function showEnd() {
     mode = 'over';
@@ -517,7 +547,12 @@
     document.getElementById('endKills').textContent = g.kills + '마리 (돌격조 ' + g.eliteKills + ')';
     document.getElementById('endMolt').textContent = g.molts + '번 터지고 ' + g.rebirths + '번 계승';
     document.getElementById('endLevel').textContent = g.maxLevel + '등급';
-    document.getElementById('endBest').textContent = bestDistrict(won ? g.district : g.district - 1) + '구역';
+    // 처음 정복한 구역이면 골드를 받고 최고 기록이 오른다(둘을 함께). 지면 아무것도 바뀌지 않는다
+    let gained = 0;
+    reload();
+    if (won) { const r = S.Save.clear(save, g.district); save = r.save; gained = r.gained; persist(); }
+    document.getElementById('endBest').textContent = save.best + '구역';
+    refreshGold(gained);
     // 이기면 다음 구역으로(키메라는 데려가지 않고 처음부터 키운다). 지면 그 구역을 다시 한다.
     const list = document.getElementById('aceList'), askEl = document.getElementById('aceAsk'), again = document.getElementById('againBtn');
     list.textContent = '';
