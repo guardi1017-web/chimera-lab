@@ -102,7 +102,7 @@
     Sound.on();
     reload();
     const district = opts && opts.district ? opts.district : save.best + 1;
-    g = S.newGame(seed++, { district, start: { genes: save.up.genes } });
+    g = S.newGame(seed++, { district, start: { genes: save.up.genes, hp: save.up.hp } });
     mode = 'play'; shake = 0; lastTap = null;
     titleEl.hidden = true; endEl.hidden = true;
     inp.x = inp.y = 0; stick = null;
@@ -531,16 +531,21 @@
   }
 
   // 끝 화면의 골드 줄과 구매 버튼(판 밖에서만 산다)
-  const buyBtn = document.getElementById('buyGene');
+  const SHOP = [
+    { kind: 'genes', btn: document.getElementById('buyGene'), label: k => '시작 맹수 유전자 +1', now: k => '+' + k },
+    { kind: 'hp', btn: document.getElementById('buyHp'), label: k => '네크로맨서 체력 +' + S.CFG.gold.hpStep, now: k => String(100 + S.CFG.gold.hpStep * k) },
+  ];
   function refreshGold(gained) {
     document.getElementById('endGold').textContent = save.gold + '골드' + (gained ? ' (+' + gained + ')' : '');
-    const cost = S.Save.geneCost(save);
-    buyBtn.textContent = cost === null ? '시작 맹수 유전자 최대 (+' + save.up.genes + ')' : '시작 맹수 유전자 +1 · ' + cost + '골드 (지금 +' + save.up.genes + ')';
-    buyBtn.disabled = cost === null || save.gold < cost;
+    for (const it of SHOP) {
+      const k = save.up[it.kind] || 0, cost = S.Save.cost(save, it.kind);
+      it.btn.textContent = cost === null ? it.label(k) + ' · 최대 (지금 ' + it.now(k) + ')' : it.label(k) + ' · ' + cost + '골드 (지금 ' + it.now(k) + ')';
+      it.btn.disabled = cost === null || save.gold < cost;
+    }
   }
-  buyBtn.addEventListener('click', () => {
+  for (const it of SHOP) it.btn.addEventListener('click', () => {
     reload();
-    const r = S.Save.buyGene(save);
+    const r = S.Save.buy(save, it.kind);
     if (r.ok) { save = r.save; persist(); }
     refreshGold(0);
   });

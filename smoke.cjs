@@ -187,7 +187,7 @@ const winNow = () => {
   if (game.over !== 'win') throw new Error('정복하지 못했다');
 };
 const PC = S.CFG.gold.perClear;
-const base = JSON.stringify({ v: 1, best: 1, gold: 5, up: { genes: 2 } });
+const base = JSON.stringify({ v: 1, best: 1, gold: 5, up: { genes: 2, hp: 0 } });   // 새 저장 모양 그대로(띄울 때 정리해 다시 쓰지 않게)
 
 // 읽기가 막히면(예외) '저장 없음'으로 보지 않고 이 세션의 골드·강화를 지킨다
 {
@@ -237,4 +237,22 @@ const base = JSON.stringify({ v: 1, best: 1, gold: 5, up: { genes: 2 } });
   fire('againBtn', 'click', { fake: 'event' }); frames(3);
   if (store['chimera-lab-save-v1'] !== other) throw new Error('쓰기에 실패했던 세션이 다른 탭의 저장을 덮어썼다: ' + store['chimera-lab-save-v1']);
   console.log('저장 쓰기 실패: 이 세션의 골드·강화는 그대로 이어지고, 저장소가 살아나도 다른 탭의 저장을 따라가거나 덮어쓰지 않는다');
+}
+
+// ---- 네크로맨서 체력 강화: 끝 화면에서 사면 다음 판의 최대 체력이 오른다 ----
+{
+  store['chimera-lab-save-v1'] = JSON.stringify({ v: 1, best: 3, gold: 6, up: { genes: 0 } });   // 체력 강화가 없던 저장
+  freshSession(ls);
+  fire('startBtn', 'click', {}); frames(3);
+  if (game.district !== 4 || game.necro.maxHp !== 100) throw new Error('체력 강화 전 4구역: ' + game.necro.maxHp);
+  game.necro.hp = 0; frames(3);
+  if (els.buyHp.disabled || !/지금 100/.test(els.buyHp.textContent)) throw new Error('패배 화면의 체력 구매 버튼: ' + els.buyHp.textContent);
+  fire('buyHp', 'click', {}); fire('buyHp', 'click', {});
+  const sv = readSave();
+  if (sv.gold !== 6 - 2 * S.CFG.gold.hpCost || sv.up.hp !== 2 || sv.up.genes !== 0) throw new Error('체력 구매 저장: ' + store['chimera-lab-save-v1']);
+  if (!els.buyHp.disabled) throw new Error('골드가 없는데 체력을 살 수 있게 보인다');
+  fire('againBtn', 'click', { fake: 'event' }); frames(3);
+  const want = 100 + 2 * S.CFG.gold.hpStep;
+  if (game.district !== 4 || game.necro.maxHp !== want || game.necro.hp > want) throw new Error('체력 강화가 다음 판에 들어가지 않았다: ' + game.necro.maxHp);
+  console.log('네크로맨서 체력: 패배 화면에서 2단계 구매 → 4구역을 최대 체력 ' + want + '에서 다시, 버튼 "' + els.buyHp.textContent + '"');
 }

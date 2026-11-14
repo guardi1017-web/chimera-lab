@@ -295,7 +295,7 @@ const ok = (c, msg) => { if (!c) throw new Error(msg); };
   // ---- 골드와 시작 강화 ----
   {
     const G = C.gold, V = S.Save;
-    let r, r0;
+    let r, r0, b0;
     // 시작 맹수의 유전자: 산 만큼 더해지고, 불안정도는 0. 상한을 넘거나 이상한 값이면 잘린다
     const g1 = S.newGame(3, { start: { genes: 3 } }), u1 = g1.units[0];
     ok(g1.units.length === 1 && u1.main === 'beast' && S.geneTotal(u1) === 4 && u1.inst === 0 && u1.hp === S.stats(u1).maxHp, '시작 강화: 맹수 하나, 유전자 1+3, 불안정도 0, 체력 가득');
@@ -303,9 +303,21 @@ const ok = (c, msg) => { if (!c) throw new Error(msg); };
     eq(S.geneTotal(S.newGame(3, { start: { genes: -5 } }).units[0]), 1, '음수는 0으로');
     eq(S.geneTotal(S.newGame(3, { start: { genes: 'x' } }).units[0]), 1, '숫자가 아니면 0으로');
     eq(S.geneTotal(S.newGame(3).units[0]), 1, '강화가 없으면 예전처럼 유전자 1');
+    { const gh = S.newGame(3, { start: { hp: 3 } }); ok(gh.necro.hp === 100 + 3 * G.hpStep && gh.necro.maxHp === gh.necro.hp, '체력 강화: 최대 체력과 시작 체력이 함께 오른다'); }
+    eq(S.newGame(3, { start: { hp: 999 } }).necro.maxHp, 100 + G.hpMax * G.hpStep, '체력 강화는 상한까지만');
+    eq(S.newGame(3, { start: { hp: 'x' } }).necro.maxHp, 100, '체력 강화: 이상한 값은 0으로');
+    { const gh = S.newGame(3, { start: { hp: 2 } }); gh.spawnT = 1e9; gh.eliteIdx = 99; gh.posts = []; gh.necro.hp = gh.necro.maxHp - 1; gh.feedT = 0;
+      gh.souls.push({ x: gh.necro.x, y: gh.necro.y, type: 'armor', q: 3, ttl: 5 }); S.step(gh, 1 / 60, { x: 0, y: 0 });
+      eq(gh.necro.hp, gh.necro.maxHp, '혼 회복은 강화된 최대 체력까지'); }
     // 저장 읽기: 없으면 새 저장, 옛 최고 기록은 소급 지급, 깨졌으면 기본값(옛 기록으로 다시 옮기지 않는다)
     let sv = V.load(null, null);
     ok(sv.v === 1 && sv.best === 0 && sv.gold === 0 && sv.up.genes === 0, '저장이 없으면 새 저장');
+    sv = V.load(JSON.stringify({ v: 1, best: 2, gold: 4, up: { genes: 1 } }), null);
+    ok(sv.up.genes === 1 && sv.up.hp === 0, '체력 강화가 없던 저장은 0으로 읽는다');
+    b0 = V.buy({ v: 1, best: 2, gold: G.hpCost, up: { genes: 1, hp: 0 } }, 'hp');
+    ok(b0.ok && b0.save.gold === 0 && b0.save.up.hp === 1 && b0.save.up.genes === 1, '체력을 사면 골드가 줄고 체력 단계만 오른다');
+    ok(!V.buy({ v: 1, best: 9, gold: 99, up: { genes: 0, hp: G.hpMax } }, 'hp').ok, '체력 강화 상한');
+    ok(!V.buy({ v: 1, best: 9, gold: 99, up: { genes: 0, hp: 0 } }, 'nope').ok, '모르는 강화는 못 산다');
     sv = V.load(null, '2');
     ok(sv.best === 2 && sv.gold === 2 * G.perClear, '옛 최고 기록(2구역)은 그만큼 골드를 소급해 준다');
     sv = V.load('{깨짐', '5');
@@ -339,7 +351,7 @@ const ok = (c, msg) => { if (!c) throw new Error(msg); };
     b = V.buyGene({ v: 1, best: 9, gold: 999, up: { genes: G.geneMax } });
     ok(!b.ok && b.reason === 'max' && V.geneCost(b.save) === null, '상한이면 못 산다');
   }
-  console.log('규칙 확인: 골드(처음 정복만), 시작 유전자 강화, 저장 읽기·소급·깨진 저장, 구매');
+  console.log('규칙 확인: 골드(처음 정복만), 시작 유전자·네크로맨서 체력 강화, 저장 읽기·소급·깨진 저장, 구매');
   console.log('규칙 확인: 되살리기, 흡수와 불안정도, 과부하, 탈피 폭발, 심장 계승, 수동 자폭, 연결, 돌격조와 갑주 방어');
 }
 
@@ -412,7 +424,7 @@ for (const policy of ['play', 'spam', 'nomolt', 'idle']) {
 // '마구 터뜨림'(익히지 않고 틈만 나면 터뜨림)은 이기면 안 된다. 시작 강화를 다 사고 1구역에 돌아가도
 {
   const N = 40;
-  for (const opts of [undefined, { district: 1, start: { genes: S.CFG.gold.geneMax } }]) {
+  for (const opts of [undefined, { district: 1, start: { genes: S.CFG.gold.geneMax, hp: S.CFG.gold.hpMax } }]) {
     let w = 0; for (let s = 1; s <= N; s++) if (run(s, 'spam', opts).over === 'win') w++;
     if (w) throw new Error('마구 터뜨림이 이겼다 ' + w + '/' + N + ' ' + JSON.stringify(opts || {}));
   }
