@@ -13,9 +13,9 @@
     pickRadius: 1.1,
     // 혼의 품질: 1 불량(잡몹), 2 신선(중형), 3 순혈 코어(돌격조)
     soul: {
-      1: { gene: 1, inst: 24, heal: 0 },
-      2: { gene: 2, inst: 12, heal: 0.5 },
-      3: { gene: 3, inst: -1, heal: 1 },   // inst -1 = 불안정도를 0으로 식힌다
+      1: { gene: 1, inst: 24, heal: 0, necro: 2 },
+      2: { gene: 2, inst: 12, heal: 0.5, necro: 4 },
+      3: { gene: 3, inst: -1, heal: 1, necro: 10 },   // inst -1 = 불안정도를 0으로 식힌다. necro: 혼을 먹이거나 되살릴 때 네크로맨서가 회복하는 양
     },
     soulTtl: 10, soulCap: 12,
     frenzyAt: 80, frenzyMul: 1.5,
@@ -280,6 +280,12 @@
   }
 
   // 혼을 먹인다: 유전자가 쌓이고 불안정도가 오른다(순혈 코어는 0으로 식힌다).
+  // 혼을 먹이거나 되살리면 네크로맨서도 조금 회복한다(심장은 회복하지 않는다)
+  function healNecro(g, q) {
+    const n = g.necro;
+    if (n.hp > 0) n.hp = Math.min(n.maxHp, n.hp + CFG.soul[q].necro);
+  }
+
   function absorb(g, u, soul) {
     const c = CFG.soul[soul.q], before = stats(u).maxHp, wasFrenzy = isFrenzy(u);
     u.genes[soul.type] += c.gene;
@@ -608,7 +614,7 @@
         const u = makeUnit(g, genes, s.type, s.x, s.y);
         if (s.q === 3) u.mutant = true;
         u.hp = stats(u).maxHp;
-        g.units.push(u); g.raised++;
+        g.units.push(u); g.raised++; healNecro(g, s.q);
         g.fx.push({ k: 'raise', x: u.x, y: u.y, arch: s.type, t: 0.45 });
         g.events.push('raise');
         s.ttl = 0;
@@ -616,7 +622,7 @@
         const tgt = feedTarget(g, s);
         if (tgt) {
           if (g.pinned === null) g.pinned = tgt.uid;   // 처음 먹은 키메라가 먹일 대상으로 남는다
-          absorb(g, tgt, s); s.ttl = 0; g.feedT = CFG.feedGap;
+          absorb(g, tgt, s); healNecro(g, s.q); s.ttl = 0; g.feedT = CFG.feedGap;
         }
       }
     }

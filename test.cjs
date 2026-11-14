@@ -159,6 +159,20 @@ const ok = (c, msg) => { if (!c) throw new Error(msg); };
     ok(r0.state !== 'rush' || S.geneTotal(r0) === total, '뛰어드는 중에는 먹지 않는다');
   }
 
+  // 혼을 먹이거나 되살리면 네크로맨서가 조금 회복한다(최대 체력은 넘지 않고, 심장은 회복하지 않는다)
+  {
+    const g = fresh(); g.necro.hp = 50;
+    soulAt(g, 'armor', 1); eq(g.necro.hp, 50 + C.soul[1].necro, '불량 혼으로 되살리면 회복');
+    soulAt(g, 'ranger', 2); eq(g.necro.hp, 50 + C.soul[1].necro + C.soul[2].necro, '신선한 혼으로 되살리면 회복');
+    g.pinned = g.units[0].uid; const hp0 = g.necro.hp;
+    soulAt(g, 'beast', 1); eq(g.necro.hp, hp0 + C.soul[1].necro, '불량 혼을 먹이면 회복');
+    soulAt(g, 'beast', 3); eq(g.necro.hp, hp0 + C.soul[1].necro + C.soul[3].necro, '순혈 코어를 먹이면 크게 회복');
+    g.necro.hp = 99; soulAt(g, 'beast', 3); eq(g.necro.hp, 100, '최대 체력은 넘지 않는다');
+    g.necro.hp = 50; g.feedT = 0;
+    g.hearts.push({ x: g.necro.x, y: g.necro.y, genes: { beast: 2, armor: 0, ranger: 0 }, main: 'beast', molts: 0, mutant: false, age: 0, ttl: 12 });
+    S.step(g, 1 / 60, { x: 0, y: 0 }); ok(g.hearts.length === 0 && g.necro.hp === 50, '심장은 회복하지 않는다');
+  }
+
   // 따로 찍지 않아도, 처음 먹은 키메라가 먹일 대상으로 남는다
   {
     const g = fresh(); soulAt(g, 'armor', 1); soulAt(g, 'ranger', 1);
