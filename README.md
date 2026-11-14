@@ -4,7 +4,7 @@
 핵심 30초가 폰에서 재미있는지 확인하려는 것이고, 완성된 게임이 아니다.
 
 - 해 보기: https://guardi1017-web.github.io/chimera-lab/
-- 3D 쿼터뷰(시험 중): https://guardi1017-web.github.io/chimera-lab/3d.html
+- 예전 2D 판: https://guardi1017-web.github.io/chimera-lab/2d.html
 - 기획 명세: [`docs/superpowers/specs/2026-11-13-chimera-lab-design.md`](docs/superpowers/specs/2026-11-13-chimera-lab-design.md)
 - 이어 만들기 지시(집 PC): [`docs/instructions-2026-11-13-next.md`](docs/instructions-2026-11-13-next.md)
 
@@ -20,14 +20,14 @@
 | `src/render.js` | 화면, 입력, Web Audio 효과음. `window.ChimeraView`가 있으면 판 그리기를 넘긴다 |
 | `src/render3d.js` | 3D 쿼터뷰(Three.js, CDN). 규칙은 건드리지 않고 판만 그린다 |
 | `src/page.html` | 제목·끝 화면과 색 토큰 |
-| `index.html` | 합친 결과물, 2D 판(직접 고치지 않는다) |
-| `3d.html` | 합친 결과물, 3D 쿼터뷰 판(직접 고치지 않는다) |
+| `index.html` | 합친 결과물, 3D 쿼터뷰 판(직접 고치지 않는다) |
+| `2d.html` | 합친 결과물, 예전 2D 판. `smoke.cjs`가 이것으로 화면 코드를 돌린다 |
 | `test.cjs` | 규칙 테스트와 봇 40판 |
 | `smoke.cjs` | 가짜 DOM으로 화면 코드를 끝까지 돌려 보는 확인 |
 | `parts-v1/`, `blend-v2/`, `grade-v5/` | 지난 실험판(부위 붙이기, 재료 섞임, 등급 합성) |
 
 ```bash
-node build.cjs   # src → index.html, 3d.html
+node build.cjs   # src → index.html(3D), 2d.html
 node test.cjs    # 규칙과 봇
 node smoke.cjs   # 화면 코드 예외 확인
 ```

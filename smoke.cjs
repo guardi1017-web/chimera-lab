@@ -1,7 +1,7 @@
-// 합친 index.html의 화면 코드를 가짜 DOM으로 돌려 예외가 없는지 본다(그림과 소리는 확인하지 못한다).
+// 합친 2d.html의 화면 코드(render.js, 3D 판과 같은 코드)를 가짜 DOM으로 돌려 예외가 없는지 본다(그림과 소리는 확인하지 못한다).
 const fs = require('fs');
 const S = require('./src/sim.js');
-const h = fs.readFileSync('index.html', 'utf8');
+const h = fs.readFileSync('2d.html', 'utf8');
 const scripts = [...h.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]);
 for (const s of scripts) new Function(s);
 const noop = () => {};
