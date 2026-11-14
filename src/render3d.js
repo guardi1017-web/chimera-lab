@@ -5,6 +5,7 @@
 // 폰 성능: 그림자·후처리 없음, 땅 위의 표시는 버퍼 하나로 한 번에 그린다.
 import * as THREE from 'three';   // 주소는 페이지의 importmap에 있다(build.cjs)
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 
 const S = window.ChimeraSim;
 const css = getComputedStyle(document.documentElement);
@@ -227,24 +228,58 @@ function sweep() {
 const faceToY = a => -a;   // 판의 각(atan2(dy, dx)) → 3D의 y축 회전
 
 // 키메라: 주 유전자가 몸(맹수 뿔 / 갑주 상자 / 사수 공), 섞인 유전자가 개수만큼 붙는다(가시·장갑판·눈알)
+// 키메라 몸 모델(Tripo3D, 네발 뼈대와 걷기 동작). 주 유전자마다 하나씩. 아직 없거나 못 불러오면 도형 몸을 쓴다.
+// 모델의 앞은 -z, 키는 약 0.82, 길이 1로 온다. 게임은 +x가 앞이므로 -90도 돌려 놓는다.
+const BODY = {};
+for (const kind of ['beast']) {
+  new GLTFLoader().load('assets/chimera-' + kind + '.glb', gltf => { BODY[kind] = gltf; }, undefined, () => { /* 없으면 도형 몸 */ });
+}
+const BODY_LEN = 3.4;   // 판 위의 몸 길이 = 반지름 × 이 값(밤 도로에서 묻히지 않게 도형 몸보다 조금 크게)
+function makeBodyModel(kind) {
+  const src = BODY[kind], root = cloneSkinned(src.scene), mats = [];
+  root.traverse(o => {
+    if (!o.isMesh) return;
+    o.frustumCulled = false;
+    o.material = o.material.clone();   // 키메라마다 붉어지는 정도가 다르다
+    o.material.transparent = true;
+    if (o.material.map) { o.material.emissiveMap = o.material.map; o.material.emissive = new THREE.Color(0xffffff); o.material.emissiveIntensity = 0.5; }
+    mats.push(o.material);
+  });
+  const holder = new THREE.Group(); holder.add(root); root.rotation.y = -Math.PI / 2;
+  const mixer = new THREE.AnimationMixer(root), walk = src.animations[0] ? mixer.clipAction(src.animations[0]) : null;
+  if (walk) walk.play();
+  return { holder, mats, mixer, walk };
+}
+
 function unitSig(u) {
   const gn = u.genes;
-  return u.main + (u.mutant ? '*' : '') + '|' + Math.min(u.main === 'beast' ? 0 : gn.beast, 12) + '|' + Math.min(u.main === 'armor' ? 0 : gn.armor, 8) + '|' + Math.min(u.main === 'ranger' ? 0 : gn.ranger, 8) + '|' + Math.min(gn[u.main], 5);
+  return u.main + (BODY[u.main] ? '@' : '') + (u.mutant ? '*' : '') + '|' + Math.min(u.main === 'beast' ? 0 : gn.beast, 12) + '|' + Math.min(u.main === 'armor' ? 0 : gn.armor, 8) + '|' + Math.min(u.main === 'ranger' ? 0 : gn.ranger, 8) + '|' + Math.min(gn[u.main], 5);
 }
 function makeUnit() {
   const root = new THREE.Group(), body = new THREE.Group(), turn = new THREE.Group();
   root.add(turn); turn.add(body);
   const skin = new THREE.MeshLambertMaterial({ color: COL.bone.clone(), transparent: true });
   const pin = mesh(GEO.cone, basic('necro')); pin.rotation.x = Math.PI; pin.scale.set(0.45, 0.5, 0.45); root.add(pin);
-  return { root, turn, body, skin, pin, sig: '', dispose() { skin.dispose(); } };
+  const rec = { root, turn, body, skin, pin, sig: '', model: null, px: null, py: null };
+  rec.dispose = () => { skin.dispose(); dropModel(rec); };
+  return rec;
+}
+function dropModel(rec) {
+  if (!rec.model) return;
+  rec.turn.remove(rec.model.holder);
+  rec.model.mixer.stopAllAction();
+  for (const m of rec.model.mats) m.dispose();
+  rec.model = null;
 }
 function buildUnitBody(rec, u) {
   const b = rec.body, gn = u.genes;
   b.clear();
-  const core = mesh(u.main === 'beast' ? GEO.horn : u.main === 'armor' ? GEO.box : GEO.ball, rec.skin);
-  b.add(core);
-  // 주 유전자가 쌓일수록 몸에 같은 색의 띠가 겹친다
-  for (let i = 1; i < Math.min(gn[u.main], 5); i++) {
+  dropModel(rec);
+  // 주 유전자의 몸: 모델이 있으면 모델, 없으면 도형(뿔/상자/공)
+  if (BODY[u.main]) { rec.model = makeBodyModel(u.main); rec.turn.add(rec.model.holder); }
+  else b.add(mesh(u.main === 'beast' ? GEO.horn : u.main === 'armor' ? GEO.box : GEO.ball, rec.skin));
+  // 주 유전자가 쌓일수록 몸에 같은 색의 띠가 겹친다(도형 몸일 때만)
+  for (let i = 1; i < (rec.model ? 0 : Math.min(gn[u.main], 5)); i++) {
     const band = mesh(GEO.cyl, lambert(u.main), 0, -0.55 + i * 0.28, 0); band.scale.set(1.9 - i * 0.05, 0.07, 1.9 - i * 0.05);
     if (u.main === 'beast') { band.scale.set(1.2, 0.07, 1.2); band.position.set(-0.3, -0.35 + i * 0.18, 0); }
     b.add(band);
@@ -285,6 +320,22 @@ function drawUnit(u, now, reduced) {
   rec.body.position.y = r * 0.95;
   if (blink) rec.skin.color.copy(COL.danger); else rec.skin.color.copy(COL.bone).lerp(COL.danger, heat * 0.85);
   rec.skin.opacity = u.down > 0 ? 0.3 : 1;
+  if (rec.model) {
+    const m = rec.model;
+    m.holder.scale.setScalar(r * BODY_LEN);
+    // 불안정도가 오르면 몸이 붉게 물든다(과부하면 깜박인다). 쓰러져 있으면 흐리다
+    for (const mat of m.mats) {
+      mat.color.setRGB(1, 1, 1).lerp(COL.danger, blink ? 0.9 : heat * 0.7);
+      mat.emissiveIntensity = blink ? 0.8 : 0.5 + heat * 0.25;
+      mat.opacity = u.down > 0 ? 0.3 : 1;
+    }
+    // 움직일 때만 걷는다(멈추면 걷기를 멈춘 자세)
+    const moved = rec.px !== null && Math.hypot(u.x - rec.px, u.y - rec.py) > 0.002;
+    rec.px = u.x; rec.py = u.y;
+    const dt = rec.lastT == null ? 0 : Math.min(0.05, (now - rec.lastT) / 1000); rec.lastT = now;
+    if (m.walk) m.walk.timeScale = moved || u.state === 'rush' ? 1.6 : 0;
+    m.mixer.update(dt);
+  }
   const pinned = g.pinned === u.uid;
   rec.pin.visible = pinned;
   if (pinned) rec.pin.position.set(0, r * 2.1 + 0.55 + (reduced ? 0 : Math.sin(now / 200) * 0.08), 0);
