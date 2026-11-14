@@ -16,12 +16,18 @@ fs.writeFileSync(path.join(__dirname, '2d.html'), head + page + tail);
 // 모듈 스크립트는 적힌 순서대로 돈다: render3d.js가 window.ChimeraView를 만든 뒤 render.js가 그것을 쓴다.
 // three와 그 부속(GLTFLoader)을 같은 판(0.170.0)으로 CDN에서 받는다. 모듈보다 먼저 와야 한다.
 const IMPORTMAP = '<script type="importmap">\n{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/" } }\n</script>\n';
+// 모델 파일 내용의 짧은 해시. 모델이 바뀌면 주소(?v=)가 바뀌어 폰 브라우저가 예전 모델을 캐시에서 쓰지 않는다.
+const crypto = require('crypto');
+const assetDir = path.join(__dirname, 'assets');
+const assetV = crypto.createHash('sha1')
+  .update(fs.readdirSync(assetDir).filter(f => f.endsWith('.glb')).sort().map(f => f + ':' + crypto.createHash('sha1').update(fs.readFileSync(path.join(assetDir, f))).digest('hex')).join('|'))
+  .digest('hex').slice(0, 8);
 const marks = ['<canvas id="game" aria-label="키메라 실험 판"></canvas>', '</style>', '<script>\n/*__RENDER__*/\n</script>'];
 for (const m of marks) if (!src.includes(m)) throw new Error('page.html에서 찾지 못했다: ' + m);
 const page3d = src
   .replace(marks[0], '<canvas id="game3d" aria-hidden="true"></canvas>\n  ' + marks[0])
   .replace(marks[1], '  #game3d { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }\n  #game { position: relative; z-index: 1; }\n  .veil { z-index: 2; }\n' + marks[1])
-  .replace(marks[2], () => IMPORTMAP + '<script type="module">\n' + read('render3d.js') + '\n</script>\n<script type="module">\n' + read('render.js') + '\n</script>')
+  .replace(marks[2], () => IMPORTMAP + '<script type="module">\n' + read('render3d.js').replace('__ASSET_V__', assetV) + '\n</script>\n<script type="module">\n' + read('render.js') + '\n</script>')
   .replace('/*__SIM__*/', () => read('sim.js'));
 fs.writeFileSync(path.join(__dirname, 'index.html'), head + page3d + tail);
 console.log('index.html(3D) ' + page3d.length + '자, 2d.html ' + page.length + '자');

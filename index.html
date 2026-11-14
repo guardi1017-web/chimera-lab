@@ -823,6 +823,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 
 const S = window.ChimeraSim;
+// 모델 파일이 바뀌면 주소도 바뀌게(폰 브라우저가 예전 모델을 캐시에서 쓰지 않게). build.cjs가 모델 내용으로 채운다
+const ASSET_V = '0c80be48';
 const css = getComputedStyle(document.documentElement);
 const tok = n => css.getPropertyValue(n).trim();
 const HEX = {
@@ -1047,7 +1049,7 @@ const faceToY = a => -a;   // 판의 각(atan2(dy, dx)) → 3D의 y축 회전
 // 모델의 앞은 -z, 키는 약 0.82, 길이 1로 온다. 게임은 +x가 앞이므로 -90도 돌려 놓는다.
 const BODY = {};
 for (const kind of ['beast']) {
-  new GLTFLoader().load('assets/chimera-' + kind + '.glb', gltf => { BODY[kind] = gltf; }, undefined, () => { /* 없으면 도형 몸 */ });
+  new GLTFLoader().load('assets/chimera-' + kind + '.glb?v=' + ASSET_V, gltf => { BODY[kind] = gltf; }, undefined, () => { /* 없으면 도형 몸 */ });
 }
 const BODY_LEN = 3.4;   // 판 위의 몸 길이 = 반지름 × 이 값(밤 도로에서 묻히지 않게 도형 몸보다 조금 크게)
 function makeBodyModel(kind) {
@@ -1268,7 +1270,7 @@ scene.add(necro);
 // 불러오는 동안이나 불러오지 못하면 위의 원뿔을 그대로 쓴다.
 const hero = { root: null, mixer: null, act: {}, cur: null, mats: [], face: -Math.PI / 2, last: null };
 const HERO_H = 2.1;    // 판 위의 키(모델은 높이 1로 온다). 키메라보다 조금 크게
-new GLTFLoader().load('assets/necromancer.glb', gltf => {
+new GLTFLoader().load('assets/necromancer.glb?v=' + ASSET_V, gltf => {
   const root = gltf.scene;
   root.scale.setScalar(HERO_H);
   root.traverse(o => {
