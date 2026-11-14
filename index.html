@@ -758,6 +758,9 @@
 (function () {
   'use strict';
   const S = window.ChimeraSim;
+  // 3D 판(3d.html)이면 판을 그리는 쪽을 넘겨받는다. 없으면 지금의 2D 판이다.
+  // V: render(g, now, opts) / resize(w, h) / toScreen(x, y, h) → [px, py] / toWorld(px, py) → {x, y} / rotateInput(x, y) → [x, y]
+  const V = window.ChimeraView || null;
   const cv = document.getElementById('game');
   const ctx = cv.getContext('2d');
   const css = getComputedStyle(document.documentElement);
@@ -819,6 +822,7 @@
     cv.width = Math.max(1, Math.round(r.width * dpr));
     cv.height = Math.max(1, Math.round(r.height * dpr));
     scale = cv.width / VIEW_W;
+    if (V) V.resize(r.width, r.height);
   }
   window.addEventListener('resize', resize);
 
@@ -863,7 +867,8 @@
       const b = hud[i], lx = cx - r.left, ly = cy - r.top;
       if (g.units[i] && lx >= b.x - 4 && lx <= b.x + b.w + 4 && ly >= b.y - 14 && ly <= b.y + b.h + 22) { S.pin(g, g.units[i].uid); return; }
     }
-    const wx = (cx - r.left) * dpr / scale + camX, wy = (cy - r.top) * dpr / scale + camY;
+    const wp = V ? V.toWorld(cx - r.left, cy - r.top) : null;
+    const wx = wp ? wp.x : (cx - r.left) * dpr / scale + camX, wy = wp ? wp.y : (cy - r.top) * dpr / scale + camY;
     const game = g;
     // 누른 순간 손가락 아래에 있던 키메라를 기억해 둔다(확정될 때는 이미 움직였을 수 있다)
     let best = null, bd = 1e9;
@@ -896,6 +901,7 @@
     if (keys.ArrowRight || keys.d) x += 1;
     if (keys.ArrowUp || keys.w) y -= 1;
     if (keys.ArrowDown || keys.s) y += 1;
+    if (V) { const m = Math.hypot(x, y); if (m > 1) { x /= m; y /= m; } [x, y] = V.rotateInput(x, y); }   // 화면 위쪽으로 끌면 화면 위쪽으로 간다
     inp.x = x; inp.y = y;
   }
 
@@ -917,7 +923,8 @@
     const a = p(c1), b = p(c2);
     return 'rgb(' + a.map((v, i) => Math.round(v + (b[i] - v) * k)).join(',') + ')';
   }
-  const sx = x => (x - camX) * scale / dpr, sy = y => (y - camY) * scale / dpr;
+  // 판 좌표 → 화면 좌표(CSS px). h는 땅에서의 높이(3D에서만 쓴다)
+  const scr = (x, y, h) => V ? V.toScreen(x, y, h || 0) : [(x - camX) * scale / dpr, (y - camY) * scale / dpr];
 
   // 키메라: 주 유전자가 몸의 모양이고, 섞인 유전자가 개수만큼 몸에 들러붙는다
   // (맹수 가시, 갑주 장갑판, 사수 눈알). 불안정도가 오르면 붉게 달아오르고 떤다.
@@ -1017,8 +1024,19 @@
   function draw(now) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = 1;
-    ctx.fillStyle = COL.ground; ctx.fillRect(0, 0, cv.width, cv.height);
-    if (!g) return;
+    if (V) {
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      if (!g) return;
+      V.render(g, now, { shake: reduced ? 0 : shake, reduced });
+    } else {
+      ctx.fillStyle = COL.ground; ctx.fillRect(0, 0, cv.width, cv.height);
+      if (!g) return;
+      drawWorld2D(now);
+    }
+    drawScreen(now);
+  }
+
+  function drawWorld2D(now) {
     const vh = cv.height / scale, n = g.necro;
     camX = Math.max(0, Math.min(S.W - VIEW_W, n.x - VIEW_W / 2));
     camY = vh >= S.H ? (S.H - vh) / 2 : Math.max(0, Math.min(S.H - vh, n.y - vh / 2));
@@ -1133,15 +1151,40 @@
       else if (f.k === 'down') { ctx.strokeStyle = COL.danger; ctx.lineWidth = 0.1; circle(f.x, f.y, 0.6 + (0.5 - f.t) * 2); ctx.stroke(); }
     }
 
+  }
+
+  // 3D 판에서 화면 좌표로 그리는 것: 체력 막대, 초소 내구도, 기절 표시
+  function drawMarks3D(now) {
+    const sbar = (x, y, w, f, col) => { ctx.fillStyle = COL.grid; ctx.fillRect(x - w / 2, y, w, 4); ctx.fillStyle = col; ctx.fillRect(x - w / 2, y, w * Math.max(0, f), 4); };
+    const ppu = V.pxPerUnit();
+    for (const e of g.enemies) {
+      const [x, y] = scr(e.x, e.y, e.r * 2.2 + 0.4);
+      if (e.hp < e.maxHp) sbar(x, y - 8, (e.elite ? 2 : 0.9) * ppu, e.hp / e.maxHp, COL.danger);
+      if (e.stun > 0) { ctx.strokeStyle = COL.great; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y - 16, 5, now / 90, now / 90 + 4.5); ctx.stroke(); }
+    }
+    for (const p of g.posts) {
+      if (p.dead) continue;
+      const [x, y] = scr(p.x, p.y, 2.3);
+      for (let i = 0; i < p.maxHp; i++) { ctx.fillStyle = i < p.hp ? COL.ink : COL.grid; ctx.fillRect(x - 0.45 * ppu + i * 0.5 * ppu, y - 6, 0.4 * ppu, 5); }
+    }
+    for (const u of g.units) {
+      const mh = S.stats(u).maxHp;
+      if (u.down <= 0 && u.hp < mh && u.state === 'ok') { const [x, y] = scr(u.x, u.y, 0); sbar(x, y + u.r * ppu * 0.5 + 6, Math.max(1, u.r * 1.6) * ppu, u.hp / mh, COL.bone); }
+    }
+  }
+
+  function drawScreen(now) {
+    const n = g.necro;
     // 여기부터 화면 좌표(글자가 또렷하게 나오게)
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const px = scale / dpr, w = cv.width / dpr, hh = cv.height / dpr, pad = 16, bw = w - pad * 2;
-    for (const u of g.units) label(String(S.levelOf(u)), sx(u.x), sy(u.y), Math.max(13, u.r * px * 0.9), COL.ground);
+    const px = V ? V.pxPerUnit() : scale / dpr, w = cv.width / dpr, hh = cv.height / dpr, pad = 16, bw = w - pad * 2;
+    if (V) drawMarks3D(now);
+    for (const u of g.units) { const [x, y] = scr(u.x, u.y, u.r * 1.1); label(String(S.levelOf(u)), x, y, Math.max(13, u.r * px * 0.9), V ? COL.ink : COL.ground); }
     // 화면 밖에서 겨누는 돌격조: 가장자리에 느낌표
     for (const e of g.enemies) {
       if (!e.elite || (e.mode !== 'warn' && e.mode !== 'aim')) continue;
-      const ex = Math.max(26, Math.min(w - 26, sx(e.x))), ey = Math.max(100, Math.min(hh - 30, sy(e.y)));
-      if (ex !== sx(e.x) || ey !== sy(e.y)) label('!', ex, ey, 34, COL.danger);
+      const [qx, qy] = scr(e.x, e.y), ex = Math.max(26, Math.min(w - 26, qx)), ey = Math.max(100, Math.min(hh - 30, qy));
+      if (ex !== qx || ey !== qy) label('!', ex, ey, 34, COL.danger);
     }
     // 다음 목표(가장 가까운 초소, 다 부쉈으면 대장)가 화면 밖이면 가장자리에 표시한다
     {
@@ -1149,7 +1192,7 @@
       let goal = null, gd = 1e9;
       for (const p of goals) { const d = Math.hypot(p.x - n.x, p.y - n.y); if (d < gd) { gd = d; goal = p; } }
       if (goal) {
-        const gx = sx(goal.x), gy = sy(goal.y), ex = Math.max(30, Math.min(w - 30, gx)), ey = Math.max(104, Math.min(hh - 34, gy));
+        const [gx, gy] = scr(goal.x, goal.y), ex = Math.max(30, Math.min(w - 30, gx)), ey = Math.max(104, Math.min(hh - 34, gy));
         if (ex !== gx || ey !== gy) {
           const a = Math.atan2(gy - ey, gx - ex);
           ctx.save(); ctx.translate(ex, ey); ctx.rotate(a);
@@ -1159,7 +1202,6 @@
         }
       }
     }
-    // 느려진 동안: 화면 테두리
 
     // 화면 고정 표시: 남은 시간, 체력, 키메라 셋의 등급과 불안정도
     // 목적: 초소 칸(부수면 꺼진다)과 그 뒤의 대장 표시
@@ -1256,7 +1298,7 @@
     last = now;
     if (mode === 'play') {
       readInput();
-      S.step(g, dt, inp);   // 느려짐은 규칙 쪽에서 처리한다
+      S.step(g, dt, inp);
       consumeEvents(dt);
       if (g.over) showEnd();
     }
