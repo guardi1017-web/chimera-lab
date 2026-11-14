@@ -88,12 +88,32 @@
   let save = null;
   reload();
   persist();   // 옛 기록을 옮겼으면 바로 새 저장으로 남긴다(소급이 되풀이되지 않게)
-  const startBtn = document.getElementById('startBtn');
-  startBtn.textContent = (save.best + 1) + '구역으로';   // 다시 열면 아직 못 깬 다음 구역부터
+  const startBtn = document.getElementById('startBtn'), resetBtn = document.getElementById('resetBtn');
+  // 제목 화면: 다시 열면 지금 진행의 다음 구역부터. 1구역이 아닐 때만 '1구역으로 되돌리기'를 보인다(두 번 눌러야 된다)
+  const RESET_LABEL = '1구역으로 되돌리기 (골드·강화는 그대로)';
+  let resetArmed = false, resetTimer = null;
+  function refreshTitle() {
+    startBtn.textContent = (save.cur + 1) + '구역으로';
+    resetBtn.hidden = save.cur === 0;
+    resetArmed = false; clearTimeout(resetTimer);
+    resetBtn.textContent = RESET_LABEL;
+  }
+  refreshTitle();
+  resetBtn.addEventListener('click', () => {
+    if (!resetArmed) {
+      resetArmed = true; resetBtn.textContent = '정말 1구역으로? 한 번 더 누르기';
+      resetTimer = setTimeout(() => { resetArmed = false; resetBtn.textContent = RESET_LABEL; }, 3000);
+      return;
+    }
+    reload();
+    save = S.Save.restart(save); persist();
+    refreshTitle();
+    startBtn.focus();
+  });
   window.addEventListener('storage', e => {   // 다른 탭이 저장을 바꾸면 따라간다
     if (e.key !== SAVE_KEY) return;
     reload();
-    if (mode === 'title') startBtn.textContent = (save.best + 1) + '구역으로';
+    if (mode === 'title') refreshTitle();
     else if (mode === 'over') refreshGold(0);
   });
 
@@ -101,7 +121,7 @@
   function start(opts) {
     Sound.on();
     reload();
-    const district = opts && opts.district ? opts.district : save.best + 1;
+    const district = opts && opts.district ? opts.district : save.cur + 1;
     g = S.newGame(seed++, { district, start: { genes: save.up.genes, hp: save.up.hp } });
     mode = 'play'; shake = 0; lastTap = null;
     titleEl.hidden = true; endEl.hidden = true;

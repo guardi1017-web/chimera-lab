@@ -60,6 +60,7 @@
   }
   button.ace { font-family: var(--font-body); font-size: 1rem; text-align: left; background: var(--great); }
   button.buy { font-family: var(--font-body); font-size: 1rem; text-align: left; background: transparent; color: var(--great); outline: 2px solid var(--great); outline-offset: -2px; }
+  button.sub { font-family: var(--font-body); font-size: 0.95rem; background: transparent; color: var(--dim); outline: 2px solid var(--grid); outline-offset: -2px; }
   button.buy:disabled { color: var(--dim); outline-color: var(--grid); cursor: default; }
   #end #againBtn { background: transparent; color: var(--ink); outline: 2px solid var(--dim); outline-offset: -2px; }
   #end #againBtn.solo { background: var(--ink); color: var(--ground); outline: 0; }
@@ -86,6 +87,7 @@
       <li><span class="swatch ranger"></span>소총수: 멀리서 쏜다</li>
     </ul>
     <button id="startBtn" type="button">1구역으로</button>
+    <button id="resetBtn" class="sub" type="button" hidden>1구역으로 되돌리기 (골드·강화는 그대로)</button>
   </section>
 
   <section class="veil" id="end" hidden>

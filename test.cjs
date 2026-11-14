@@ -343,6 +343,21 @@ const ok = (c, msg) => { if (!c) throw new Error(msg); };
     ok(r.gained === 0 && r.save === after1, '이미 깬 구역을 다시 깨면 골드 없음(쉬운 구역 돌기 차단)');
     r = V.clear(after1, 2);
     ok(r.gained === G.perClear && r.save.best === 2 && after1.best === 1, '다음 구역 정복: 골드, 원래 저장은 그대로');
+    // 1구역으로 되돌리기: 진행(cur)만 0, 최고 기록·골드·강화는 그대로. 다시 깨는 구역은 골드를 또 주지 않는다
+    { const s3 = { v: 1, best: 3, cur: 3, gold: 7, up: { genes: 2, hp: 1 } }, z = V.restart(s3);
+      ok(z.cur === 0 && z.best === 3 && z.gold === 7 && z.up.genes === 2 && z.up.hp === 1 && s3.cur === 3, '되돌리기: 진행만 0, 나머지는 그대로(원래 저장은 안 바뀜)');
+      let c = V.clear(z, 1);
+      ok(c.gained === 0 && c.save.cur === 1 && c.save.best === 3 && c.save.gold === 7, '되돌린 뒤 1구역 정복: 진행만 오르고 골드 없음');
+      c = V.clear(V.clear(V.clear(z, 1).save, 2).save, 3);
+      ok(c.gained === 0 && c.save.cur === 3 && c.save.gold === 7, '되돌린 뒤 3구역까지 다시: 골드 없음');
+      c = V.clear(c.save, 4);
+      ok(c.gained === G.perClear && c.save.cur === 4 && c.save.best === 4, '기록을 넘는 구역부터 다시 골드');
+      ok(V.load(JSON.stringify(z), null).cur === 0, '되돌린 진행이 다시 읽어도 남는다');
+      ok(V.load(JSON.stringify({ v: 1, best: 3, gold: 0, up: {} }), null).cur === 3, 'cur가 없던 저장은 cur=best');
+      ok(V.load(JSON.stringify({ v: 1, best: 3, cur: 9, gold: 0, up: {} }), null).cur === 3, 'cur는 best를 넘지 않는다');
+      ok(V.load(null, '2').cur === 2, '옛 기록을 옮기면 진행도 그 구역');
+      const bz = V.buy({ v: 1, best: 3, cur: 0, gold: 9, up: { genes: 0, hp: 0 } }, 'hp');
+      ok(bz.ok && bz.save.cur === 0, '구매가 진행을 바꾸지 않는다'); }
     // 구매: 골드를 빼고 단계를 올리는 것을 함께, 모자라거나 상한이면 거절
     let b = V.buyGene({ v: 1, best: 2, gold: G.geneCost - 1, up: { genes: 0 } });
     ok(!b.ok && b.reason === 'gold' && b.save.gold === G.geneCost - 1, '골드가 모자라면 못 산다');

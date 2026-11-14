@@ -187,7 +187,7 @@ const winNow = () => {
   if (game.over !== 'win') throw new Error('정복하지 못했다');
 };
 const PC = S.CFG.gold.perClear;
-const base = JSON.stringify({ v: 1, best: 1, gold: 5, up: { genes: 2, hp: 0 } });   // 새 저장 모양 그대로(띄울 때 정리해 다시 쓰지 않게)
+const base = JSON.stringify({ v: 1, best: 1, cur: 1, gold: 5, up: { genes: 2, hp: 0 } });   // 새 저장 모양 그대로(띄울 때 정리해 다시 쓰지 않게)
 
 // 읽기가 막히면(예외) '저장 없음'으로 보지 않고 이 세션의 골드·강화를 지킨다
 {
@@ -255,4 +255,28 @@ const base = JSON.stringify({ v: 1, best: 1, gold: 5, up: { genes: 2, hp: 0 } })
   const want = 100 + 2 * S.CFG.gold.hpStep;
   if (game.district !== 4 || game.necro.maxHp !== want || game.necro.hp > want) throw new Error('체력 강화가 다음 판에 들어가지 않았다: ' + game.necro.maxHp);
   console.log('네크로맨서 체력: 패배 화면에서 2단계 구매 → 4구역을 최대 체력 ' + want + '에서 다시, 버튼 "' + els.buyHp.textContent + '"');
+}
+
+// ---- 1구역으로 되돌리기: 제목 화면에서 두 번 눌러야 되고, 진행만 0, 골드·강화·최고 기록은 그대로 ----
+{
+  delete store['chimera-lab-save-v1'];
+  freshSession(ls);
+  if (!els.resetBtn.hidden) throw new Error('1구역이면 되돌리기 버튼이 없어야 한다');
+  store['chimera-lab-save-v1'] = JSON.stringify({ v: 1, best: 3, cur: 3, gold: 6, up: { genes: 1, hp: 1 } });
+  freshSession(ls);
+  if (els.resetBtn.hidden || els.startBtn.textContent !== '4구역으로') throw new Error('되돌리기 전 제목: ' + els.startBtn.textContent + ' / 버튼 숨김 ' + els.resetBtn.hidden);
+  fire('resetBtn', 'click', {});
+  if (readSave().cur !== 3 || els.startBtn.textContent !== '4구역으로') throw new Error('한 번만 눌렀는데 되돌렸다');
+  now += 3100; flush();   // 3초 지나면 확인이 풀린다
+  fire('resetBtn', 'click', {});
+  if (readSave().cur !== 3) throw new Error('확인이 풀린 뒤 한 번 누름에 되돌렸다');
+  fire('resetBtn', 'click', {});
+  const sv = readSave();
+  if (sv.cur !== 0 || sv.best !== 3 || sv.gold !== 6 || sv.up.genes !== 1 || sv.up.hp !== 1) throw new Error('되돌리기 저장: ' + store['chimera-lab-save-v1']);
+  if (els.startBtn.textContent !== '1구역으로' || !els.resetBtn.hidden) throw new Error('되돌린 뒤 제목: ' + els.startBtn.textContent);
+  fire('startBtn', 'click', {}); frames(3);
+  if (game.district !== 1 || game.necro.maxHp !== 100 + S.CFG.gold.hpStep || S.geneTotal(game.units[0]) !== 2) throw new Error('되돌린 뒤 1구역이 강화와 함께 시작해야 한다');
+  winNow();
+  if (readSave().cur !== 1 || readSave().gold !== 6 || els.endGold.textContent !== '6골드' || els.endBest.textContent !== '3구역') throw new Error('되돌린 뒤 1구역 정복: 골드 없이 진행만: ' + store['chimera-lab-save-v1'] + ' / ' + els.endGold.textContent);
+  console.log('1구역으로 되돌리기: 두 번 눌러야 되고, 진행만 0 → 다시 깬 1구역은 골드 없이 진행만 오른다');
 }

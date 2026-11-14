@@ -68,6 +68,7 @@
   }
   button.ace { font-family: var(--font-body); font-size: 1rem; text-align: left; background: var(--great); }
   button.buy { font-family: var(--font-body); font-size: 1rem; text-align: left; background: transparent; color: var(--great); outline: 2px solid var(--great); outline-offset: -2px; }
+  button.sub { font-family: var(--font-body); font-size: 0.95rem; background: transparent; color: var(--dim); outline: 2px solid var(--grid); outline-offset: -2px; }
   button.buy:disabled { color: var(--dim); outline-color: var(--grid); cursor: default; }
   #end #againBtn { background: transparent; color: var(--ink); outline: 2px solid var(--dim); outline-offset: -2px; }
   #end #againBtn.solo { background: var(--ink); color: var(--ground); outline: 0; }
@@ -98,6 +99,7 @@
       <li><span class="swatch ranger"></span>소총수: 멀리서 쏜다</li>
     </ul>
     <button id="startBtn" type="button">1구역으로</button>
+    <button id="resetBtn" class="sub" type="button" hidden>1구역으로 되돌리기 (골드·강화는 그대로)</button>
   </section>
 
   <section class="veil" id="end" hidden>
@@ -765,30 +767,37 @@
   }
 
   // ---- 저장(골드와 강화). 순수 함수만: 읽고 쓰는 것은 화면 쪽이 localStorage로 한다 ----
-  // 저장 모양: { v: 1, best: 정복한 가장 높은 구역, gold, up: { genes, hp } }(hp가 없던 저장은 0으로 읽는다). 정복은 순서대로만 하므로 best로 처음 정복인지 안다.
+  // 저장 모양: { v: 1, best: 정복한 가장 높은 구역(최고 기록), cur: 지금 진행(제목 화면의 시작 구역은 cur+1), gold, up: { genes, hp } }.
+  // hp·cur가 없던 저장은 hp 0, cur=best로 읽는다. 골드는 best를 넘는 구역에만 주므로, cur를 1구역으로 되돌려도 다시 받지 않는다.
   const SAVE_V = 1, MAX_DISTRICT = Number.MAX_SAFE_INTEGER;   // 저장값 검증용 상한(사실상 없음)
-  function freshSave() { return { v: SAVE_V, best: 0, gold: 0, up: { genes: 0, hp: 0 } }; }
+  function freshSave() { return { v: SAVE_V, best: 0, cur: 0, gold: 0, up: { genes: 0, hp: 0 } }; }
   const wholeNum = (v, max) => (Number.isFinite(+v) ? clamp(Math.floor(+v), 0, max) : 0);
   // 저장 글을 읽는다. 깨졌으면 기본값. 새 저장이 없을 때만 옛 최고 기록(legacyBest)을 옮기고 그만큼 골드를 소급해 준다.
   function loadSave(text, legacyBest) {
     if (text !== null && text !== undefined) {   // 빈 글도 '있었는데 깨진 저장'이다
       try {
         const o = JSON.parse(text);
-        if (o && o.v === SAVE_V) return { v: SAVE_V, best: wholeNum(o.best, MAX_DISTRICT), gold: wholeNum(o.gold, MAX_DISTRICT), up: { genes: wholeNum(o.up && o.up.genes, CFG.gold.geneMax), hp: wholeNum(o.up && o.up.hp, CFG.gold.hpMax) } };
+        if (o && o.v === SAVE_V) {
+          const best = wholeNum(o.best, MAX_DISTRICT);
+          return { v: SAVE_V, best, cur: o.cur === undefined ? best : wholeNum(o.cur, best), gold: wholeNum(o.gold, MAX_DISTRICT), up: { genes: wholeNum(o.up && o.up.genes, CFG.gold.geneMax), hp: wholeNum(o.up && o.up.hp, CFG.gold.hpMax) } };
+        }
       } catch (e) { /* 깨진 저장은 기본값으로 */ }
       return freshSave();   // 새 저장이 있었는데 깨졌으면 옛 기록으로 다시 옮기지 않는다(소급이 되풀이되지 않게)
     }
     const s = freshSave(), b = wholeNum(legacyBest, MAX_DISTRICT);
-    s.best = b; s.gold = b * CFG.gold.perClear;
+    s.best = s.cur = b; s.gold = b * CFG.gold.perClear;
     return s;
   }
-  // 구역을 정복했다: 처음 정복한 구역이면 best를 올리고 골드를 준다(둘을 함께). 이미 깬 구역이면 그대로.
+  // 구역을 정복했다: 진행(cur)을 올린다. 처음 정복한 구역이면 best도 올리고 골드를 준다(둘을 함께). 이미 깬 구역이면 골드 없음.
+  const curOf = save => (Number.isFinite(save.cur) ? save.cur : save.best);
   function clearDistrict(save, district) {
-    const d = Math.floor(+district);
-    if (!Number.isFinite(d) || d <= save.best) return { save, gained: 0 };
-    const gained = (d - save.best) * CFG.gold.perClear;
-    return { save: { v: SAVE_V, best: d, gold: save.gold + gained, up: Object.assign({}, save.up) }, gained };
+    const d = Math.floor(+district), cur = curOf(save);
+    if (!Number.isFinite(d) || (d <= save.best && d <= cur)) return { save, gained: 0 };
+    const gained = d > save.best ? (d - save.best) * CFG.gold.perClear : 0;
+    return { save: { v: SAVE_V, best: Math.max(save.best, d), cur: Math.max(cur, d), gold: save.gold + gained, up: Object.assign({}, save.up) }, gained };
   }
+  // 진행만 1구역으로 되돌린다. 최고 기록·골드·강화는 그대로(이미 받은 구역의 골드는 다시 받지 않는다).
+  function restart(save) { return { v: SAVE_V, best: save.best, cur: 0, gold: save.gold, up: Object.assign({}, save.up) }; }
   // 살 수 있는 강화: genes(시작 맹수 유전자), hp(네크로맨서 체력)
   const UP = { genes: { cost: 'geneCost', max: 'geneMax' }, hp: { cost: 'hpCost', max: 'hpMax' } };
   function upCost(save, kind) { const u = UP[kind]; return !u || (save.up[kind] || 0) >= CFG.gold[u.max] ? null : CFG.gold[u.cost]; }
@@ -798,10 +807,10 @@
     if (cost === null) return { ok: false, save, reason: 'max' };
     if (save.gold < cost) return { ok: false, save, reason: 'gold' };
     const up = Object.assign({}, save.up); up[kind] = (up[kind] || 0) + 1;
-    return { ok: true, save: { v: SAVE_V, best: save.best, gold: save.gold - cost, up } };
+    return { ok: true, save: { v: SAVE_V, best: save.best, cur: curOf(save), gold: save.gold - cost, up } };
   }
   const geneCost = save => upCost(save, 'genes'), buyGene = save => buy(save, 'genes');
-  const Save = { fresh: freshSave, load: loadSave, clear: clearDistrict, cost: upCost, buy, geneCost, buyGene };
+  const Save = { fresh: freshSave, load: loadSave, clear: clearDistrict, restart, cost: upCost, buy, geneCost, buyGene };
 
   const api = { W, H, DURATION, MAX_LEVEL, KINDS, CFG, newGame, step, stats, geneTotal, levelOf, isFrenzy, heartKeep, scaleGenes, detonate, pin, absorb, feedTarget, spawnBoss, nextBlast, Save };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
@@ -1506,12 +1515,32 @@ window.ChimeraView = view;
   let save = null;
   reload();
   persist();   // 옛 기록을 옮겼으면 바로 새 저장으로 남긴다(소급이 되풀이되지 않게)
-  const startBtn = document.getElementById('startBtn');
-  startBtn.textContent = (save.best + 1) + '구역으로';   // 다시 열면 아직 못 깬 다음 구역부터
+  const startBtn = document.getElementById('startBtn'), resetBtn = document.getElementById('resetBtn');
+  // 제목 화면: 다시 열면 지금 진행의 다음 구역부터. 1구역이 아닐 때만 '1구역으로 되돌리기'를 보인다(두 번 눌러야 된다)
+  const RESET_LABEL = '1구역으로 되돌리기 (골드·강화는 그대로)';
+  let resetArmed = false, resetTimer = null;
+  function refreshTitle() {
+    startBtn.textContent = (save.cur + 1) + '구역으로';
+    resetBtn.hidden = save.cur === 0;
+    resetArmed = false; clearTimeout(resetTimer);
+    resetBtn.textContent = RESET_LABEL;
+  }
+  refreshTitle();
+  resetBtn.addEventListener('click', () => {
+    if (!resetArmed) {
+      resetArmed = true; resetBtn.textContent = '정말 1구역으로? 한 번 더 누르기';
+      resetTimer = setTimeout(() => { resetArmed = false; resetBtn.textContent = RESET_LABEL; }, 3000);
+      return;
+    }
+    reload();
+    save = S.Save.restart(save); persist();
+    refreshTitle();
+    startBtn.focus();
+  });
   window.addEventListener('storage', e => {   // 다른 탭이 저장을 바꾸면 따라간다
     if (e.key !== SAVE_KEY) return;
     reload();
-    if (mode === 'title') startBtn.textContent = (save.best + 1) + '구역으로';
+    if (mode === 'title') refreshTitle();
     else if (mode === 'over') refreshGold(0);
   });
 
@@ -1519,7 +1548,7 @@ window.ChimeraView = view;
   function start(opts) {
     Sound.on();
     reload();
-    const district = opts && opts.district ? opts.district : save.best + 1;
+    const district = opts && opts.district ? opts.district : save.cur + 1;
     g = S.newGame(seed++, { district, start: { genes: save.up.genes, hp: save.up.hp } });
     mode = 'play'; shake = 0; lastTap = null;
     titleEl.hidden = true; endEl.hidden = true;
