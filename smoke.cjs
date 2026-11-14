@@ -63,10 +63,16 @@ if (!pins || !booms || !sawLink || !tones) throw new Error('입력·연결선·�
 
 // 한 번 톡의 대상은 누른 순간의 키메라다
 {
+  // 앞의 40초 동안 판이 끝났으면(죽지 않게 해 두어 가끔 이겨 버린다) 1구역을 새로 열고 확인한다
+  if (game.over) { fire('againBtn', 'click', { fake: 'event' }); frames(2); }
   while (game.units.length < 2) { game.souls.push({ x: game.necro.x, y: game.necro.y, type: 'armor', q: 1, ttl: 5 }); frames(2); }
   for (const u of game.units) u.state = 'ok';
   const a = game.units[0], b = game.units[1];
+  // 네크로맨서가 판 맨 위에 있으면 누를 자리가 위쪽 키메라 칸과 겹쳐 칸이 먼저 눌린다. 판 가운데에서 확인한다
+  game.necro.x = S.W / 2; game.necro.y = S.H / 2; frames(1);   // 카메라가 새 자리를 따라오게 한 번 그린다
   a.x = game.necro.x + 2; a.y = game.necro.y; b.x = game.necro.x - 2; b.y = game.necro.y;
+  // 셋째 키메라가 누를 자리 근처에 있으면 그쪽이 찍힌다(판에 따라 가끔 실패하던 까닭). 멀리 치워 둔다
+  for (const u of game.units) if (u !== a && u !== b) { u.x = game.necro.x; u.y = game.necro.y + (game.necro.y < S.H / 2 ? 4 : -4); }
   if (game.pinned === a.uid) game.pinned = null;
   tap(a.x, a.y);
   const ax = a.x, ay = a.y; a.x = b.x; a.y = b.y; b.x = ax; b.y = ay;
