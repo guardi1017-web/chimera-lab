@@ -233,7 +233,7 @@ const faceToY = a => -a;   // 판의 각(atan2(dy, dx)) → 3D의 y축 회전
 // 키메라 몸 모델(Tripo3D, 네발 뼈대와 걷기 동작). 주 유전자마다 하나씩. 아직 없거나 못 불러오면 도형 몸을 쓴다.
 // 모델의 앞은 -z, 키는 약 0.82, 길이 1로 온다. 게임은 +x가 앞이므로 -90도 돌려 놓는다.
 const BODY = {};
-for (const kind of ['beast']) {
+for (const kind of ['beast', 'armor']) {
   new GLTFLoader().load('assets/chimera-' + kind + '.glb?v=' + ASSET_V, gltf => { BODY[kind] = gltf; }, undefined, () => { /* 없으면 도형 몸 */ });
 }
 const BODY_LEN = 3.4;   // 판 위의 몸 길이 = 반지름 × 이 값(밤 도로에서 묻히지 않게 도형 몸보다 조금 크게)
