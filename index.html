@@ -1161,11 +1161,9 @@ const robe = mesh(GEO.cone, robeMat, 0, 0.6, 0); robe.scale.set(1.15, 1.2, 1.15)
 const headN = mesh(GEO.dot, lambert('bone'), 0, 1.35, 0); headN.scale.setScalar(0.24); necro.add(headN);
 scene.add(necro);
 
-// 주인공 모델(Tripo3D로 만든 assets/necromancer.glb: 뼈대와 서기·걷기·맞기 동작).
+// 주인공 모델(Tripo3D로 만든 assets/necromancer.glb: 뼈대와 서기·걷기 동작. 맞기 동작도 들어 있지만 쓰지 않는다).
 // 불러오는 동안이나 불러오지 못하면 위의 원뿔을 그대로 쓴다.
-const hero = { root: null, mixer: null, act: {}, cur: null, mats: [], face: -Math.PI / 2, last: null, flinchT: 0, flinchCd: 0 };
-// 맞기 동작은 3초가 넘게 주저앉는 동작이다. 앞부분만 짧게 움찔하듯 쓰고 바로 걷기·서기로 돌아간다
-const FLINCH = 0.35, FLINCH_GAP = 1.5;
+const hero = { root: null, mixer: null, act: {}, cur: null, mats: [], face: -Math.PI / 2, last: null };
 const HERO_H = 2.1;    // 판 위의 키(모델은 높이 1로 온다). 키메라보다 조금 크게
 new GLTFLoader().load('assets/necromancer.glb', gltf => {
   const root = gltf.scene;
@@ -1180,7 +1178,6 @@ new GLTFLoader().load('assets/necromancer.glb', gltf => {
   const turn = new THREE.Group(); turn.add(root);
   hero.mixer = new THREE.AnimationMixer(root);
   for (const clip of gltf.animations) hero.act[clip.name] = hero.mixer.clipAction(clip);
-  if (hero.act.hurt) hero.act.hurt.setLoop(THREE.LoopOnce, 1);
   hero.root = turn;
   necro.clear(); necro.add(turn);
 }, undefined, () => { /* 모델이 없으면 원뿔로 계속한다 */ });
@@ -1205,9 +1202,8 @@ function drawHero(n, now) {
     hero.face += d * Math.min(1, dt * 14);
   }
   hero.root.rotation.y = faceToY(hero.face);
-  hero.flinchT = Math.max(0, hero.flinchT - dt); hero.flinchCd = Math.max(0, hero.flinchCd - dt);
-  if (n.hurt > 0 && hero.act.hurt && hero.flinchCd <= 0 && hero.cur !== 'hurt') { playHero('hurt'); hero.flinchT = FLINCH; hero.flinchCd = FLINCH_GAP; }
-  if (hero.cur !== 'hurt' || hero.flinchT <= 0) playHero(moving ? 'walk' : 'idle');
+  playHero(moving ? 'walk' : 'idle');
+  // 맞으면 몸이 붉게 빛나기만 한다(맞는 자세로 움직이면 어색하다는 사용자 확인)
   for (const m of hero.mats) if (m.emissive) { if (n.hurt > 0) { m.emissive.copy(COL.danger); m.emissiveIntensity = 0.8; } else { m.emissive.setRGB(1, 1, 1); m.emissiveIntensity = 0.35; } }
   hero.mixer.update(dt);
 }
