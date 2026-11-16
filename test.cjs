@@ -141,6 +141,22 @@ const ok = (c, msg) => { if (!c) throw new Error(msg); };
     ok(g.units.length === 3 && g.hearts.length === 0 && g.units[1].genes.beast === 4 && g.units[1].main === 'armor', '만석 심장: 찍어 둔 키메라가 유전자를 삼킨다(종류는 그대로)');
   }
 
+  // 익은 채(80~99%) 들고 있으면 체력이 샌다. 그렇게 쓰러지면 일어날 때까지 터뜨릴 수 없다. 79%면 새지 않는다
+  {
+    const quiet = g => { g.spawnT = 1e9; g.eliteIdx = 99; g.posts = []; };
+    const g = fresh(); quiet(g); const u = g.units[0], m = S.stats(u).maxHp;
+    u.inst = C.frenzyAt - 1; u.hp = m;
+    for (let i = 0; i < 60 * 3; i++) S.step(g, 1 / 60, { x: 0, y: 0 });
+    eq(u.hp, m, '79%는 체력이 새지 않는다');
+    u.inst = 90;
+    for (let i = 0; i < 60 * 4; i++) S.step(g, 1 / 60, { x: 0, y: 0 });
+    ok(Math.abs(u.hp / m - (1 - 4 * C.frenzyDrain)) < 0.02, '익은 채 4초: 최대 체력의 ' + (400 * C.frenzyDrain) + '%가 샌다 (' + (u.hp / m).toFixed(3) + ')');
+    for (let i = 0; i < 60 * 20 && !(u.down > 0); i++) S.step(g, 1 / 60, { x: 0, y: 0 });
+    ok(u.down > 0 && u.drained, '오래 들고 있으면 쓰러진다');
+    ok(!S.detonate(g) && S.nextBlast(g) === null && u.state === 'ok', '쓰러진 동안은 터뜨릴 수 없다');
+    for (let i = 0; i < 60 * 7; i++) S.step(g, 1 / 60, { x: 0, y: 0 });
+    ok(u.down === 0 && !u.drained && S.detonate(g) && u.state === 'rush', '일어나면 다시 터뜨릴 수 있다');
+  }
   // 다른 유전자를 많이 먹어도 종류는 그대로, 체력은 깎이지 않는다
   {
     const g = fresh(); soulAt(g, 'armor', 1); soulAt(g, 'ranger', 1);

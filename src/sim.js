@@ -19,6 +19,8 @@
     },
     soulTtl: 10, soulCap: 12,
     frenzyAt: 80, frenzyMul: 1.5,
+    // 익은 채(80~99%) 들고 있으면 대가: 초마다 최대 체력의 frenzyDrain만큼 샌다. 그렇게 쓰러지면 일어날 때까지 터뜨릴 수 없다(2026-11-16 사용자 결정)
+    frenzyDrain: 0.05,
     blastRadius: 3.2, blastEliteFrac: 0.1, blastKnock: 3, blastStun: 1.2,
     rushSpeed: 14, rushMax: 1.0, rushReach: 10, rushBigBonus: 1.5,   // 뛰어들 수 있는 거리, 큰 표적에게 주는 거리 덤
     // 덜 익은 폭탄(불안정도 80% 미만)은 약하고 대가가 있다: 반경이 좁고, 잡몹을 즉사시키지 못하고, 심장이 유전자를 덜 지킨다
@@ -221,7 +223,7 @@
     if (s.taken < 0.99) g.fx.push({ k: 'block', x: u.x, y: u.y, face: u.face, r: u.r, t: 0.18 });
     u.hp -= dmg * s.taken;
     u.hitsTaken++;
-    if (u.hp <= 0) { u.hp = 0; u.down = 6; g.fx.push({ k: 'down', x: u.x, y: u.y, t: 0.5 }); }
+    if (u.hp <= 0) { u.hp = 0; u.down = 6; u.drained = isFrenzy(u); g.fx.push({ k: 'down', x: u.x, y: u.y, t: 0.5 }); }
   }
 
   // 사수 섞임: 기술을 쓸 때 가까운 적들에게 파편이 날아간다
@@ -297,7 +299,7 @@
     u.genes[soul.type] += c.gene;
     if (c.inst < 0) { u.inst = 0; u.mutant = true; } else u.inst += c.inst;
     const after = stats(u).maxHp;
-    if (u.down > 0 && c.heal > 0) u.down = 0;
+    if (u.down > 0 && c.heal > 0) { u.down = 0; u.drained = false; }
     u.hp = Math.min(after, Math.max(u.hp, u.hp + (after - before)) + after * c.heal);
     u.r = radiusOf(u); u.pop = 0.5;
     g.absorbs++; if (g.firstFeedT === null) g.firstFeedT = g.t;
@@ -322,11 +324,13 @@
   }
   // 지금 두 번 톡톡 치면 누가 어디로 뛰어드는지(화면의 조준 표시용)
   function nextBlast(g) {
-    const c = g.units.filter(u => u.state === 'ok').sort((a, b) => (b.inst - a.inst) || (geneTotal(a) - geneTotal(b)))[0];
+    const c = g.units.filter(canBlast).sort((a, b) => (b.inst - a.inst) || (geneTotal(a) - geneTotal(b)))[0];
     return c ? { unit: c, target: pickBlastTarget(g, c) } : null;
   }
+  // 익은 채(80~99%) 쓰러진 키메라는(체력이 새서든 맞아서든) 일어날 때까지 터뜨릴 수 없다
+  const canBlast = u => u.state === 'ok' && !(u.drained && u.down > 0);
   function startMolt(g, u) {
-    if (u.state !== 'ok') return false;
+    if (!canBlast(u)) return false;
     const best = pickBlastTarget(g, u);
     u.state = 'rush'; u.rushT = 0; u.down = 0; u.target = best;
     u.charge = Math.min(1, u.inst / CFG.frenzyAt);   // 폭발의 세기는 터지는 순간의 불안정도로 정해진다
@@ -385,7 +389,7 @@
   // 손으로 터뜨린다: 불안정도가 가장 높은(같으면 유전자가 가장 적은) 키메라가 뛰어든다.
   function detonate(g) {
     if (g.over) return false;
-    const c = g.units.filter(u => u.state === 'ok').sort((a, b) => (b.inst - a.inst) || (geneTotal(a) - geneTotal(b)));
+    const c = g.units.filter(canBlast).sort((a, b) => (b.inst - a.inst) || (geneTotal(a) - geneTotal(b)));
     return c.length ? startMolt(g, c[0]) : false;
   }
   function pin(g, uid) {
@@ -467,10 +471,14 @@
       }
       if (u.down > 0) {
         u.down -= dt;
-        if (u.down <= 0) { u.down = 0; u.hp = stats(u).maxHp * 0.5; u.pop = 0.3; }
+        if (u.down <= 0) { u.down = 0; u.drained = false; u.hp = stats(u).maxHp * 0.5; u.pop = 0.3; }
         continue;
       }
       const s = stats(u);
+      if (isFrenzy(u)) {
+        u.hp -= s.maxHp * CFG.frenzyDrain * dt;
+        if (u.hp <= 0) { u.hp = 0; u.down = 6; u.drained = true; g.fx.push({ k: 'down', x: u.x, y: u.y, t: 0.5 }); g.events.push('drained'); continue; }
+      }
       u.cd -= dt;
       let best = null, bd = 1e9;
       for (const e of g.enemies) {
