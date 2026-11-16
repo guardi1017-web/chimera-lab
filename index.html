@@ -162,6 +162,8 @@
     eliteHp: 260, eliteHpStep: 0.5,
     chargeSpeed: 13, chargeDmg: 25, eliteDmg: 12, rechargeEvery: 7, aimTime: 1.2,
     spawnStart: 1.8, spawnEnd: 1.05, foeGradeMul: 1.35,
+    // 잡몹 종류의 비율(나머지는 갑주). 처음부터 셋 다 나와 첫 소환부터 종류를 고를 수 있다(2026-11-16 사용자 결정, 전에는 10초까지 군견만)
+    foeMixEarly: { beast: 0.5, ranger: 0.25 }, foeMixLate: { beast: 0.42, ranger: 0.28 }, foeMixLateAt: 35,
   };
   // 주 유전자별 기본 능력(유전자 1개 기준)
   const BASE = {
@@ -306,9 +308,8 @@
     if (g.spawnT > 0 || g.enemies.length >= 36) return;
     const k = Math.min(1, g.t / DURATION), r = g.rand(), r2 = g.rand();
     g.spawnT = (CFG.spawnStart + (CFG.spawnEnd - CFG.spawnStart) * k) * (0.8 + 0.4 * g.rand());
-    let arch = 'beast';
-    if (g.t >= 10 && g.t < 35) arch = r < 0.6 ? 'beast' : 'ranger';
-    else if (g.t >= 35) arch = r < 0.42 ? 'beast' : r < 0.7 ? 'ranger' : 'armor';
+    const mix = g.t < CFG.foeMixLateAt ? CFG.foeMixEarly : CFG.foeMixLate;
+    const arch = r < mix.beast ? 'beast' : r < mix.beast + mix.ranger ? 'ranger' : 'armor';
     let grade = 1;
     if (g.t >= 18) grade = r2 < (g.t < 50 ? 0.7 : 0.5) ? 1 : 2;
     const n = arch === 'beast' && grade === 1 && g.t > 30 ? 2 : 1;
