@@ -85,7 +85,7 @@
   <section class="veil" id="title">
     <h1>키메라 실험실</h1>
     <p>봉쇄된 서울의 밤. 네크로맨서는 직접 싸우지 못하고, 키메라 셋이 대신 싸운다.</p>
-    <p class="goal"><strong>목적:</strong> <span class="gold">봉쇄 초소</span>를 폭발로 모두 부수면 진압 대장이 나온다. 대장을 잡으면 구역을 차지하고 다음 구역이 열린다. 구역마다 키메라는 처음부터 키운다. 구역을 처음 차지하면 <span class="gold">골드</span>를 받아, 끝 화면에서 시작 맹수와 네크로맨서를 강화한다.</p>
+    <p class="goal"><strong>목적:</strong> <span class="gold">봉쇄 초소</span>를 폭발로 모두 부수면 진압 대장이 나온다. 대장을 잡으면 구역을 차지하고 다음 구역이 열린다. 구역마다 키메라는 처음부터 키운다. 초소를 부술 때마다 <span class="gold">골드</span>를 받고(구역을 처음 차지하면 더), 끝 화면에서 시작 맹수와 네크로맨서를 강화한다.</p>
     <ol class="how">
       <li><span class="step">1</span><span>누르고 끌면 움직인다. 적이 남긴 혼을 밟으면 키메라가 된다.</span></li>
       <li><span class="step">2</span><span>셋이 차면 연결선이 닿은 키메라가 혼을 먹어 커진다. 먹일 대상은 위쪽 칸을 눌러 바꾼다.</span></li>
@@ -156,8 +156,9 @@
     postHits: 2, postRange: 4.2, postDmg: 3, postCd: 1.5,   // 초소: 폭발 두 번(불안정도가 찬 폭발은 한 번)에 부서진다
     bossHp: 600, bossBlastCap: 0.35,                   // 대장: 폭발 한 번에 최대 체력의 35%까지만
     districtScale: 0.25,                               // 구역이 하나 오를 때마다 적의 체력과 피해가 이만큼 더
-    // 골드: 구역을 처음 정복할 때만 받는다(이미 깬 구역은 0). 판 밖(끝 화면)에서 시작 맹수의 유전자와 네크로맨서 체력을 산다
-    gold: { perClear: 3, geneCost: 3, geneMax: 8, hpCost: 3, hpStep: 25, hpMax: 8 },
+    // 골드: 판마다(이기든 지든) 부순 초소 하나에 perPost, 구역을 처음 정복하면 perClear를 더 받는다(2026-11-16 사용자 결정).
+    // 판 밖(끝 화면)에서 시작 맹수의 유전자와 네크로맨서 체력을 산다
+    gold: { perPost: 1, perClear: 3, geneCost: 3, geneMax: 8, hpCost: 3, hpStep: 25, hpMax: 8 },
     eliteHp: 260, eliteHpStep: 0.5,
     chargeSpeed: 13, chargeDmg: 25, eliteDmg: 12, rechargeEvery: 7, aimTime: 1.2,
     spawnStart: 1.8, spawnEnd: 1.05, foeGradeMul: 1.35,
@@ -791,6 +792,12 @@
     const gained = d > save.best ? (d - save.best) * CFG.gold.perClear : 0;
     return { save: { v: SAVE_V, best: Math.max(save.best, d), cur: Math.max(cur, d), gold: save.gold + gained, up: Object.assign({}, save.up) }, gained };
   }
+  // 판이 끝났다: 부순 초소만큼 골드를 더한다(이기든 지든). 처음 정복의 골드는 clear가 따로 준다.
+  function earn(save, posts) {
+    const n = Number.isFinite(+posts) ? Math.max(0, Math.floor(+posts)) : 0, gained = n * CFG.gold.perPost;
+    if (!gained) return { save, gained: 0 };
+    return { save: { v: SAVE_V, best: save.best, cur: curOf(save), gold: save.gold + gained, up: Object.assign({}, save.up) }, gained };
+  }
   // 진행만 1구역으로 되돌린다. 최고 기록·골드·강화는 그대로(이미 받은 구역의 골드는 다시 받지 않는다).
   function restart(save) { return { v: SAVE_V, best: save.best, cur: 0, gold: save.gold, up: Object.assign({}, save.up) }; }
   // 살 수 있는 강화: genes(시작 맹수 유전자), hp(네크로맨서 체력)
@@ -805,7 +812,7 @@
     return { ok: true, save: { v: SAVE_V, best: save.best, cur: curOf(save), gold: save.gold - cost, up } };
   }
   const geneCost = save => upCost(save, 'genes'), buyGene = save => buy(save, 'genes');
-  const Save = { fresh: freshSave, load: loadSave, clear: clearDistrict, restart, cost: upCost, buy, geneCost, buyGene };
+  const Save = { fresh: freshSave, load: loadSave, clear: clearDistrict, earn, restart, cost: upCost, buy, geneCost, buyGene };
 
   const api = { W, H, DURATION, MAX_LEVEL, KINDS, CFG, newGame, step, stats, geneTotal, levelOf, isFrenzy, heartKeep, scaleGenes, detonate, pin, absorb, feedTarget, spawnBoss, nextBlast, Save };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
@@ -2000,10 +2007,12 @@ window.ChimeraView = view;
     document.getElementById('endKills').textContent = g.kills + '마리 (돌격조 ' + g.eliteKills + ')';
     document.getElementById('endMolt').textContent = g.molts + '번 터지고 ' + g.rebirths + '번 계승';
     document.getElementById('endLevel').textContent = g.maxLevel + '등급';
-    // 처음 정복한 구역이면 골드를 받고 최고 기록이 오른다(둘을 함께). 지면 아무것도 바뀌지 않는다
-    let gained = 0;
+    // 부순 초소만큼 골드(이기든 지든). 처음 정복한 구역이면 골드를 더 받고 최고 기록이 오른다(둘을 함께)
     reload();
-    if (won) { const r = S.Save.clear(save, g.district); save = r.save; gained = r.gained; persist(); }
+    const e = S.Save.earn(save, g.postsDown); save = e.save;
+    let gained = e.gained;
+    if (won) { const r = S.Save.clear(save, g.district); save = r.save; gained += r.gained; }
+    if (gained || won) persist();
     document.getElementById('endBest').textContent = save.best + '구역';
     refreshGold(gained);
     // 이기면 다음 구역으로(키메라는 데려가지 않고 처음부터 키운다). 지면 그 구역을 다시 한다.

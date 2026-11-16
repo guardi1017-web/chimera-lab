@@ -47,6 +47,9 @@ const tap = (wx, wy) => {
   fire('game', 'pointerdown', e); fire('game', 'pointerup', e);
 };
 
+// 초소 골드(판마다 부순 초소당)는 맨 끝 절에서 따로 확인한다. 그 앞의 저장·구매 확인은 처음 정복 골드만 보도록 끈다
+const PER_POST = S.CFG.gold.perPost; S.CFG.gold.perPost = 0;
+
 // ---- 첫 판: 입력과 흐름 ----
 if (els.startBtn.textContent !== '1구역으로') throw new Error('저장이 없으면 제목 버튼은 1구역: ' + els.startBtn.textContent);
 // 다른 탭이 저장을 바꾸면(storage 이벤트) 제목 버튼이 따라간다. 확인 뒤 되돌린다
@@ -279,4 +282,27 @@ const base = JSON.stringify({ v: 1, best: 1, cur: 1, gold: 5, up: { genes: 2, hp
   winNow();
   if (readSave().cur !== 1 || readSave().gold !== 6 || els.endGold.textContent !== '6골드' || els.endBest.textContent !== '3구역') throw new Error('되돌린 뒤 1구역 정복: 골드 없이 진행만: ' + store['chimera-lab-save-v1'] + ' / ' + els.endGold.textContent);
   console.log('1구역으로 되돌리기: 두 번 눌러야 되고, 진행만 0 → 다시 깬 1구역은 골드 없이 진행만 오른다');
+}
+
+// ---- 초소 골드: 이기든 지든 부순 초소 하나에 perPost. 처음 정복이면 perClear를 더 ----
+{
+  S.CFG.gold.perPost = PER_POST;
+  const PP = PER_POST;
+  store['chimera-lab-save-v1'] = JSON.stringify({ v: 1, best: 1, cur: 1, gold: 0, up: { genes: 0, hp: 0 } });
+  freshSession(ls);
+  fire('startBtn', 'click', {}); frames(3);   // 2구역
+  game.posts[0].dead = true; game.posts[1].dead = true; game.postsDown = 2;
+  game.necro.hp = 0; frames(3);
+  if (game.over !== 'lose' || readSave().gold !== 2 * PP || els.endGold.textContent !== (2 * PP) + '골드 (+' + 2 * PP + ')') throw new Error('지면서 초소 둘: ' + store['chimera-lab-save-v1'] + ' / ' + els.endGold.textContent);
+  fire('againBtn', 'click', {}); frames(3);
+  game.necro.hp = 0; frames(3);
+  if (readSave().gold !== 2 * PP || els.endGold.textContent !== (2 * PP) + '골드') throw new Error('초소 없이 지면 골드 없음: ' + els.endGold.textContent);
+  fire('againBtn', 'click', {}); frames(3);
+  winNow();   // 2구역 처음 정복: 초소 넷 + 처음 정복
+  const want = 2 * PP + 4 * PP + PC;
+  if (readSave().gold !== want || readSave().best !== 2 || els.endGold.textContent !== want + '골드 (+' + (4 * PP + PC) + ')') throw new Error('처음 정복 골드: ' + store['chimera-lab-save-v1'] + ' / ' + els.endGold.textContent);
+  fire('againBtn', 'click', {}); frames(3);   // 1구역부터 다시: 이미 깬 구역은 초소 골드만
+  winNow();
+  if (readSave().gold !== want + 3 * PP) throw new Error('이미 깬 1구역: 초소 골드만: ' + store['chimera-lab-save-v1']);
+  console.log('초소 골드: 지면서 초소 둘 +' + 2 * PP + ', 초소 없이 지면 0, 2구역 처음 정복 +' + (4 * PP + PC) + ', 이미 깬 1구역 +' + 3 * PP);
 }

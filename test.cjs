@@ -348,6 +348,10 @@ const ok = (c, msg) => { if (!c) throw new Error(msg); };
     ok(r.gained === 0 && r.save === after1, '이미 깬 구역을 다시 깨면 골드 없음(쉬운 구역 돌기 차단)');
     r = V.clear(after1, 2);
     ok(r.gained === G.perClear && r.save.best === 2 && after1.best === 1, '다음 구역 정복: 골드, 원래 저장은 그대로');
+    // 초소 골드: 부순 초소 하나에 perPost(이기든 지든), 이상한 값은 0
+    { const s0 = { v: 1, best: 2, cur: 0, gold: 1, up: { genes: 1, hp: 0 } }, e = V.earn(s0, 3);
+      ok(e.gained === 3 * G.perPost && e.save.gold === 1 + 3 * G.perPost && e.save.cur === 0 && e.save.best === 2 && s0.gold === 1, '초소 셋: 골드만 오르고 진행·기록은 그대로');
+      ok(V.earn(s0, 0).save === s0 && V.earn(s0, 'x').gained === 0 && V.earn(s0, -2).gained === 0, '초소 0·이상한 값: 골드 없음'); }
     // 1구역으로 되돌리기: 진행(cur)만 0, 최고 기록·골드·강화는 그대로. 다시 깨는 구역은 골드를 또 주지 않는다
     { const s3 = { v: 1, best: 3, cur: 3, gold: 7, up: { genes: 2, hp: 1 } }, z = V.restart(s3);
       ok(z.cur === 0 && z.best === 3 && z.gold === 7 && z.up.genes === 2 && z.up.hp === 1 && s3.cur === 3, '되돌리기: 진행만 0, 나머지는 그대로(원래 저장은 안 바뀜)');

@@ -578,10 +578,12 @@
     document.getElementById('endKills').textContent = g.kills + '마리 (돌격조 ' + g.eliteKills + ')';
     document.getElementById('endMolt').textContent = g.molts + '번 터지고 ' + g.rebirths + '번 계승';
     document.getElementById('endLevel').textContent = g.maxLevel + '등급';
-    // 처음 정복한 구역이면 골드를 받고 최고 기록이 오른다(둘을 함께). 지면 아무것도 바뀌지 않는다
-    let gained = 0;
+    // 부순 초소만큼 골드(이기든 지든). 처음 정복한 구역이면 골드를 더 받고 최고 기록이 오른다(둘을 함께)
     reload();
-    if (won) { const r = S.Save.clear(save, g.district); save = r.save; gained = r.gained; persist(); }
+    const e = S.Save.earn(save, g.postsDown); save = e.save;
+    let gained = e.gained;
+    if (won) { const r = S.Save.clear(save, g.district); save = r.save; gained += r.gained; }
+    if (gained || won) persist();
     document.getElementById('endBest').textContent = save.best + '구역';
     refreshGold(gained);
     // 이기면 다음 구역으로(키메라는 데려가지 않고 처음부터 키운다). 지면 그 구역을 다시 한다.

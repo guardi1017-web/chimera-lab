@@ -33,8 +33,9 @@
     postHits: 2, postRange: 4.2, postDmg: 3, postCd: 1.5,   // 초소: 폭발 두 번(불안정도가 찬 폭발은 한 번)에 부서진다
     bossHp: 600, bossBlastCap: 0.35,                   // 대장: 폭발 한 번에 최대 체력의 35%까지만
     districtScale: 0.25,                               // 구역이 하나 오를 때마다 적의 체력과 피해가 이만큼 더
-    // 골드: 구역을 처음 정복할 때만 받는다(이미 깬 구역은 0). 판 밖(끝 화면)에서 시작 맹수의 유전자와 네크로맨서 체력을 산다
-    gold: { perClear: 3, geneCost: 3, geneMax: 8, hpCost: 3, hpStep: 25, hpMax: 8 },
+    // 골드: 판마다(이기든 지든) 부순 초소 하나에 perPost, 구역을 처음 정복하면 perClear를 더 받는다(2026-11-16 사용자 결정).
+    // 판 밖(끝 화면)에서 시작 맹수의 유전자와 네크로맨서 체력을 산다
+    gold: { perPost: 1, perClear: 3, geneCost: 3, geneMax: 8, hpCost: 3, hpStep: 25, hpMax: 8 },
     eliteHp: 260, eliteHpStep: 0.5,
     chargeSpeed: 13, chargeDmg: 25, eliteDmg: 12, rechargeEvery: 7, aimTime: 1.2,
     spawnStart: 1.8, spawnEnd: 1.05, foeGradeMul: 1.35,
@@ -668,6 +669,12 @@
     const gained = d > save.best ? (d - save.best) * CFG.gold.perClear : 0;
     return { save: { v: SAVE_V, best: Math.max(save.best, d), cur: Math.max(cur, d), gold: save.gold + gained, up: Object.assign({}, save.up) }, gained };
   }
+  // 판이 끝났다: 부순 초소만큼 골드를 더한다(이기든 지든). 처음 정복의 골드는 clear가 따로 준다.
+  function earn(save, posts) {
+    const n = Number.isFinite(+posts) ? Math.max(0, Math.floor(+posts)) : 0, gained = n * CFG.gold.perPost;
+    if (!gained) return { save, gained: 0 };
+    return { save: { v: SAVE_V, best: save.best, cur: curOf(save), gold: save.gold + gained, up: Object.assign({}, save.up) }, gained };
+  }
   // 진행만 1구역으로 되돌린다. 최고 기록·골드·강화는 그대로(이미 받은 구역의 골드는 다시 받지 않는다).
   function restart(save) { return { v: SAVE_V, best: save.best, cur: 0, gold: save.gold, up: Object.assign({}, save.up) }; }
   // 살 수 있는 강화: genes(시작 맹수 유전자), hp(네크로맨서 체력)
@@ -682,7 +689,7 @@
     return { ok: true, save: { v: SAVE_V, best: save.best, cur: curOf(save), gold: save.gold - cost, up } };
   }
   const geneCost = save => upCost(save, 'genes'), buyGene = save => buy(save, 'genes');
-  const Save = { fresh: freshSave, load: loadSave, clear: clearDistrict, restart, cost: upCost, buy, geneCost, buyGene };
+  const Save = { fresh: freshSave, load: loadSave, clear: clearDistrict, earn, restart, cost: upCost, buy, geneCost, buyGene };
 
   const api = { W, H, DURATION, MAX_LEVEL, KINDS, CFG, newGame, step, stats, geneTotal, levelOf, isFrenzy, heartKeep, scaleGenes, detonate, pin, absorb, feedTarget, spawnBoss, nextBlast, Save };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
