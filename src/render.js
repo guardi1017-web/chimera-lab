@@ -279,7 +279,12 @@
       ctx.beginPath(); ctx.moveTo(u.x, u.y - u.r - 0.55); ctx.lineTo(u.x - 0.22, u.y - u.r - 0.95); ctx.lineTo(u.x + 0.22, u.y - u.r - 0.95); ctx.closePath(); ctx.fill();
     }
     const mh = S.stats(u).maxHp;
-    if (u.down <= 0 && u.hp < mh && u.state === 'ok') bar(u.x, u.y + u.r + 0.3, Math.max(1, u.r * 1.6), u.hp / mh, COL.bone);
+    // 익은 채(80~99%)면 체력이 샌다: 막대를 빨갛게 늘 보이고, 핏방울이 떨어진다.
+    if (u.down <= 0 && u.state === 'ok' && frenzy) {
+      bar(u.x, u.y + u.r + 0.3, Math.max(1, u.r * 1.6), u.hp / mh, COL.danger);
+      if (!reduced) for (let i = 0; i < 3; i++) { const k = (now / 700 + i / 3 + u.uid * 0.37) % 1; ctx.save(); ctx.globalAlpha = 1 - k; ctx.fillStyle = COL.danger; circle(u.x + (i - 1) * u.r * 0.5, u.y + u.r * 0.4 + k * 1.1, 0.12); ctx.fill(); ctx.restore(); }
+    }
+    else if (u.down <= 0 && u.hp < mh && u.state === 'ok') bar(u.x, u.y + u.r + 0.3, Math.max(1, u.r * 1.6), u.hp / mh, COL.bone);
     if (u.down > 0) {
       ctx.strokeStyle = COL.bone; ctx.lineWidth = 0.08;
       ctx.beginPath(); ctx.arc(u.x, u.y, u.r + 0.25, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - u.down / 6)); ctx.stroke();
@@ -468,7 +473,16 @@
     }
     for (const u of g.units) {
       const mh = S.stats(u).maxHp;
-      if (u.down <= 0 && u.hp < mh && u.state === 'ok') { const [x, y] = scr(u.x, u.y, 0); sbar(x, y + u.r * ppu * 0.5 + 6, Math.max(1, u.r * 1.6) * ppu, u.hp / mh, COL.bone); }
+      if (u.down > 0 || u.state !== 'ok') continue;
+      const [x, y] = scr(u.x, u.y, 0), w = Math.max(1, u.r * 1.6) * ppu, by = y + u.r * ppu * 0.5 + 6;
+      // 익은 채(80~99%)면 체력이 샌다: 막대를 빨갛게 늘 보이고, 핏방울이 떨어진다.
+      if (S.isFrenzy(u)) {
+        const ww = Math.max(36, w * 1.3);
+        ctx.fillStyle = COL.grid; ctx.fillRect(x - ww / 2, by, ww, 7);
+        ctx.fillStyle = COL.danger; ctx.fillRect(x - ww / 2, by, ww * Math.max(0, u.hp / mh), 7);
+        if (!reduced) for (let i = 0; i < 3; i++) { const k = (now / 700 + i / 3 + u.uid * 0.37) % 1; ctx.save(); ctx.globalAlpha = 1 - k * k; ctx.fillStyle = COL.danger; ctx.beginPath(); ctx.arc(x + (i - 1) * ww * 0.3, by + 10 + k * 22, 3.5 * (1 - k * 0.4), 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+      }
+      else if (u.hp < mh) sbar(x, by, w, u.hp / mh, COL.bone);
     }
   }
 
