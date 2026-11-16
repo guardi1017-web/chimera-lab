@@ -21,6 +21,7 @@
 
   let g = null, mode = 'title', inp = { x: 0, y: 0 }, stick = null, keys = {}, last = 0;
   let retryDistrict = 1;   // 끝 화면의 '다시' 버튼이 여는 구역
+  let flash = 0, hitstop = 0;   // 익은 폭발 연출: 화면 번쩍임, 판을 잠깐 멈춤(그림만, 규칙은 그대로)
   let scale = 1, dpr = 1, camX = 0, camY = 0, shake = 0, beatT = 0, lastTap = null, seed = (Date.now() % 100000) + 1;
 
   // ---- 소리: 외부 파일 없이 Web Audio로 만든다. 첫 터치(시작 버튼) 뒤에만 켜진다. ----
@@ -50,7 +51,9 @@
     },
     absorb() { this.tone('sawtooth', 150, 400, 0.08, 0.18); },                    // 혼이 빨려 드는 짧은 스윕
     beat() { this.tone('sine', 70, 45, 0.12, 0.35); this.tone('sine', 62, 40, 0.12, 0.25, 0.16); },   // 과부하: 심장 박동
-    boom() { this.noise(0.3, 0.5, 900); this.tone('sine', 80, 30, 0.3, 0.6); },   // 탈피 대폭발
+    boom() { this.noise(0.45, 0.6, 1200); this.tone('sine', 90, 28, 0.5, 0.7); this.tone('sine', 55, 25, 0.6, 0.4, 0.05); },   // 익은 폭발: 크고 길게
+    fizz() { this.noise(0.15, 0.2, 500); this.tone('sine', 140, 70, 0.12, 0.15); },   // 덜 익은 폭발: 피식
+    ripe() { this.tone('sine', 440, 880, 0.18, 0.16); },   // 80%를 넘는 순간
     siren() { for (let i = 0; i < 3; i++) this.tone('square', i % 2 ? 660 : 880, i % 2 ? 660 : 880, 0.13, 0.12, i * 0.17); },   // 돌격조 예고
     raise() { this.tone('triangle', 300, 520, 0.1, 0.14); },
     purify() { this.tone('sine', 520, 1040, 0.25, 0.2); this.tone('sine', 780, 1560, 0.25, 0.12, 0.05); },
@@ -123,7 +126,7 @@
     reload();
     const district = opts && opts.district ? opts.district : save.cur + 1;
     g = S.newGame(seed++, { district, start: { genes: save.up.genes, hp: save.up.hp } });
-    mode = 'play'; shake = 0; lastTap = null;
+    mode = 'play'; shake = 0; flash = 0; hitstop = 0; lastTap = null;
     titleEl.hidden = true; endEl.hidden = true;
     inp.x = inp.y = 0; stick = null;
   }
@@ -326,6 +329,7 @@
       if (!g) return;
       drawWorld2D(now);
     }
+    if (flash > 0) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = Math.min(1, flash / 0.14) * 0.45; ctx.fillStyle = '#fff6e0'; ctx.fillRect(0, 0, cv.width, cv.height); ctx.globalAlpha = 1; }
     drawScreen(now);
   }
 
@@ -432,8 +436,8 @@
         ctx.lineWidth = 0.1; circle(u.x, u.y, u.r + 0.3 + k * 1.2); ctx.stroke();
       }
       else if (f.k === 'boom') {
-        const k = 1 - f.t / 0.5;
-        ctx.save(); ctx.globalAlpha = (1 - k) * (f.weak ? 0.3 : 0.6); ctx.fillStyle = f.weak ? COL.dim : COL.danger; circle(f.x, f.y, f.r * (0.4 + k * 0.6)); ctx.fill();
+        const k = 1 - f.t / (f.weak ? 0.4 : 0.7);
+        ctx.save(); ctx.globalAlpha = (1 - k) * (f.weak ? 0.25 : 0.75); ctx.fillStyle = f.weak ? COL.dim : COL.danger; circle(f.x, f.y, f.r * (0.4 + k * 0.6)); ctx.fill();
         ctx.globalAlpha = 1 - k; ctx.strokeStyle = f.weak ? COL.dim : COL.great; ctx.lineWidth = 0.3; circle(f.x, f.y, f.r * (0.3 + k)); ctx.stroke(); ctx.restore();
       }
       else if (f.k === 'wave') { const k = 1 - f.t / 0.3; ctx.strokeStyle = COL.armor; ctx.lineWidth = 0.22 * (1 - k) + 0.05; circle(f.x, f.y, f.r * k); ctx.stroke(); }
@@ -442,6 +446,8 @@
       else if (f.k === 'clash') { const k = 1 - f.t / 0.4; ctx.strokeStyle = COL.ink; ctx.lineWidth = 0.2; for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; ctx.beginPath(); ctx.moveTo(f.x + Math.cos(a) * (0.3 + k), f.y + Math.sin(a) * (0.3 + k)); ctx.lineTo(f.x + Math.cos(a) * (0.9 + k * 2), f.y + Math.sin(a) * (0.9 + k * 2)); ctx.stroke(); } }
       else if (f.k === 'rebirth') { const k = 1 - f.t / 0.6; ctx.strokeStyle = COL.great; ctx.lineWidth = 0.2; circle(f.x, f.y, 0.4 + k * 2.4); ctx.stroke(); ctx.lineWidth = 0.08; circle(f.x, f.y, 0.4 + k * 4); ctx.stroke(); }
       else if (f.k === 'down') { ctx.strokeStyle = COL.danger; ctx.lineWidth = 0.1; circle(f.x, f.y, 0.6 + (0.5 - f.t) * 2); ctx.stroke(); }
+      else if (f.k === 'ripe') { const u = g.units.find(x => x.uid === f.uid), k = 1 - f.t / 0.6; ctx.strokeStyle = COL.great; ctx.lineWidth = 0.2 * (1 - k) + 0.05; circle(u ? u.x : f.x, u ? u.y : f.y, 0.5 + k * 2.2); ctx.stroke(); }
+      else if (f.k === 'postfall') { const k = 1 - f.t / 0.9; ctx.strokeStyle = COL.great; ctx.lineWidth = 0.3 * (1 - k) + 0.06; circle(f.x, f.y, 0.8 + k * 4); ctx.stroke(); }
     }
 
   }
@@ -531,15 +537,17 @@
     for (const ev of g.events) {
       if (ev === 'absorb') Sound.absorb();
       else if (ev === 'purify') Sound.purify();
-      else if (ev === 'frenzy') Sound.beat();
-      else if (ev === 'boom') { Sound.boom(); shake = 0.45; }
+      else if (ev === 'frenzy') { Sound.ripe(); Sound.beat(); }
+      else if (ev === 'boom') { Sound.boom(); shake = 0.75; if (!reduced) { flash = 0.14; hitstop = 0.07; } }   // 익은 폭발: 크게 흔들고 잠깐 멈추고 번쩍
+      else if (ev === 'boomweak') { Sound.fizz(); shake = Math.max(shake, 0.2); }
+      else if (ev === 'drained') Sound.hurt();
       else if (ev === 'warn') Sound.siren();
       else if (ev === 'raise') Sound.raise();
       else if (ev === 'rebirth') Sound.rebirth();
       else if (ev === 'block') { Sound.clash(); shake = Math.max(shake, 0.25); }
       else if (ev === 'necrohit') { Sound.hurt(); shake = Math.max(shake, 0.3); }
       else if (ev === 'rush') Sound.rush();
-      else if (ev === 'postdown') { Sound.clash(); Sound.purify(); shake = Math.max(shake, 0.4); }
+      else if (ev === 'postdown') { Sound.clash(); Sound.purify(); shake = Math.max(shake, 0.6); }
       else if (ev === 'posthit' || ev === 'postbounce') Sound.clash();
       else if (ev === 'boss') { Sound.siren(); shake = Math.max(shake, 0.3); }
     }
@@ -548,6 +556,7 @@
     beatT -= dt;
     if (beatT <= 0 && g.units.some(u => u.state === 'ok' && S.isFrenzy(u))) { Sound.beat(); beatT = 0.7; }
     shake = Math.max(0, shake - dt);
+    flash = Math.max(0, flash - dt);
   }
 
   // 끝 화면의 골드 줄과 구매 버튼(판 밖에서만 산다)
@@ -576,7 +585,7 @@
     document.getElementById('endTitle').textContent = won ? g.district + '구역 정복' : g.district + '구역에서 쓰러졌다';
     document.getElementById('endPosts').textContent = g.postsDown + ' / ' + g.postsTotal;
     document.getElementById('endKills').textContent = g.kills + '마리 (돌격조 ' + g.eliteKills + ')';
-    document.getElementById('endMolt').textContent = g.molts + '번 터지고 ' + g.rebirths + '번 계승';
+    document.getElementById('endMolt').textContent = g.molts + '번 터짐(익은 폭발 ' + g.ripeBlasts + ') · ' + g.rebirths + '번 계승';
     document.getElementById('endLevel').textContent = g.maxLevel + '등급';
     // 부순 초소만큼 골드(이기든 지든). 처음 정복한 구역이면 골드를 더 받고 최고 기록이 오른다(둘을 함께)
     reload();
@@ -610,7 +619,8 @@
     last = now;
     if (mode === 'play') {
       readInput();
-      S.step(g, dt, inp);
+      if (hitstop > 0) hitstop -= dt;
+      else S.step(g, dt, inp);
       consumeEvents(dt);
       if (g.over) showEnd();
     }

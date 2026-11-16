@@ -510,10 +510,24 @@ function drawFx(f) {
     const k = 1 - f.t / 0.35, col = f.q === 3 ? COL.great : COL[f.type];
     dec.line(f.x + (u.x - f.x) * k, f.y + (u.y - f.y) * k, u.x, u.y, 0.18, col, 1, 0.5);
     dec.ring(u.x, u.y, u.r + 0.3 + k * 1.2, 0.1, col, 1);
-  } else if (f.k === 'boom') {
-    const k = 1 - f.t / 0.5;
-    dec.disc(f.x, f.y, f.r * (0.4 + k * 0.6), f.weak ? COL.dim : COL.danger, (1 - k) * (f.weak ? 0.3 : 0.6), 0, Math.PI * 2, H);
-    dec.ring(f.x, f.y, f.r * (0.3 + k), 0.3, f.weak ? COL.dim : COL.great, 1 - k, 0, Math.PI * 2, H + 0.01);
+  } else if (f.k === 'boom' && f.weak) {   // 덜 익은 폭발: 작고 흐린 회색 한 겹
+    const k = 1 - f.t / 0.4;
+    dec.disc(f.x, f.y, f.r * (0.4 + k * 0.5), COL.dim, (1 - k) * 0.25, 0, Math.PI * 2, H);
+    dec.ring(f.x, f.y, f.r * (0.3 + k * 0.8), 0.12, COL.dim, 1 - k, 0, Math.PI * 2, H + 0.01);
+  } else if (f.k === 'boom') {   // 익은 폭발: 붉은 원판, 금빛 고리 두 겹, 밖으로 튀는 파편 줄
+    const k = 1 - f.t / 0.7, e = 1 - (1 - k) * (1 - k);
+    dec.disc(f.x, f.y, f.r * (0.5 + e * 0.6), COL.danger, (1 - k) * 0.75, 0, Math.PI * 2, H);
+    dec.ring(f.x, f.y, f.r * (0.3 + e * 1.1), 0.45 * (1 - k) + 0.08, COL.great, 1 - k, 0, Math.PI * 2, H + 0.01);
+    dec.ring(f.x, f.y, f.r * (0.2 + e * 1.6), 0.12, COL.ink, (1 - k) * 0.8, 0, Math.PI * 2, H + 0.02);
+    for (let i = 0; i < 10; i++) { const a = i * Math.PI / 5 + 0.3, r0 = f.r * (0.4 + e * 0.9), r1 = r0 + 0.6 + e * 1.2; dec.line(f.x + Math.cos(a) * r0, f.y + Math.sin(a) * r0, f.x + Math.cos(a) * r1, f.y + Math.sin(a) * r1, 0.16, COL.great, 1 - k, H + 0.03); }
+  } else if (f.k === 'ripe') {   // 80%를 넘는 순간: 그 키메라에서 금빛 고리가 한 번 퍼진다
+    const u = g.units.find(x => x.uid === f.uid), k = 1 - f.t / 0.6, x = u ? u.x : f.x, y = u ? u.y : f.y;
+    dec.ring(x, y, 0.5 + k * 2.2, 0.2 * (1 - k) + 0.05, COL.great, 1 - k);
+  } else if (f.k === 'postfall') {   // 초소가 무너진다: 큰 고리 두 겹과 흩어지는 파편
+    const k = 1 - f.t / 0.9, e = 1 - (1 - k) * (1 - k);
+    dec.ring(f.x, f.y, 0.8 + e * 4, 0.3 * (1 - k) + 0.06, COL.great, 1 - k);
+    dec.ring(f.x, f.y, 0.6 + e * 2.4, 0.18, COL.armor, 1 - k);
+    for (let i = 0; i < 12; i++) { const a = i * Math.PI / 6, r0 = 0.5 + e * 1.5, r1 = r0 + 0.5 + e; dec.line(f.x + Math.cos(a) * r0, f.y + Math.sin(a) * r0, f.x + Math.cos(a) * r1, f.y + Math.sin(a) * r1, 0.2, COL.armor, 1 - k); }
   } else if (f.k === 'wave') { const k = 1 - f.t / 0.3; dec.ring(f.x, f.y, f.r * k, 0.22 * (1 - k) + 0.05, COL.armor, 1); }
   else if (f.k === 'leap') dec.line(f.x, f.y, f.tx, f.ty, 0.3 * (f.t / 0.25), COL.beast, 1);
   else if (f.k === 'volley') dec.disc(f.x, f.y, 6.5, COL.ranger, f.t / 0.25 * 0.3, f.face - 0.7, f.face + 0.7);

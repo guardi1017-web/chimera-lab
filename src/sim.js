@@ -306,7 +306,7 @@
     g.maxLevel = Math.max(g.maxLevel, levelOf(u));
     g.fx.push({ k: 'absorb', x: soul.x, y: soul.y, uid: u.uid, type: soul.type, q: soul.q, t: 0.35 });
     g.events.push(soul.q === 3 ? 'purify' : 'absorb');
-    if (!wasFrenzy && isFrenzy(u)) g.events.push('frenzy');
+    if (!wasFrenzy && isFrenzy(u)) { g.events.push('frenzy'); g.fx.push({ k: 'ripe', uid: u.uid, x: u.x, y: u.y, t: 0.6 }); }
     if (u.inst >= 100) startMolt(g, u);
   }
 
@@ -360,7 +360,7 @@
       p.hp -= hit;
       if (p.hp <= 0) {
         p.dead = true; g.postsDown++;
-        g.fx.push({ k: 'die', x: p.x, y: p.y, arch: 'armor', big: true, t: 0.35 });
+        g.fx.push({ k: 'postfall', x: p.x, y: p.y, t: 0.9 });
         g.events.push('postdown');
         if (g.postsDown >= g.postsTotal && !g.boss) spawnBoss(g);
       } else g.events.push('posthit');
@@ -370,8 +370,8 @@
     if (g.pinned === u.uid) g.pinned = null;
     g.molts++;
     if (c >= 1) { g.ripeBlasts++; if (g.firstRipeT === null) g.firstRipeT = g.t; }
-    g.fx.push({ k: 'boom', x: u.x, y: u.y, r: R, weak: c < 1, t: 0.5 });
-    g.events.push('boom');
+    g.fx.push({ k: 'boom', x: u.x, y: u.y, r: R, weak: c < 1, t: c < 1 ? 0.4 : 0.7 });
+    g.events.push(c < 1 ? 'boomweak' : 'boom');   // 연출용: 익은 폭발과 덜 익은 폭발을 다르게 보이고 들리게
   }
   // 초소를 다 부수면 대장이 나타난다. 돌격조처럼 예고하고 달려들지만 훨씬 단단하다.
   function spawnBoss(g) {
