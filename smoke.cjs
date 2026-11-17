@@ -133,7 +133,7 @@ if (statBtn(0).disabled) throw new Error('골드가 있는데 능력치를 살 �
 buyStat(0);
 if (readSave().gold !== S.CFG.gold.perClear - S.CFG.gold.statCost || readSave().up.stat.beast.hp !== 1) throw new Error('사도 골드·단계가 바뀌지 않았다: ' + store['chimera-lab-save-v1']);
 if (!statBtn(0).disabled || !statBtn(5).disabled) throw new Error('골드가 모자란데 살 수 있게 보인다');
-if (!/^체력 \+8%\n3골드 · 1\/5단계$/.test(statBtn(0).textContent) || !/^받는 피해 -6%/.test(statBtn(5).textContent)) throw new Error('능력치 버튼 글: ' + statBtn(0).textContent + ' / ' + statBtn(5).textContent);
+if (!/^체력 \+15%\n3골드 · 1\/5단계$/.test(statBtn(0).textContent) || !/^받는 피해 -10%/.test(statBtn(5).textContent)) throw new Error('능력치 버튼 글: ' + statBtn(0).textContent + ' / ' + statBtn(5).textContent);
 tab(1);
 if (els.statTabs.kids[1]['attr:aria-pressed'] !== 'true' || !/ 0\/5단계$/.test(statBtn(0).textContent)) throw new Error('갑주 탭: 단계는 종류마다 따로: ' + statBtn(0).textContent);
 tab(0);

@@ -121,7 +121,7 @@
     <div id="aceList" hidden></div>
     <div id="statTabs" class="tabs" role="group" aria-label="강화할 소환수 종류"></div>
     <div id="statShop" class="statShop"></div>
-    <button id="buyHp" class="buy" type="button">네크로맨서 체력 +25</button>
+    <button id="buyHp" class="buy" type="button">네크로맨서 체력 +10</button>
     <button id="againBtn" type="button">1구역부터 다시</button>
   </section>
 </div>
@@ -168,9 +168,9 @@
     // 판 밖(끝 화면)에서 시작 맹수의 유전자와 네크로맨서 체력을 산다
     // 골드로 사는 강화: 소환수 능력치(종류마다 따로, 그 종류의 모든 소환수에 붙는다)와 네크로맨서 체력.
     // geneRefund·geneMaxOld: 예전 '시작 맹수 유전자' 강화 한 단계에 쓴 골드와 그 상한(그 강화를 없애며 돌려준다, 2026-11-17)
-    gold: { perPost: 1, perClear: 3, statCost: 3, statMax: 5, hpCost: 3, hpStep: 25, hpMax: 8, geneRefund: 3, geneMaxOld: 8 },
+    gold: { perPost: 1, perClear: 3, statCost: 3, statMax: 5, hpCost: 3, hpStep: 10, hpMax: 8, geneRefund: 3, geneMaxOld: 8 },
     // 능력치 강화 한 단계: 체력·공격력·이속·사거리는 그만큼 오르고, 간격·받는 피해는 (1+값)으로 나눈다
-    statStep: { hp: 0.08, dmg: 0.08, cd: 0.06, spd: 0.05, range: 0.06, taken: 0.06 },
+    statStep: { hp: 0.15, dmg: 0.15, cd: 0.1, spd: 0.08, range: 0.12, taken: 0.1 },
     eliteHp: 260, eliteHpStep: 0.5,
     chargeSpeed: 13, chargeDmg: 25, eliteDmg: 12, rechargeEvery: 7, aimTime: 1.2,
     spawnStart: 1.8, spawnEnd: 1.05, foeGradeMul: 1.35,
