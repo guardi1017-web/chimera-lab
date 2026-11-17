@@ -117,7 +117,7 @@
     if (e.key !== SAVE_KEY) return;
     reload();
     if (mode === 'title') refreshTitle();
-    else if (mode === 'over') refreshGold(0);
+    else if (mode === 'over') refreshGold(lastGained);
   });
 
   // opts: { district }. 없으면 아직 못 깬 다음 구역. 어느 경로로 시작하든 골드로 산 시작 강화를 넣는다.
@@ -125,7 +125,7 @@
     Sound.on();
     reload();
     const district = opts && opts.district ? opts.district : save.cur + 1;
-    g = S.newGame(seed++, { district, start: { genes: save.up.genes, hp: save.up.hp } });
+    g = S.newGame(seed++, { district, start: { hp: save.up.hp, stat: save.up.stat } });
     mode = 'play'; shake = 0; flash = 0; hitstop = 0; lastTap = null;
     titleEl.hidden = true; endEl.hidden = true;
     inp.x = inp.y = 0; stick = null;
@@ -576,25 +576,49 @@
     flash = Math.max(0, flash - dt);
   }
 
-  // 끝 화면의 골드 줄과 구매 버튼(판 밖에서만 산다)
-  const SHOP = [
-    { kind: 'genes', btn: document.getElementById('buyGene'), label: k => '시작 맹수 유전자 +1', now: k => '+' + k },
-    { kind: 'hp', btn: document.getElementById('buyHp'), label: k => '네크로맨서 체력 +' + S.CFG.gold.hpStep, now: k => String(100 + S.CFG.gold.hpStep * k) },
-  ];
-  function refreshGold(gained) {
-    document.getElementById('endGold').textContent = save.gold + '골드' + (gained ? ' (+' + gained + ')' : '');
-    for (const it of SHOP) {
-      const k = save.up[it.kind] || 0, cost = S.Save.cost(save, it.kind);
-      it.btn.textContent = cost === null ? it.label(k) + ' · 최대 (지금 ' + it.now(k) + ')' : it.label(k) + ' · ' + cost + '골드 (지금 ' + it.now(k) + ')';
-      it.btn.disabled = cost === null || save.gold < cost;
-    }
-  }
-  for (const it of SHOP) it.btn.addEventListener('click', () => {
-    reload();
-    const r = S.Save.buy(save, it.kind);
-    if (r.ok) { save = r.save; persist(); }
-    refreshGold(0);
+  // 끝 화면의 골드 줄과 구매 버튼(판 밖에서만 산다).
+  // 소환수 능력치: 종류 탭을 고르고, 그 종류의 능력치 하나를 한 단계씩 산다(그 종류의 모든 소환수에 붙는다).
+  const STAT_NAME = [['hp', '체력', '+'], ['dmg', '공격력', '+'], ['cd', '공격 간격', '-'], ['spd', '이동 속도', '+'], ['range', '사거리', '+'], ['taken', '받는 피해', '-']];
+  const TAB_NAME = { beast: '맹수', armor: '갑주', ranger: '소총수' };
+  const tabsEl = document.getElementById('statTabs'), statsEl = document.getElementById('statShop'), hpBtn = document.getElementById('buyHp');
+  let shopKind = 'beast';
+  const tabBtns = S.KINDS.map(k => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'tab'; b.textContent = TAB_NAME[k];
+    b.addEventListener('click', () => { shopKind = k; refreshGold(lastGained); });
+    tabsEl.appendChild(b);
+    return { k, b };
   });
+  const statBtns = STAT_NAME.map(([key, name, sign]) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'buy stat';
+    b.addEventListener('click', () => buyUp(shopKind + '.' + key));
+    statsEl.appendChild(b);
+    return { key, name, sign, b };
+  });
+  hpBtn.addEventListener('click', () => buyUp('hp'));
+  function buyUp(key) {
+    reload();
+    const r = S.Save.buy(save, key);
+    if (r.ok) { save = r.save; persist(); }
+    refreshGold(0);   // 사면 '(+받은 골드)' 표시는 지운다
+  }
+  let lastGained = 0;
+  function refreshGold(gained) {
+    lastGained = gained;
+    document.getElementById('endGold').textContent = save.gold + '골드' + (gained ? ' (+' + gained + ')' : '');
+    for (const t of tabBtns) t.b.setAttribute('aria-pressed', String(t.k === shopKind));
+    const maxS = S.CFG.gold.statMax;
+    for (const it of statBtns) {
+      const key = shopKind + '.' + it.key, k = S.Save.level(save, key), cost = S.Save.cost(save, key);
+      const pct = Math.round(S.CFG.statStep[it.key] * 100);
+      it.b.textContent = it.name + ' ' + it.sign + pct + '%\n' + (cost === null ? '최대' : cost + '골드') + ' · ' + k + '/' + maxS + '단계';
+      it.b.disabled = cost === null || save.gold < cost;
+    }
+    const k = S.Save.level(save, 'hp'), cost = S.Save.cost(save, 'hp'), now = String(100 + S.CFG.gold.hpStep * k);
+    hpBtn.textContent = '네크로맨서 체력 +' + S.CFG.gold.hpStep + ' · ' + (cost === null ? '최대' : cost + '골드') + ' (지금 ' + now + ')';
+    hpBtn.disabled = cost === null || save.gold < cost;
+  }
   const KIND_NAME = { beast: '맹수', armor: '갑주', ranger: '사수' };
   function showEnd() {
     mode = 'over';

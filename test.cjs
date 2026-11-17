@@ -3,6 +3,7 @@ const S = require('./src/sim.js');
 const C = S.CFG;
 const eq = (a, b, msg) => { if (a !== b) throw new Error(msg + ' (기대 ' + b + ', 실제 ' + a + ')'); };
 const ok = (c, msg) => { if (!c) throw new Error(msg); };
+const approx = (a, b, tol, msg) => { if (!(Math.abs(a - b) <= tol)) throw new Error(msg + ' (기대 ' + b + ', 실제 ' + a + ')'); };
 
 // ---- 규칙 ----
 {
@@ -317,13 +318,38 @@ const ok = (c, msg) => { if (!c) throw new Error(msg); };
   {
     const G = C.gold, V = S.Save;
     let r, r0, b0;
-    // 시작 맹수의 유전자: 산 만큼 더해지고, 불안정도는 0. 상한을 넘거나 이상한 값이면 잘린다
-    const g1 = S.newGame(3, { start: { genes: 3 } }), u1 = g1.units[0];
-    ok(g1.units.length === 1 && u1.main === 'beast' && S.geneTotal(u1) === 4 && u1.inst === 0 && u1.hp === S.stats(u1).maxHp, '시작 강화: 맹수 하나, 유전자 1+3, 불안정도 0, 체력 가득');
-    eq(S.geneTotal(S.newGame(3, { start: { genes: 999 } }).units[0]), 1 + G.geneMax, '시작 강화는 상한까지만');
-    eq(S.geneTotal(S.newGame(3, { start: { genes: -5 } }).units[0]), 1, '음수는 0으로');
-    eq(S.geneTotal(S.newGame(3, { start: { genes: 'x' } }).units[0]), 1, '숫자가 아니면 0으로');
-    eq(S.geneTotal(S.newGame(3).units[0]), 1, '강화가 없으면 예전처럼 유전자 1');
+    // 소환수 능력치 강화: 그 종류의 모든 소환수에 붙는다(시작 맹수, 혼으로 되살린 것, 심장 계승). 유전자는 늘 1에서 시작
+    {
+      const SS = C.statStep, plain = S.newGame(3).units[0], ps = S.stats(plain);
+      eq(S.geneTotal(plain), 1, '시작 맹수는 유전자 1');
+      eq(S.geneTotal(S.newGame(3, { start: { genes: 5 } }).units[0]), 1, '예전 시작 유전자 강화는 더 없다');
+      const up = { beast: { hp: 2, dmg: 1, cd: 3, spd: 1, range: 2, taken: 4 }, armor: { taken: 5 } };
+      const g1 = S.newGame(3, { start: { stat: up } }), u1 = g1.units[0], s1 = S.stats(u1);
+      approx(s1.maxHp, ps.maxHp * (1 + 2 * SS.hp), 1e-9, '체력 강화');
+      ok(u1.hp === s1.maxHp, '강화된 최대 체력으로 시작');
+      approx(s1.dmg, ps.dmg * (1 + SS.dmg), 1e-9, '공격력 강화');
+      approx(s1.cd, ps.cd / (1 + 3 * SS.cd), 1e-9, '간격 강화: 짧아진다');
+      approx(s1.spd, ps.spd * (1 + SS.spd), 1e-9, '이속 강화');
+      approx(s1.range, ps.range * (1 + 2 * SS.range), 1e-9, '사거리 강화');
+      approx(s1.taken, ps.taken / (1 + 4 * SS.taken), 1e-9, '받는 피해 강화: 줄어든다');
+      // 혼으로 되살린 갑주는 갑주 강화만 받는다
+      g1.spawnT = 1e9; g1.eliteIdx = 99; g1.posts = []; g1.feedT = 0;
+      g1.souls.push({ x: g1.necro.x, y: g1.necro.y, type: 'armor', q: 1, ttl: 5 }); S.step(g1, 1 / 60, { x: 0, y: 0 });
+      const a1 = g1.units.find(u => u.main === 'armor'), aPlain = S.newGame(3);
+      aPlain.spawnT = 1e9; aPlain.eliteIdx = 99; aPlain.posts = []; aPlain.feedT = 0;
+      aPlain.souls.push({ x: aPlain.necro.x, y: aPlain.necro.y, type: 'armor', q: 1, ttl: 5 }); S.step(aPlain, 1 / 60, { x: 0, y: 0 });
+      const a0 = aPlain.units.find(u => u.main === 'armor');
+      ok(a1 && a0, '혼으로 갑주를 되살렸다');
+      approx(S.stats(a1).taken, S.stats(a0).taken / (1 + 5 * SS.taken), 1e-9, '되살린 갑주: 갑주 강화(받는 피해)');
+      approx(S.stats(a1).maxHp, S.stats(a0).maxHp, 1e-9, '되살린 갑주: 맹수 강화(체력)는 받지 않는다');
+      // 심장 계승도 같은 종류 강화
+      g1.hearts.push({ x: g1.necro.x, y: g1.necro.y, genes: { beast: 2, armor: 0, ranger: 0 }, main: 'beast', molts: 0, mutant: false, age: 0, ttl: 12 });
+      g1.units = g1.units.filter(u => u.main !== 'beast'); S.step(g1, 1 / 60, { x: 0, y: 0 });
+      const hb = g1.units.find(u => u.main === 'beast');
+      ok(hb && hb.up && hb.up.taken === 4, '심장으로 깨어난 맹수도 맹수 강화를 받는다');
+      const gx = S.newGame(3, { start: { stat: { beast: { hp: 999, dmg: -3, cd: 'x' }, nope: { hp: 3 } } } });
+      ok(gx.statUp.beast.hp === C.gold.statMax && gx.statUp.beast.dmg === 0 && gx.statUp.beast.cd === 0 && !gx.statUp.nope, '능력치 강화: 상한까지만, 이상한 값은 0');
+    }
     { const gh = S.newGame(3, { start: { hp: 3 } }); ok(gh.necro.hp === 100 + 3 * G.hpStep && gh.necro.maxHp === gh.necro.hp, '체력 강화: 최대 체력과 시작 체력이 함께 오른다'); }
     eq(S.newGame(3, { start: { hp: 999 } }).necro.maxHp, 100 + G.hpMax * G.hpStep, '체력 강화는 상한까지만');
     eq(S.newGame(3, { start: { hp: 'x' } }).necro.maxHp, 100, '체력 강화: 이상한 값은 0으로');
@@ -332,21 +358,31 @@ const ok = (c, msg) => { if (!c) throw new Error(msg); };
       eq(gh.necro.hp, gh.necro.maxHp, '혼 회복은 강화된 최대 체력까지'); }
     // 저장 읽기: 없으면 새 저장, 옛 최고 기록은 소급 지급, 깨졌으면 기본값(옛 기록으로 다시 옮기지 않는다)
     let sv = V.load(null, null);
-    ok(sv.v === 1 && sv.best === 0 && sv.gold === 0 && sv.up.genes === 0, '저장이 없으면 새 저장');
-    sv = V.load(JSON.stringify({ v: 1, best: 2, gold: 4, up: { genes: 1 } }), null);
-    ok(sv.up.genes === 1 && sv.up.hp === 0, '체력 강화가 없던 저장은 0으로 읽는다');
-    b0 = V.buy({ v: 1, best: 2, gold: G.hpCost, up: { genes: 1, hp: 0 } }, 'hp');
-    ok(b0.ok && b0.save.gold === 0 && b0.save.up.hp === 1 && b0.save.up.genes === 1, '체력을 사면 골드가 줄고 체력 단계만 오른다');
-    ok(!V.buy({ v: 1, best: 9, gold: 99, up: { genes: 0, hp: G.hpMax } }, 'hp').ok, '체력 강화 상한');
-    ok(!V.buy({ v: 1, best: 9, gold: 99, up: { genes: 0, hp: 0 } }, 'nope').ok, '모르는 강화는 못 산다');
+    ok(sv.v === 1 && sv.best === 0 && sv.gold === 0 && sv.up.hp === 0 && sv.up.stat.ranger.range === 0 && sv.up.genes === undefined, '저장이 없으면 새 저장');
+    sv = V.load(JSON.stringify({ v: 1, best: 2, gold: 4, up: { genes: 3 } }), null);
+    ok(sv.gold === 4 + 3 * G.geneRefund && sv.up.genes === undefined && sv.up.hp === 0, '예전 유전자 강화는 쓴 골드로 돌려준다');
+    ok(V.load(JSON.stringify(sv), null).gold === sv.gold, '돌려준 저장을 다시 읽어도 두 번 돌려주지 않는다');
+    ok(V.load(JSON.stringify({ v: 1, best: 2, gold: 0, up: { genes: 99 } }), null).gold === G.geneMaxOld * G.geneRefund, '돌려주는 골드는 예전 상한까지만');
+    b0 = V.buy({ v: 1, best: 2, gold: G.hpCost, up: { hp: 0 } }, 'hp');
+    ok(b0.ok && b0.save.gold === 0 && b0.save.up.hp === 1 && b0.save.up.stat.beast.hp === 0, '체력을 사면 골드가 줄고 체력 단계만 오른다');
+    ok(!V.buy({ v: 1, best: 9, gold: 99, up: { hp: G.hpMax } }, 'hp').ok, '체력 강화 상한');
+    for (const bad of ['nope', 'beast', 'beast.nope', 'nope.hp', '__proto__.hp', 'beast.__proto__', 'beast.toString', 'genes'])
+      ok(!V.buy({ v: 1, best: 9, gold: 99, up: {} }, bad).ok && V.cost({ v: 1, best: 9, gold: 99, up: {} }, bad) === null, '모르는 강화는 못 산다: ' + bad);
+    { const s0 = { v: 1, best: 2, gold: G.statCost * 2, up: { hp: 1, stat: { armor: { taken: 2 } } } };
+      const r1 = V.buy(s0, 'armor.taken');
+      ok(r1.ok && r1.save.gold === G.statCost && r1.save.up.stat.armor.taken === 3 && r1.save.up.hp === 1 && s0.up.stat.armor.taken === 2, '능력치를 사면 그 칸만 오르고, 원래 저장은 그대로');
+      ok(V.level(r1.save, 'armor.taken') === 3 && V.level(r1.save, 'ranger.taken') === 0, '단계는 종류마다 따로');
+      const top = { v: 1, best: 2, gold: 99, up: { stat: { ranger: { range: G.statMax } } } };
+      ok(!V.buy(top, 'ranger.range').ok && V.cost(top, 'ranger.range') === null && V.buy(top, 'ranger.dmg').ok, '능력치 상한은 칸마다');
+      ok(!V.buy({ v: 1, best: 2, gold: G.statCost - 1, up: {} }, 'beast.dmg').ok, '골드가 모자라면 능력치를 못 산다'); }
     sv = V.load(null, '2');
     ok(sv.best === 2 && sv.gold === 2 * G.perClear, '옛 최고 기록(2구역)은 그만큼 골드를 소급해 준다');
     sv = V.load('{깨짐', '5');
     ok(sv.best === 0 && sv.gold === 0, '새 저장이 깨졌으면 기본값(옛 기록 소급을 되풀이하지 않는다)');
     sv = V.load(JSON.stringify({ v: 1, best: 3, gold: 7, up: { genes: 2 } }), '9');
-    ok(sv.best === 3 && sv.gold === 7 && sv.up.genes === 2, '새 저장이 있으면 옛 기록은 보지 않는다');
-    sv = V.load(JSON.stringify({ v: 1, best: -1, gold: 'a', up: { genes: 99 } }), null);
-    ok(sv.best === 0 && sv.gold === 0 && sv.up.genes === G.geneMax, '이상한 값은 범위 안으로');
+    ok(sv.best === 3 && sv.gold === 7 + 2 * G.geneRefund, '새 저장이 있으면 옛 기록은 보지 않는다');
+    sv = V.load(JSON.stringify({ v: 1, best: -1, gold: 'a', up: { hp: 99, stat: { beast: { hp: 99, dmg: 'x' } } } }), null);
+    ok(sv.best === 0 && sv.gold === 0 && sv.up.hp === G.hpMax && sv.up.stat.beast.hp === G.statMax && sv.up.stat.beast.dmg === 0, '이상한 값은 범위 안으로');
     ok(V.load(JSON.stringify({ v: 2, best: 4 }), null).best === 0, '모르는 판의 저장은 기본값');
     sv = V.load('', '2');
     ok(sv.best === 0 && sv.gold === 0, '빈 글의 저장도 깨진 저장이다(옛 기록 소급을 되풀이하지 않는다)');
@@ -369,8 +405,8 @@ const ok = (c, msg) => { if (!c) throw new Error(msg); };
       ok(e.gained === 3 * G.perPost && e.save.gold === 1 + 3 * G.perPost && e.save.cur === 0 && e.save.best === 2 && s0.gold === 1, '초소 셋: 골드만 오르고 진행·기록은 그대로');
       ok(V.earn(s0, 0).save === s0 && V.earn(s0, 'x').gained === 0 && V.earn(s0, -2).gained === 0, '초소 0·이상한 값: 골드 없음'); }
     // 1구역으로 되돌리기: 진행(cur)만 0, 최고 기록·골드·강화는 그대로. 다시 깨는 구역은 골드를 또 주지 않는다
-    { const s3 = { v: 1, best: 3, cur: 3, gold: 7, up: { genes: 2, hp: 1 } }, z = V.restart(s3);
-      ok(z.cur === 0 && z.best === 3 && z.gold === 7 && z.up.genes === 2 && z.up.hp === 1 && s3.cur === 3, '되돌리기: 진행만 0, 나머지는 그대로(원래 저장은 안 바뀜)');
+    { const s3 = { v: 1, best: 3, cur: 3, gold: 7, up: { hp: 1, stat: { armor: { hp: 2 } } } }, z = V.restart(s3);
+      ok(z.cur === 0 && z.best === 3 && z.gold === 7 && z.up.stat.armor.hp === 2 && z.up.hp === 1 && s3.cur === 3, '되돌리기: 진행만 0, 나머지는 그대로(원래 저장은 안 바뀜)');
       let c = V.clear(z, 1);
       ok(c.gained === 0 && c.save.cur === 1 && c.save.best === 3 && c.save.gold === 7, '되돌린 뒤 1구역 정복: 진행만 오르고 골드 없음');
       c = V.clear(V.clear(V.clear(z, 1).save, 2).save, 3);
@@ -381,17 +417,17 @@ const ok = (c, msg) => { if (!c) throw new Error(msg); };
       ok(V.load(JSON.stringify({ v: 1, best: 3, gold: 0, up: {} }), null).cur === 3, 'cur가 없던 저장은 cur=best');
       ok(V.load(JSON.stringify({ v: 1, best: 3, cur: 9, gold: 0, up: {} }), null).cur === 3, 'cur는 best를 넘지 않는다');
       ok(V.load(null, '2').cur === 2, '옛 기록을 옮기면 진행도 그 구역');
-      const bz = V.buy({ v: 1, best: 3, cur: 0, gold: 9, up: { genes: 0, hp: 0 } }, 'hp');
+      const bz = V.buy({ v: 1, best: 3, cur: 0, gold: 9, up: { hp: 0 } }, 'hp');
       ok(bz.ok && bz.save.cur === 0, '구매가 진행을 바꾸지 않는다'); }
     // 구매: 골드를 빼고 단계를 올리는 것을 함께, 모자라거나 상한이면 거절
-    let b = V.buyGene({ v: 1, best: 2, gold: G.geneCost - 1, up: { genes: 0 } });
-    ok(!b.ok && b.reason === 'gold' && b.save.gold === G.geneCost - 1, '골드가 모자라면 못 산다');
-    b = V.buyGene({ v: 1, best: 2, gold: G.geneCost + 1, up: { genes: 0 } });
-    ok(b.ok && b.save.gold === 1 && b.save.up.genes === 1 && b.save.best === 2, '사면 골드가 줄고 단계가 오른다');
-    b = V.buyGene({ v: 1, best: 9, gold: 999, up: { genes: G.geneMax } });
-    ok(!b.ok && b.reason === 'max' && V.geneCost(b.save) === null, '상한이면 못 산다');
+    let b = V.buy({ v: 1, best: 2, gold: G.statCost - 1, up: {} }, 'beast.hp');
+    ok(!b.ok && b.reason === 'gold' && b.save.gold === G.statCost - 1, '골드가 모자라면 못 산다');
+    b = V.buy({ v: 1, best: 2, gold: G.statCost + 1, up: {} }, 'beast.hp');
+    ok(b.ok && b.save.gold === 1 && b.save.up.stat.beast.hp === 1 && b.save.best === 2, '사면 골드가 줄고 단계가 오른다');
+    b = V.buy({ v: 1, best: 9, gold: 999, up: { stat: { beast: { hp: G.statMax } } } }, 'beast.hp');
+    ok(!b.ok && b.reason === 'max', '상한이면 못 산다');
   }
-  console.log('규칙 확인: 골드(처음 정복만), 시작 유전자·네크로맨서 체력 강화, 저장 읽기·소급·깨진 저장, 구매');
+  console.log('규칙 확인: 골드(처음 정복만), 소환수 능력치·네크로맨서 체력 강화, 예전 유전자 강화 환불, 저장 읽기·소급·깨진 저장, 구매');
   console.log('규칙 확인: 되살리기, 흡수와 불안정도, 과부하, 탈피 폭발, 심장 계승, 수동 자폭, 연결, 돌격조와 갑주 방어');
 }
 
@@ -464,7 +500,8 @@ for (const policy of ['play', 'spam', 'nomolt', 'idle']) {
 // '마구 터뜨림'(익히지 않고 틈만 나면 터뜨림)은 이기면 안 된다. 시작 강화를 다 사고 1구역에 돌아가도
 {
   const N = 40;
-  for (const opts of [undefined, { district: 1, start: { genes: S.CFG.gold.geneMax, hp: S.CFG.gold.hpMax } }]) {
+  const maxStat = {}; for (const k of S.KINDS) { maxStat[k] = {}; for (const st of Object.keys(S.CFG.statStep)) maxStat[k][st] = S.CFG.gold.statMax; }
+  for (const opts of [undefined, { district: 1, start: { stat: maxStat, hp: S.CFG.gold.hpMax } }]) {
     let w = 0; for (let s = 1; s <= N; s++) if (run(s, 'spam', opts).over === 'win') w++;
     if (w) throw new Error('마구 터뜨림이 이겼다 ' + w + '/' + N + ' ' + JSON.stringify(opts || {}));
   }
@@ -475,18 +512,20 @@ for (const policy of ['play', 'spam', 'nomolt', 'idle']) {
 // 재미 판정이 아니다. 지표: 정복, 처음 먹인 시각, 다 익은 폭발 수, 다 익은 폭발 없이 끝난 판, 처음 다 익은 폭발 시각
 if (process.argv.includes('--gold')) {
   const G = S.CFG.gold, N = 40;
-  const boughtFor = d => { let gold = (d - 1) * G.perClear, k = 0; while (k < G.geneMax && gold >= G.geneCost) { gold -= G.geneCost; k++; } return k; };
+  // d구역까지 번 골드(처음 정복만 셈)를 모든 종류의 체력·공격력에 고르게 쓴 단계 수
+  const boughtFor = d => { let gold = (d - 1) * (G.perClear + 3 * G.perPost), k = 0; while (k < G.statMax && gold >= G.statCost * 6) { gold -= G.statCost * 6; k++; } return k; };
+  const statFor = k => { const o = {}; for (const kind of S.KINDS) o[kind] = { hp: k, dmg: k }; return o; };
   console.log('구역 | 강화 | 정복 | 처음 먹임 | 익은 폭발 | 익은 폭발 없음 | 처음 익은 폭발');
   for (let d = 1; d <= 6; d++) for (const k of [...new Set([0, boughtFor(d)])]) {
     const a = { win: 0, feed: [], ripe: 0, none: 0, firstRipe: [] };
     for (let s = 1; s <= N; s++) {
-      const g = run(s, 'play', { district: d, start: { genes: k } });
+      const g = run(s, 'play', { district: d, start: { stat: statFor(k) } });
       if (g.over === 'win') a.win++;
       if (g.firstFeedT !== null) a.feed.push(g.firstFeedT);
       a.ripe += g.ripeBlasts; if (!g.ripeBlasts) a.none++; else a.firstRipe.push(g.firstRipeT);
     }
     const avg = v => v.length ? (v.reduce((x, y) => x + y, 0) / v.length).toFixed(1) + '초' : '-';
-    console.log(`${d}구역 | 유전자 +${k} | ${a.win}/${N} | ${avg(a.feed)} | ${(a.ripe / N).toFixed(1)} | ${a.none}/${N} | ${avg(a.firstRipe)}`);
+    console.log(`${d}구역 | 체력·공격력 +${k} | ${a.win}/${N} | ${avg(a.feed)} | ${(a.ripe / N).toFixed(1)} | ${a.none}/${N} | ${avg(a.firstRipe)}`);
   }
 }
 

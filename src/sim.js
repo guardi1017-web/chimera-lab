@@ -37,7 +37,11 @@
     districtScale: 0.25,                               // 구역이 하나 오를 때마다 적의 체력과 피해가 이만큼 더
     // 골드: 판마다(이기든 지든) 부순 초소 하나에 perPost, 구역을 처음 정복하면 perClear를 더 받는다(2026-11-16 사용자 결정).
     // 판 밖(끝 화면)에서 시작 맹수의 유전자와 네크로맨서 체력을 산다
-    gold: { perPost: 1, perClear: 3, geneCost: 3, geneMax: 8, hpCost: 3, hpStep: 25, hpMax: 8 },
+    // 골드로 사는 강화: 소환수 능력치(종류마다 따로, 그 종류의 모든 소환수에 붙는다)와 네크로맨서 체력.
+    // geneRefund·geneMaxOld: 예전 '시작 맹수 유전자' 강화 한 단계에 쓴 골드와 그 상한(그 강화를 없애며 돌려준다, 2026-11-17)
+    gold: { perPost: 1, perClear: 3, statCost: 3, statMax: 5, hpCost: 3, hpStep: 25, hpMax: 8, geneRefund: 3, geneMaxOld: 8 },
+    // 능력치 강화 한 단계: 체력·공격력·이속·사거리는 그만큼 오르고, 간격·받는 피해는 (1+값)으로 나눈다
+    statStep: { hp: 0.08, dmg: 0.08, cd: 0.06, spd: 0.05, range: 0.06, taken: 0.06 },
     eliteHp: 260, eliteHpStep: 0.5,
     chargeSpeed: 13, chargeDmg: 25, eliteDmg: 12, rechargeEvery: 7, aimTime: 1.2,
     spawnStart: 1.8, spawnEnd: 1.05, foeGradeMul: 1.35,
@@ -79,19 +83,20 @@
   // 심장으로 깨어나도 같은 종류. 다른 유전자는 섞인 유전자로만 붙는다.
 
   // 능력과 기술은 모두 유전자 개수에서 나온다. 주 유전자가 몸과 기술을, 섞인 유전자가 그 변형을 정한다.
+  const NO_UP = { hp: 0, dmg: 0, cd: 0, spd: 0, range: 0, taken: 0 };
   function stats(u) {
-    const g = u.genes, b = BASE[u.main], total = geneTotal(u);
+    const g = u.genes, b = BASE[u.main], total = geneTotal(u), q = u.up || NO_UP, ss = CFG.statStep;
     const sb = u.main === 'beast' ? 0 : g.beast, sa = u.main === 'armor' ? 0 : g.armor, sr = u.main === 'ranger' ? 0 : g.ranger;
     const m = (1 + CFG.statPerGene * (total - 1)) * (1 + CFG.moltBonus * u.molts) * (u.mutant ? 1 + CFG.mutantBonus : 1);
     const fz = isFrenzy(u) ? CFG.frenzyMul : 1;
     return {
       level: levelOf(u), total,
-      maxHp: b.hp * m * (1 + 0.15 * sa),
-      dmg: b.dmg * m * fz,
-      cd: b.cd / ((1 + 0.06 * sb) * fz),
-      spd: b.spd * (1 + 0.06 * sb),
-      range: b.range, ranged: u.main === 'ranger',
-      taken: b.taken / (1 + 0.12 * sa),
+      maxHp: b.hp * m * (1 + 0.15 * sa) * (1 + ss.hp * q.hp),
+      dmg: b.dmg * m * fz * (1 + ss.dmg * q.dmg),
+      cd: b.cd / ((1 + 0.06 * sb) * fz * (1 + ss.cd * q.cd)),
+      spd: b.spd * (1 + 0.06 * sb) * (1 + ss.spd * q.spd),
+      range: b.range * (1 + ss.range * q.range), ranged: u.main === 'ranger',
+      taken: b.taken / ((1 + 0.12 * sa) * (1 + ss.taken * q.taken)),
       taunt: u.main === 'armor',
       lifesteal: Math.min(0.3, 0.05 * sb),             // 맹수 섞임: 흡혈
       skillCd: b.skillCd / (1 + 0.12 * sb),            // 맹수 섞임: 기술이 빨리 돈다
@@ -106,6 +111,7 @@
       uid: g.nextUid++, x, y, genes: { beast: genes.beast || 0, armor: genes.armor || 0, ranger: genes.ranger || 0 }, main,
       inst: 0, molts: 0, mutant: false, hp: 0, r: 0.5, cd: 0, skillT: 2, hitsTaken: 0, down: 0, pop: 0.5, face: -Math.PI / 2,
       state: 'ok', rushT: 0, tx: x, ty: y,
+      up: (g.statUp && g.statUp[main]) || null,   // 골드로 산 그 종류의 능력치 강화
     };
     u.r = radiusOf(u);
     u.hp = stats(u).maxHp;
@@ -118,6 +124,19 @@
 
   // opts.district: 몇 번째 구역인지(1부터). 키메라는 구역마다 맹수 하나로 처음부터 키운다.
   // opts.start: 골드로 산 시작 강화 { genes: 시작 맹수에 더할 유전자 수, hp: 네크로맨서 체력 단계 }. 불안정도는 늘 0으로 시작한다.
+  // 능력치 강화 단계를 범위 안의 정수로 읽는다: { beast: { hp, dmg, cd, spd, range, taken }, armor: {...}, ranger: {...} }
+  function statUpOf(o) {
+    const out = {};
+    for (const k of KINDS) {
+      out[k] = {};
+      for (const s of Object.keys(CFG.statStep)) {
+        const v = o && o[k] ? Math.floor(+o[k][s]) : 0;
+        out[k][s] = Number.isFinite(v) ? clamp(v, 0, CFG.gold.statMax) : 0;
+      }
+    }
+    return out;
+  }
+
   function newGame(seed, opts) {
     opts = opts || {};
     const district = Math.max(1, opts.district || 1);
@@ -134,11 +153,12 @@
       district, scale: 1 + CFG.districtScale * (district - 1),
       posts: [], postsTotal: 0, postsDown: 0, boss: null,
     };
-    // 네크로맨서는 직접 싸우지 못한다. 맹수 하나와 시작한다(골드로 산 만큼 유전자가 많다).
+    // 네크로맨서는 직접 싸우지 못한다. 유전자 하나짜리 맹수 하나와 시작한다.
     const step = (v, max) => { const n = Math.floor(+(v || 0)); return Number.isFinite(n) ? clamp(n, 0, max) : 0; };
-    const st = opts.start || {}, extra = step(st.genes, CFG.gold.geneMax);
+    const st = opts.start || {};
     g.necro.maxHp = g.necro.hp = 100 + CFG.gold.hpStep * step(st.hp, CFG.gold.hpMax);   // 골드로 산 체력
-    g.units.push(makeUnit(g, { beast: 1 + extra }, 'beast', g.necro.x, g.necro.y + 1.5));
+    g.statUp = statUpOf(st.stat);   // 골드로 산 소환수 능력치(종류마다)
+    g.units.push(makeUnit(g, { beast: 1 }, 'beast', g.necro.x, g.necro.y + 1.5));
     // 봉쇄 초소: 구역이 오를수록 많아진다(셋에서 다섯까지)
     // 구역은 아래에서 시작해 위로 밀고 올라간다. 가까운 초소부터 놓는다.
     const spots = POST_SPOTS;
@@ -649,19 +669,22 @@
   }
 
   // ---- 저장(골드와 강화). 순수 함수만: 읽고 쓰는 것은 화면 쪽이 localStorage로 한다 ----
-  // 저장 모양: { v: 1, best: 정복한 가장 높은 구역(최고 기록), cur: 지금 진행(제목 화면의 시작 구역은 cur+1), gold, up: { genes, hp } }.
+  // 저장 모양: { v: 1, best: 정복한 가장 높은 구역(최고 기록), cur: 지금 진행(제목 화면의 시작 구역은 cur+1), gold,
+  //   up: { hp: 네크로맨서 체력 단계, stat: { beast|armor|ranger: { hp, dmg, cd, spd, range, taken } } } }.
   // hp·cur가 없던 저장은 hp 0, cur=best로 읽는다. 골드는 best를 넘는 구역에만 주므로, cur를 1구역으로 되돌려도 다시 받지 않는다.
+  // 예전 저장의 up.genes(시작 맹수 유전자 강화)는 없앴다: 읽을 때 그 단계에 쓴 골드를 돌려준다. 다시 쓰는 저장에는 genes가 없어 두 번 돌려주지 않는다.
   const SAVE_V = 1, MAX_DISTRICT = Number.MAX_SAFE_INTEGER;   // 저장값 검증용 상한(사실상 없음)
-  function freshSave() { return { v: SAVE_V, best: 0, cur: 0, gold: 0, up: { genes: 0, hp: 0 } }; }
   const wholeNum = (v, max) => (Number.isFinite(+v) ? clamp(Math.floor(+v), 0, max) : 0);
+  const upOf = up => ({ hp: wholeNum(up && up.hp, CFG.gold.hpMax), stat: statUpOf(up && up.stat) });   // 늘 새 객체(깊은 복사)
+  function freshSave() { return { v: SAVE_V, best: 0, cur: 0, gold: 0, up: upOf(null) }; }
   // 저장 글을 읽는다. 깨졌으면 기본값. 새 저장이 없을 때만 옛 최고 기록(legacyBest)을 옮기고 그만큼 골드를 소급해 준다.
   function loadSave(text, legacyBest) {
     if (text !== null && text !== undefined) {   // 빈 글도 '있었는데 깨진 저장'이다
       try {
         const o = JSON.parse(text);
         if (o && o.v === SAVE_V) {
-          const best = wholeNum(o.best, MAX_DISTRICT);
-          return { v: SAVE_V, best, cur: o.cur === undefined ? best : wholeNum(o.cur, best), gold: wholeNum(o.gold, MAX_DISTRICT), up: { genes: wholeNum(o.up && o.up.genes, CFG.gold.geneMax), hp: wholeNum(o.up && o.up.hp, CFG.gold.hpMax) } };
+          const best = wholeNum(o.best, MAX_DISTRICT), refund = wholeNum(o.up && o.up.genes, CFG.gold.geneMaxOld) * CFG.gold.geneRefund;
+          return { v: SAVE_V, best, cur: o.cur === undefined ? best : wholeNum(o.cur, best), gold: wholeNum(o.gold, MAX_DISTRICT) + refund, up: upOf(o.up) };
         }
       } catch (e) { /* 깨진 저장은 기본값으로 */ }
       return freshSave();   // 새 저장이 있었는데 깨졌으면 옛 기록으로 다시 옮기지 않는다(소급이 되풀이되지 않게)
@@ -676,29 +699,38 @@
     const d = Math.floor(+district), cur = curOf(save);
     if (!Number.isFinite(d) || (d <= save.best && d <= cur)) return { save, gained: 0 };
     const gained = d > save.best ? (d - save.best) * CFG.gold.perClear : 0;
-    return { save: { v: SAVE_V, best: Math.max(save.best, d), cur: Math.max(cur, d), gold: save.gold + gained, up: Object.assign({}, save.up) }, gained };
+    return { save: { v: SAVE_V, best: Math.max(save.best, d), cur: Math.max(cur, d), gold: save.gold + gained, up: upOf(save.up) }, gained };
   }
   // 판이 끝났다: 부순 초소만큼 골드를 더한다(이기든 지든). 처음 정복의 골드는 clear가 따로 준다.
   function earn(save, posts) {
     const n = Number.isFinite(+posts) ? Math.max(0, Math.floor(+posts)) : 0, gained = n * CFG.gold.perPost;
     if (!gained) return { save, gained: 0 };
-    return { save: { v: SAVE_V, best: save.best, cur: curOf(save), gold: save.gold + gained, up: Object.assign({}, save.up) }, gained };
+    return { save: { v: SAVE_V, best: save.best, cur: curOf(save), gold: save.gold + gained, up: upOf(save.up) }, gained };
   }
   // 진행만 1구역으로 되돌린다. 최고 기록·골드·강화는 그대로(이미 받은 구역의 골드는 다시 받지 않는다).
-  function restart(save) { return { v: SAVE_V, best: save.best, cur: 0, gold: save.gold, up: Object.assign({}, save.up) }; }
-  // 살 수 있는 강화: genes(시작 맹수 유전자), hp(네크로맨서 체력)
-  const UP = { genes: { cost: 'geneCost', max: 'geneMax' }, hp: { cost: 'hpCost', max: 'hpMax' } };
-  function upCost(save, kind) { const u = UP[kind]; return !u || (save.up[kind] || 0) >= CFG.gold[u.max] ? null : CFG.gold[u.cost]; }
+  function restart(save) { return { v: SAVE_V, best: save.best, cur: 0, gold: save.gold, up: upOf(save.up) }; }
+  // 살 수 있는 강화: 'hp'(네크로맨서 체력), '종류.능력치'(예: 'armor.taken')
+  const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+  function upKey(key) {
+    if (key === 'hp') return { max: CFG.gold.hpMax, cost: CFG.gold.hpCost };
+    const [k, s] = String(key).split('.');
+    return KINDS.includes(k) && own(CFG.statStep, s) ? { k, s, max: CFG.gold.statMax, cost: CFG.gold.statCost } : null;
+  }
+  function upLevel(save, key) {
+    const u = upKey(key), up = upOf(save.up);
+    return !u ? 0 : u.k ? up.stat[u.k][u.s] : up.hp;
+  }
+  function upCost(save, key) { const u = upKey(key); return !u || upLevel(save, key) >= u.max ? null : u.cost; }
   // 강화 한 단계를 산다: 골드를 빼고 단계를 올리는 것을 함께. 못 사면 까닭을 돌려준다.
-  function buy(save, kind) {
-    const cost = upCost(save, kind);
+  function buy(save, key) {
+    const cost = upCost(save, key);
     if (cost === null) return { ok: false, save, reason: 'max' };
     if (save.gold < cost) return { ok: false, save, reason: 'gold' };
-    const up = Object.assign({}, save.up); up[kind] = (up[kind] || 0) + 1;
+    const u = upKey(key), up = upOf(save.up);
+    if (u.k) up.stat[u.k][u.s]++; else up.hp++;
     return { ok: true, save: { v: SAVE_V, best: save.best, cur: curOf(save), gold: save.gold - cost, up } };
   }
-  const geneCost = save => upCost(save, 'genes'), buyGene = save => buy(save, 'genes');
-  const Save = { fresh: freshSave, load: loadSave, clear: clearDistrict, earn, restart, cost: upCost, buy, geneCost, buyGene };
+  const Save = { fresh: freshSave, load: loadSave, clear: clearDistrict, earn, restart, cost: upCost, level: upLevel, buy };
 
   const api = { W, H, DURATION, MAX_LEVEL, KINDS, CFG, newGame, step, stats, geneTotal, levelOf, isFrenzy, heartKeep, scaleGenes, detonate, pin, absorb, feedTarget, spawnBoss, nextBlast, Save };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
