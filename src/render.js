@@ -546,13 +546,16 @@
     }
   }
 
+  // 폰 진동(안드로이드 크롬. 아이폰 사파리는 진동을 막아 두어 아무 일도 없다). 진동 모드에서도 손맛이 나게.
+  // 익은 폭발만 세게 준다. 덜 익은 폭발에는 주지 않는다(차이를 손으로도 느끼게).
+  const buzz = p => { try { if (navigator.vibrate && !document.hidden) navigator.vibrate(p); } catch (e) { /* 막혀 있으면 그냥 넘어간다 */ } };
   // 판에서 일어난 일을 소리와 흔들림으로 바꾼다
   function consumeEvents(dt) {
     for (const ev of g.events) {
       if (ev === 'absorb') Sound.absorb();
       else if (ev === 'purify') Sound.purify();
-      else if (ev === 'frenzy') { Sound.ripe(); Sound.beat(); }
-      else if (ev === 'boom') { Sound.boom(); shake = 0.75; if (!reduced) { flash = 0.14; hitstop = 0.07; } }   // 익은 폭발: 크게 흔들고 잠깐 멈추고 번쩍
+      else if (ev === 'frenzy') { Sound.ripe(); Sound.beat(); buzz(15); }
+      else if (ev === 'boom') { Sound.boom(); buzz([70, 40, 40]); shake = 0.75; if (!reduced) { flash = 0.14; hitstop = 0.07; } }   // 익은 폭발: 크게 흔들고 잠깐 멈추고 번쩍
       else if (ev === 'boomweak') { Sound.fizz(); shake = Math.max(shake, 0.2); }
       else if (ev === 'drained') Sound.hurt();
       else if (ev === 'warn') Sound.siren();
@@ -561,7 +564,7 @@
       else if (ev === 'block') { Sound.clash(); shake = Math.max(shake, 0.25); }
       else if (ev === 'necrohit') { Sound.hurt(); shake = Math.max(shake, 0.3); }
       else if (ev === 'rush') Sound.rush();
-      else if (ev === 'postdown') { Sound.clash(); Sound.purify(); shake = Math.max(shake, 0.6); }
+      else if (ev === 'postdown') { Sound.clash(); Sound.purify(); buzz([40, 60, 40]); shake = Math.max(shake, 0.6); }
       else if (ev === 'posthit' || ev === 'postbounce') Sound.clash();
       else if (ev === 'boss') { Sound.siren(); shake = Math.max(shake, 0.3); }
     }
