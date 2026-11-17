@@ -616,7 +616,11 @@
       }
       if (u.down > 0) {
         u.down -= dt;
-        if (u.down <= 0) { u.down = 0; u.drained = false; u.hp = stats(u).maxHp * 0.5; u.pop = 0.3; }
+        if (u.down <= 0) {
+          u.down = 0; u.drained = false; u.hp = stats(u).maxHp * 0.5; u.pop = 0.3;
+          // 익은 채 쓰러져 있는 동안 먹어 100%가 됐으면 막혀 있던 탈피를 일어나는 순간 한다
+          if (u.inst >= 100) startMolt(g, u);
+        }
         continue;
       }
       const s = stats(u);

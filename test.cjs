@@ -157,6 +157,15 @@ const approx = (a, b, tol, msg) => { if (!(Math.abs(a - b) <= tol)) throw new Er
     ok(!S.detonate(g) && S.nextBlast(g) === null && u.state === 'ok', '쓰러진 동안은 터뜨릴 수 없다');
     for (let i = 0; i < 60 * 7; i++) S.step(g, 1 / 60, { x: 0, y: 0 });
     ok(u.down === 0 && !u.drained && S.detonate(g) && u.state === 'rush', '일어나면 다시 터뜨릴 수 있다');
+    // 쓰러진 채 먹어 100%가 되면 그때는 못 터지고, 일어나는 순간 터진다(100%에 머무르지 않는다)
+    const g2 = fresh(); quiet(g2); const v = g2.units[0];
+    v.inst = 90; v.hp = 0.01;
+    for (let i = 0; i < 60 && !(v.down > 0); i++) S.step(g2, 1 / 60, { x: 0, y: 0 });
+    ok(v.down > 0 && v.drained, '익은 채 쓰러졌다');
+    v.inst = 100; S.step(g2, 1 / 60, { x: 0, y: 0 });
+    ok(v.state === 'ok' && v.down > 0, '쓰러진 동안은 100%여도 터지지 않는다');
+    for (let i = 0; i < 60 * 7 && v.state === 'ok'; i++) S.step(g2, 1 / 60, { x: 0, y: 0 });
+    ok(v.state !== 'ok', '일어나는 순간 100%면 터진다');
   }
   // 다른 유전자를 많이 먹어도 종류는 그대로, 체력은 깎이지 않는다
   {
@@ -480,7 +489,7 @@ function run(seed, policy, opts) {
     }
     if (g.units.length > S.CFG.maxUnits) throw new Error('키메라가 셋을 넘었다');
     for (const u of g.units) {
-      if (u.state === 'ok' && u.inst >= 100) throw new Error('100%인데 터지지 않았다');
+      if (u.state === 'ok' && u.inst >= 100 && !(u.down > 0)) throw new Error('100%인데 터지지 않았다(쓰러진 동안만 예외)');
       if (S.geneTotal(u) < 1 || u.genes[u.main] < 1) throw new Error('유전자가 비었다');
     }
   }
