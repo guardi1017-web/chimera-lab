@@ -132,6 +132,9 @@
   }
   document.getElementById('startBtn').addEventListener('click', () => start());
   document.getElementById('againBtn').addEventListener('click', () => start({ district: retryDistrict }));
+  const downBtn = document.getElementById('downBtn');
+  let downDistrict = 0;   // 진 끝 화면의 '내려가기' 버튼이 여는 구역(0이면 버튼 없음)
+  downBtn.addEventListener('click', () => { if (downDistrict) start({ district: downDistrict }); });
 
   // 누르고 끌면 이동. 두 번 톡톡 치면 자폭(탈피). 키메라를 한 번 톡 누르면 먹일 대상으로 찍는다.
   cv.addEventListener('pointerdown', e => {
@@ -649,6 +652,10 @@
       list.appendChild(b);
     }
     retryDistrict = won ? 1 : g.district;
+    // 지면 한 구역 아래로 내려가 초소 골드를 모을 수 있다(진행 기록은 내려가지 않아, 거기서 이기면 다시 이 구역으로 간다)
+    downDistrict = !won && g.district > 1 ? g.district - 1 : 0;
+    downBtn.hidden = !downDistrict;
+    if (downDistrict) downBtn.textContent = downDistrict + '구역으로 내려가기 (초소 골드 모으기)';
     again.textContent = won ? '1구역부터 다시' : g.district + '구역 다시';
     again.className = won ? '' : 'solo';   // 졌을 때는 이 버튼이 주된 행동이다
     endEl.hidden = false;

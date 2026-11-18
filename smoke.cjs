@@ -330,3 +330,30 @@ const base = JSON.stringify(S.Save.load(JSON.stringify({ v: 1, best: 1, cur: 1, 
   if (readSave().gold !== want + 3 * PP) throw new Error('이미 깬 1구역: 초소 골드만: ' + store['chimera-lab-save-v1']);
   console.log('초소 골드: 지면서 초소 둘 +' + 2 * PP + ', 초소 없이 지면 0, 2구역 처음 정복 +' + (4 * PP + PC) + ', 이미 깬 1구역 +' + 3 * PP);
 }
+
+// ---- 진 끝 화면에서 한 구역 내려가기: 초소 골드를 모으고, 이기면 다시 진 구역으로. 진행 기록은 내려가지 않는다 ----
+{
+  const PP = S.CFG.gold.perPost;
+  store['chimera-lab-save-v1'] = JSON.stringify({ v: 1, best: 3, cur: 3, gold: 0, up: { hp: 0 } });
+  freshSession(ls);
+  fire('startBtn', 'click', {}); frames(3);
+  if (game.district !== 4) throw new Error('내려가기: 4구역에서 시작해야 한다');
+  game.necro.hp = 0; frames(3);
+  if (els.downBtn.hidden || !/^3구역으로 내려가기/.test(els.downBtn.textContent)) throw new Error('진 4구역 끝 화면에 내려가기 버튼: ' + els.downBtn.hidden + ' / ' + els.downBtn.textContent);
+  fire('downBtn', 'click', {}); frames(3);
+  if (game.district !== 3 || els.end.hidden !== true) throw new Error('내려가기가 3구역을 열지 않았다: ' + game.district);
+  winNow();
+  const sv = readSave();
+  if (sv.cur !== 3 || sv.best !== 3 || sv.gold !== game.postsTotal * PP) throw new Error('내려간 3구역 정복: 초소 골드만, 진행은 그대로: ' + store['chimera-lab-save-v1']);
+  if (!els.downBtn.hidden) throw new Error('이긴 끝 화면에는 내려가기 버튼이 없다');
+  if (els.aceList.kids.length !== 1 || els.aceList.kids[0].textContent !== '4구역으로') throw new Error('내려간 구역을 이기면 다시 4구역으로: ' + (els.aceList.kids[0] || {}).textContent);
+  for (const f of els.aceList.kids[0].handlers.click) f({}); frames(3);
+  if (game.district !== 4) throw new Error('다시 4구역');
+  // 1구역에서 지면 내려갈 곳이 없다
+  store['chimera-lab-save-v1'] = JSON.stringify({ v: 1, best: 0, cur: 0, gold: 0, up: { hp: 0 } });
+  freshSession(ls);
+  fire('startBtn', 'click', {}); frames(3);
+  game.necro.hp = 0; frames(3);
+  if (!els.downBtn.hidden) throw new Error('1구역에서 지면 내려가기 버튼이 없어야 한다');
+  console.log('내려가기: 4구역에서 지면 "3구역으로 내려가기" → 3구역 정복은 초소 골드 +' + sv.gold + '만, 진행 그대로 → "4구역으로". 1구역에서는 버튼 없음');
+}
