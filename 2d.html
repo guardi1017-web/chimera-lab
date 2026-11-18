@@ -151,7 +151,7 @@
     rushSpeed: 14, rushMax: 1.0, rushReach: 10, rushBigBonus: 1.5,   // 뛰어들 수 있는 거리, 큰 표적에게 주는 거리 덤
     // 덜 익은 폭탄(불안정도 80% 미만)은 약하고 대가가 있다: 반경이 좁고, 잡몹을 즉사시키지 못하고, 심장이 유전자를 덜 지킨다
     blastMinRadius: 0.5, blastWeakMul: 3, heartWeakKeep: 0.6,
-    heartWeakWait: 3,          // 덜 익은 채 터진 심장은 식을 때까지(최대 4초) 주울 수 없다
+    heartWeakWait: 3,          // 덜 익은 채 터진 심장은 식을 때까지(최대 3초) 주울 수 없다
     postMinCharge: 0.5,        // 불안정도 40% 미만의 폭발은 초소에 통하지 않는다
     feedGap: 0.35, feedGapAfterRebirth: 0.8,           // 흡수 사이의 실제 시간 간격(초). 혼 더미 위에서 한꺼번에 먹지 않게
     heartTtl: 12, heartFullFor: 4, heartMinKeep: 0.8,   // 심장은 4초 안에 주우면 유전자 100%, 12초째에는 80%
@@ -162,7 +162,6 @@
     bossHp: 600, bossBlastCap: 0.35,                   // 대장: 폭발 한 번에 최대 체력의 35%까지만
     districtScale: 0.25,                               // 구역이 하나 오를 때마다 적의 체력과 피해가 이만큼 더
     // 골드: 판마다(이기든 지든) 부순 초소 하나에 perPost, 구역을 처음 정복하면 perClear를 더 받는다(2026-11-16 사용자 결정).
-    // 판 밖(끝 화면)에서 시작 맹수의 유전자와 네크로맨서 체력을 산다
     // 골드로 사는 강화: 소환수 능력치(종류마다 따로, 그 종류의 모든 소환수에 붙는다)와 네크로맨서 체력.
     // geneRefund·geneMaxOld: 예전 '시작 맹수 유전자' 강화 한 단계에 쓴 골드와 그 상한(그 강화를 없애며 돌려준다, 2026-11-17)
     gold: { perPost: 1, perClear: 3, statCost: 3, statMax: 5, hpCost: 3, hpStep: 10, hpMax: 8, geneRefund: 3, geneMaxOld: 8 },
