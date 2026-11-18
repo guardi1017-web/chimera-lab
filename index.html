@@ -883,10 +883,13 @@
 import * as THREE from 'three';   // 주소는 페이지의 importmap에 있다(build.cjs)
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+// 모델은 meshopt로 모양을 압축하고 그림을 1024로 줄였다(2026-11-19, 11.2MB → 3.4MB). 읽을 때 풀어야 한다.
+const newLoader = () => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 
 const S = window.ChimeraSim;
 // 모델 파일이 바뀌면 주소도 바뀌게(폰 브라우저가 예전 모델을 캐시에서 쓰지 않게). build.cjs가 모델 내용으로 채운다
-const ASSET_V = 'e9b1028e';
+const ASSET_V = 'c122674f';
 const css = getComputedStyle(document.documentElement);
 const tok = n => css.getPropertyValue(n).trim();
 const HEX = {
@@ -1111,7 +1114,7 @@ const faceToY = a => -a;   // 판의 각(atan2(dy, dx)) → 3D의 y축 회전
 // 모델의 앞은 -z, 키는 약 0.82, 길이 1로 온다. 게임은 +x가 앞이므로 -90도 돌려 놓는다.
 const BODY = {};
 for (const kind of ['beast', 'armor', 'ranger']) {
-  new GLTFLoader().load('assets/chimera-' + kind + '.glb?v=' + ASSET_V, gltf => {
+  newLoader().load('assets/chimera-' + kind + '.glb?v=' + ASSET_V, gltf => {
     // 소총수는 사람형 뼈대의 걷기를 쓴다. 팔과 몸통 동작은 둥근 몸을 앞으로 꺾고 앞팔을 늘리므로 다리 회전만 남긴다.
     if (kind === 'ranger') for (const c of gltf.animations) c.tracks = c.tracks.filter(t => /(Thigh|Calf|Foot|Toe).*\.quaternion$/.test(t.name));
     BODY[kind] = gltf;
@@ -1338,7 +1341,7 @@ scene.add(necro);
 // 불러오는 동안이나 불러오지 못하면 위의 원뿔을 그대로 쓴다.
 const hero = { root: null, mixer: null, act: {}, cur: null, mats: [], face: -Math.PI / 2, last: null };
 const HERO_H = 2.1;    // 판 위의 키(모델은 높이 1로 온다). 키메라보다 조금 크게
-new GLTFLoader().load('assets/necromancer.glb?v=' + ASSET_V, gltf => {
+newLoader().load('assets/necromancer.glb?v=' + ASSET_V, gltf => {
   const root = gltf.scene;
   root.scale.setScalar(HERO_H);
   root.traverse(o => {
