@@ -115,7 +115,10 @@ console.log('입력 확인: 찍기 ' + pins + '번, 자폭 ' + booms + '번, 연
 
 // ---- 목적을 이뤄 구역을 차지하고, 키메라를 골라 다음 구역으로 ----
 game.postsTotal = game.posts.length;
-frames(120);
+// 화면 시드가 시각으로 정해져 판마다 다르다: 기다리는 동안 죽지 않게 하고, 그사이 초소가 부서져 카드가 떴으면 고른다
+const pickCards = () => { while (game.choice) { frames(22); for (const f of els.mutList.kids[0].handlers.click) f({}); } };
+game.necro.hp = game.necro.maxHp = 1e6;
+frames(120); pickCards();
 for (const u of game.units) u.state = 'ok';
 for (const p of game.posts) p.dead = true;
 game.postsDown = game.postsTotal;
