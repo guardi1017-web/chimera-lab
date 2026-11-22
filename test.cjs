@@ -180,6 +180,77 @@ const approx = (a, b, tol, msg) => { if (!(Math.abs(a - b) <= tol)) throw new Er
     ok(re && re.main === 'armor', '심장으로 깨어나도 종류는 그대로');
   }
 
+  // 종류별 특수 폭발(다 익은 폭발만)
+  {
+    const R = C.blastRadius, sp = C.special, dist2 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+    // 한 마리만 남긴 판에서 그 키메라를 그 자리에 바로 터뜨린다(가까운 적이 없어 제자리 폭발)
+    const blast = (main, inst) => {
+      const g = fresh(); const u = g.units[0]; u.main = main; u.genes = { beast: 0, armor: 0, ranger: 0 }; u.genes[main] = 5; u.inst = inst;
+      u.x = 9; u.y = 15; S.detonate(g);
+      for (let i = 0; i < 90 && g.units.length; i++) S.step(g, 1 / 60, { x: 0, y: 0 });
+      return g;
+    };
+    // 사수: 집속탄 5발이 0.25~0.4초 사이에 차례로 터진다. 잡몹 즉사, 돌격조는 본 폭발의 25%, 초소는 그대로
+    {
+      const g = fresh(); const u = g.units[0]; u.main = 'ranger'; u.genes = { beast: 0, armor: 0, ranger: 5 }; u.inst = 85; u.x = 9; u.y = 15;
+      S.detonate(g);   // 적이 없을 때 눌러 제자리에서 터지게 하고, 적은 그 뒤에 놓는다
+      const D = R * sp.ranger.dist, a1 = -Math.PI / 2 + Math.PI * 2 / sp.ranger.n;
+      const ring = foe(g, 9, 15 - D - 1, { hp: 9999, maxHp: 9999 });   // 본 폭발 밖, 첫 집속탄 바로 바깥
+      const big = foe(g, 9 + (D + 1.2) * Math.cos(a1), 15 + (D + 1.2) * Math.sin(a1), { elite: true, hp: 1000, maxHp: 1000, r: 0.95, mode: 'chase', rechargeT: 99, stun: 99, cd: 99, dmg: 0 });   // 둘째 집속탄에만 닿는다
+      g.posts = [{ post: true, x: 9, y: 15 - D - 1.6, r: 0.9, hp: 2, maxHp: 2, cd: 99, dead: false }];
+      g.postsTotal = 1;
+      let t = 0; while (g.units.length && t < 2) { S.step(g, 1 / 60, { x: 0, y: 0 }); t += 1 / 60; }
+      eq(g.clusters.length, sp.ranger.n, '사수 다 익은 폭발: 집속탄 ' + sp.ranger.n + '발');
+      ok(!ring.dead, '집속탄이 터지기 전에는 무사하다');
+      const fired = [];
+      for (let i = 0; i < 40; i++) { g.events = []; S.step(g, 1 / 60, { x: 0, y: 0 }); if (g.events.includes('subboom')) fired.push(i); }
+      eq(fired.length, sp.ranger.n, '집속탄은 한 발씩 시차를 두고 터진다');
+      ok(fired[fired.length - 1] - fired[0] >= 6, '첫 발과 끝 발 사이에 0.1초 넘는 시차');
+      eq(g.clusters.length, 0, '다 터지면 집속탄이 남지 않는다');
+      ok(ring.dead, '집속탄: 잡몹은 체력과 상관없이 즉사');
+      approx(big.hp, 1000 * (1 - sp.ranger.frac), 1, '집속탄: 돌격조는 본 폭발(최대 체력)의 25%');
+      eq(g.posts[0].hp, 2, '집속탄은 초소에 피해를 주지 않는다');
+    }
+    // 덜 익은 폭발에는 특수 효과가 없다
+    for (const m of ['ranger', 'beast', 'armor']) {
+      const g = blast(m, 60);
+      ok(g.clusters.length === 0 && g.vortexes.length === 0 && g.necro.shieldT === 0, '덜 익은 폭발: 특수 효과 없음 (' + m + ')');
+    }
+    // 맹수: 소용돌이가 3초 동안 적과 혼을 끈다(돌진 중인 돌격조는 끌지 않는다)
+    {
+      const g = blast('beast', 85);
+      eq(g.vortexes.length, 1, '맹수 다 익은 폭발: 소용돌이');
+      const v = g.vortexes[0];
+      approx(v.r, R * sp.beast.r, 1e-9, '소용돌이 반경');
+      const e = foe(g, v.x + v.r - 0.5, v.y, { stun: 0, cd: 99 }), far = foe(g, v.x + v.r + 2, v.y, { stun: 99 });
+      const ch = foe(g, v.x, v.y + v.r - 0.5, { elite: true, hp: 999, maxHp: 999, r: 0.95, mode: 'charge', dx: 0, dy: 0, run: 0, runMax: 99, hitNecro: true, hitUnits: {}, stun: 0, cd: 99 });
+      g.souls.push({ x: v.x - v.r + 0.3, y: v.y, type: 'beast', q: 1, ttl: 9 });
+      const s = g.souls[g.souls.length - 1], e0 = dist2(e, v), s0 = dist2(s, v), c0 = dist2(ch, v), f0 = far.x;
+      for (let i = 0; i < 30; i++) S.step(g, 1 / 60, { x: 0, y: 0 });
+      ok(dist2(s, v) < s0 - 2, '소용돌이: 혼을 가운데로 끈다');
+      ok(far.x === f0, '소용돌이 밖의 적은 그대로');
+      ok(Math.abs(dist2(ch, v) - c0) < 1e-9, '돌진 중인 돌격조는 끌지 않는다');
+      ok(dist2(e, v) < e0, '소용돌이: 적을 가운데로 끈다');
+      for (let i = 0; i < 60 * 3; i++) S.step(g, 1 / 60, { x: 0, y: 0 });
+      eq(g.vortexes.length, 0, '소용돌이는 3초 뒤 사라진다');
+    }
+    // 갑주: 4초 동안 네크로맨서가 받는 모든 피해(잡몹, 돌격조 돌진, 초소)를 막는다
+    {
+      const g = blast('armor', 85), n = g.necro;
+      approx(n.shieldT, sp.armor.t - 0.1, 0.4, '갑주 다 익은 폭발: 방벽 4초');
+      n.hp = 50;
+      foe(g, n.x + 0.5, n.y, { stun: 0, cd: 0, dmg: 10 });
+      foe(g, n.x - 1, n.y, { elite: true, hp: 999, maxHp: 999, r: 0.95, mode: 'charge', dx: 1, dy: 0, run: 0, runMax: 99, hitNecro: false, hitUnits: {}, stun: 0, cd: 99 });
+      g.posts = [{ post: true, x: n.x, y: n.y - 3, r: 0.9, hp: 2, maxHp: 2, cd: 0, dead: false }];
+      let blocks = 0;
+      for (let i = 0; i < 60 && n.shieldT > 0; i++) { g.events = []; S.step(g, 1 / 60, { x: 0, y: 0 }); blocks += g.events.filter(x => x === 'shieldblock').length; }
+      eq(n.hp, 50, '방벽 동안 네크로맨서 체력 그대로');
+      ok(blocks >= 3, '잡몹·돌진·초소를 모두 막는다 (막은 수 ' + blocks + ')');
+      n.shieldT = 0; g.enemies = []; g.posts[0].cd = 0;
+      S.step(g, 1 / 60, { x: 0, y: 0 });
+      ok(n.hp < 50, '방벽이 끝나면 다시 맞는다');
+    }
+  }
   // 뛰어드는 중인 키메라는 혼을 먹지 않는다
   {
     const g = fresh(); soulAt(g, 'armor', 1); soulAt(g, 'ranger', 1);
@@ -437,7 +508,7 @@ const approx = (a, b, tol, msg) => { if (!(Math.abs(a - b) <= tol)) throw new Er
     ok(!b.ok && b.reason === 'max', '상한이면 못 산다');
   }
   console.log('규칙 확인: 골드(처음 정복만), 소환수 능력치·네크로맨서 체력 강화, 예전 유전자 강화 환불, 저장 읽기·소급·깨진 저장, 구매');
-  console.log('규칙 확인: 되살리기, 흡수와 불안정도, 과부하, 탈피 폭발, 심장 계승, 수동 자폭, 연결, 돌격조와 갑주 방어');
+  console.log('규칙 확인: 되살리기, 흡수와 불안정도, 과부하, 탈피 폭발, 심장 계승, 수동 자폭, 연결, 돌격조와 갑주 방어, 종류별 특수 폭발(집속탄·소용돌이·방벽)');
 }
 
 // ---- 봇 ----

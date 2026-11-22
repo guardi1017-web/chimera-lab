@@ -21,6 +21,14 @@
     frenzyAt: 80, frenzyMul: 1.5,
     // 익은 채(80~99%) 들고 있으면 대가: 초마다 최대 체력의 frenzyDrain만큼 샌다. 그렇게 쓰러지면 일어날 때까지 터뜨릴 수 없다(2026-11-16 사용자 결정)
     frenzyDrain: 0.05,
+    // 다 익은 폭발의 종류별 특수 효과(2026-11-22 8차 지시서). 거리·반경은 다 익은 폭발 반경(R)의 배수.
+    // 사수: 집속탄 n발을 R*dist에 깔고 t0~t1초에 차례로 터뜨린다(반경 R*r, 잡몹 즉사, 돌격조·대장은 본 폭발 피해의 frac, 초소는 그대로).
+    // 맹수: t초 동안 반경 R*r 소용돌이가 돌진하지 않는 적과 혼을 가운데로 끈다(초당 거리). 갑주: 네크로맨서가 t초 동안 모든 피해를 받지 않는다.
+    special: {
+      ranger: { n: 5, dist: 0.95, r: 0.55, t0: 0.25, t1: 0.4, frac: 0.25 },
+      beast: { t: 3, r: 1.45, pullFoe: 4.5, pullSoul: 7 },
+      armor: { t: 4 },
+    },
     blastRadius: 3.2, blastEliteFrac: 0.1, blastKnock: 3, blastStun: 1.2,
     rushSpeed: 14, rushMax: 1.0, rushReach: 10, rushBigBonus: 1.5,   // 뛰어들 수 있는 거리, 큰 표적에게 주는 거리 덤
     // 덜 익은 폭탄(불안정도 80% 미만)은 약하고 대가가 있다: 반경이 좁고, 잡몹을 즉사시키지 못하고, 심장이 유전자를 덜 지킨다
@@ -141,8 +149,9 @@
     const district = Math.max(1, opts.district || 1);
     const g = {
       W, H, DURATION, t: 0, over: null, rand: mulberry(seed || 1), nextUid: 1,
-      necro: { x: W / 2, y: H - 3.5, hp: 100, maxHp: 100, r: 0.5, hurt: 0 },
+      necro: { x: W / 2, y: H - 3.5, hp: 100, maxHp: 100, r: 0.5, hurt: 0, shieldT: 0 },   // shieldT: 갑주 방벽이 남은 시간
       units: [], enemies: [], souls: [], hearts: [], fx: [], events: [],
+      clusters: [], vortexes: [],   // 사수 집속탄(터지기를 기다림), 맹수 소용돌이
       pinned: null,             // 먹일 대상으로 찍어 둔 키메라(없으면 혼에 가장 가까운 키메라)
       link: null,               // 지금 연결된 혼과 키메라(화면의 예고선)
       feedT: 0,                 // 0이 되어야 다음 혼을 먹일 수 있다(실제 시간)
@@ -388,9 +397,39 @@
     g.units = g.units.filter(x => x !== u);
     if (g.pinned === u.uid) g.pinned = null;
     g.molts++;
-    if (c >= 1) { g.ripeBlasts++; if (g.firstRipeT === null) g.firstRipeT = g.t; }
+    if (c >= 1) { g.ripeBlasts++; if (g.firstRipeT === null) g.firstRipeT = g.t; specialBlast(g, u, R); }
     g.fx.push({ k: 'boom', x: u.x, y: u.y, r: R, weak: c < 1, t: c < 1 ? 0.4 : 0.7 });
     g.events.push(c < 1 ? 'boomweak' : 'boom');   // 연출용: 익은 폭발과 덜 익은 폭발을 다르게 보이고 들리게
+  }
+  // 다 익은 폭발만: 주 유전자에 따라 특수 효과가 하나 더 붙는다
+  function specialBlast(g, u, R) {
+    const sp = CFG.special;
+    if (u.main === 'ranger') {
+      const o = sp.ranger;
+      for (let i = 0; i < o.n; i++) {
+        const a = -Math.PI / 2 + i * Math.PI * 2 / o.n;
+        g.clusters.push({ x: clamp(u.x + Math.cos(a) * R * o.dist, 0.4, W - 0.4), y: clamp(u.y + Math.sin(a) * R * o.dist, 0.4, H - 0.4), r: R * o.r, frac: o.frac, t: o.t0 + (o.t1 - o.t0) * i / Math.max(1, o.n - 1) });
+      }
+    } else if (u.main === 'beast') {
+      const o = sp.beast;
+      g.vortexes.push({ x: u.x, y: u.y, r: R * o.r, t: o.t, maxT: o.t });
+    } else if (u.main === 'armor') g.necro.shieldT = Math.max(g.necro.shieldT, sp.armor.t);
+  }
+  // 집속탄 하나가 터진다: 잡몹은 즉사, 돌격조·대장은 본 폭발 피해의 일부, 초소는 건드리지 않는다
+  function subBoom(g, b) {
+    for (const e of g.enemies) {
+      if (e.dead || dist(e, b) > b.r + e.r) continue;
+      if (e.elite) damageEnemy(g, e, e.maxHp * (e.boss ? CFG.bossBlastCap : 1) * b.frac + 0.01, null, null);
+      else killEnemy(g, e);
+    }
+    g.fx.push({ k: 'subboom', x: b.x, y: b.y, r: b.r, t: 0.35 });
+    g.events.push('subboom');
+  }
+  // 갑주 방벽이 네크로맨서에게 오는 공격 하나를 막는다
+  function shieldBlock(g, src) {
+    const n = g.necro;
+    g.fx.push({ k: 'block', x: n.x, y: n.y, face: Math.atan2(src.y - n.y, src.x - n.x), r: n.r + 0.3, t: 0.25 });
+    g.events.push('shieldblock');
   }
   // 초소를 다 부수면 대장이 나타난다. 돌격조처럼 예고하고 달려들지만 훨씬 단단하다.
   function spawnBoss(g) {
@@ -476,6 +515,7 @@
 
     g.t += dt;
     n.hurt = Math.max(0, n.hurt - dt);
+    n.shieldT = Math.max(0, n.shieldT - dt);
     spawn(g, dt);
 
     for (const u of g.units.slice()) {
@@ -528,6 +568,18 @@
       }
     }
 
+    // 사수 집속탄: 시간이 되면 터진다
+    for (const b of g.clusters.slice()) { b.t -= dt; if (b.t <= 0) subBoom(g, b); }
+    g.clusters = g.clusters.filter(b => b.t > 0);
+    // 맹수 소용돌이: 돌진하지 않는 적과 바닥의 혼을 가운데로 끈다
+    for (const v of g.vortexes) {
+      v.t -= dt;
+      const pull = (o, sp) => { const d = dist(o, v); if (d <= v.r && d > 1e-3) { const f = o.face; moveToward(o, v.x, v.y, Math.min(d, sp * dt)); if (f !== undefined) o.face = f; } };
+      for (const e of g.enemies) if (!e.dead && !(e.elite && e.mode === 'charge')) pull(e, CFG.special.beast.pullFoe);
+      for (const s of g.souls) pull(s, CFG.special.beast.pullSoul);
+    }
+    g.vortexes = g.vortexes.filter(v => v.t > 0);
+
     for (const e of g.enemies) {
       if (e.dead) continue;
       if (e.bleedT > 0) { e.bleedT -= dt; damageEnemy(g, e, e.bleed * dt, null, null); if (e.dead) continue; }
@@ -563,9 +615,13 @@
           knock(u, e.x - e.dy * 0.01, e.y + e.dx * 0.01, 2.2);
         }
         if (!stopped && !e.hitNecro && dist(e, n) < e.r + n.r) {
-          e.hitNecro = true; n.hp -= CFG.chargeDmg; n.hurt = 0.4;
-          knock(n, e.x, e.y, 1.5);
-          g.events.push('necrohit');
+          e.hitNecro = true;
+          if (n.shieldT > 0) shieldBlock(g, e);
+          else {
+            n.hp -= CFG.chargeDmg; n.hurt = 0.4;
+            knock(n, e.x, e.y, 1.5);
+            g.events.push('necrohit');
+          }
         }
         const out = e.x < 0.6 || e.x > W - 0.6 || e.y < 0.6 || e.y > H - 0.6;
         e.x = clamp(e.x, 0.6, W - 0.6); e.y = clamp(e.y, 0.6, H - 0.6);
@@ -591,7 +647,7 @@
       if (td <= reach + 0.1 && e.cd <= 0) {
         e.cd = f.cd;
         if (shooter) g.fx.push({ k: 'shot', x: e.x, y: e.y, tx: tgt.x, ty: tgt.y, arch: 'danger', t: 0.12 });
-        if (isNecro) { n.hp -= e.dmg; n.hurt = 0.25; }
+        if (isNecro) { if (n.shieldT > 0) shieldBlock(g, e); else { n.hp -= e.dmg; n.hurt = 0.25; } }
         else hurtUnit(g, tgt, e.dmg);
       }
     }
@@ -602,7 +658,7 @@
       p.cd -= dt;
       if (p.cd <= 0 && dist(p, n) < CFG.postRange) {
         p.cd = CFG.postCd;
-        n.hp -= CFG.postDmg * g.scale; n.hurt = 0.2;
+        if (n.shieldT > 0) shieldBlock(g, p); else { n.hp -= CFG.postDmg * g.scale; n.hurt = 0.2; }
         g.fx.push({ k: 'shot', x: p.x, y: p.y, tx: n.x, ty: n.y, arch: 'danger', t: 0.14 });
       }
     }
