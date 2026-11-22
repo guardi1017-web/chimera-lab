@@ -251,6 +251,136 @@ const approx = (a, b, tol, msg) => { if (!(Math.abs(a - b) <= tol)) throw new Er
       ok(n.hp < 50, '방벽이 끝나면 다시 맞는다');
     }
   }
+  // 초소 변이 3지선다
+  {
+    const M = C.mut, still = { x: 0, y: 0 };
+    const postAt = (g, x, y) => { const p = { post: true, x, y, r: 0.9, hp: C.postHits, maxHp: C.postHits, cd: 99, dead: false }; g.posts.push(p); g.postsTotal = g.posts.length; return p; };
+    // 키메라 하나를 (x, y)에 두고 그 자리에서 터뜨린다(적·초소는 그 뒤에 놓는다)
+    const bombAt = (g, main, inst, x, y) => {
+      const u = g.units[0]; u.main = main; u.genes = { beast: 0, armor: 0, ranger: 0 }; u.genes[main] = 5; u.inst = inst; u.x = x; u.y = y;
+      for (const o of g.units) if (o !== u) o.inst = 0;
+      g.pinned = null; S.detonate(g); return u;
+    };
+    const run = (g, n) => { for (let i = 0; i < n; i++) S.step(g, 1 / 60, still); };
+    // 초소를 부수면 카드 셋이 나오고, 고를 때까지 판이 멈춘다
+    {
+      const g = fresh(); bombAt(g, 'beast', 85, 9, 15); postAt(g, 9.5, 15); postAt(g, 9, 30 - 1);
+      run(g, 3);
+      ok(Array.isArray(g.choice) && g.choice.length === 3 && new Set(g.choice).size === 3 && g.choice.every(id => S.MUTS[id]), '초소를 부수면 서로 다른 카드 셋');
+      ok(g.events.includes('choice'), '카드가 나올 때 알린다');
+      const t0 = g.t, foeE = foe(g, 9, 5, { stun: 0, cd: 0 }), y0 = foeE.y;
+      run(g, 60);
+      ok(g.t === t0 && foeE.y === y0, '고르는 동안 판이 완전히 멈춘다');
+      ok(!S.chooseMut(g, 'no_such') && g.choice, '없는 카드는 고를 수 없다');
+      const other = Object.keys(S.MUTS).find(id => !g.choice.includes(id));
+      ok(!S.chooseMut(g, other) && g.choice, '보여 준 셋 밖의 카드는 고를 수 없다');
+      const id = g.choice[1]; g.events = [];
+      ok(S.chooseMut(g, id) && g.choice === null && g.muts[id] === 1 && g.events.includes('mutpick'), '고르면 그 변이를 가진다');
+      run(g, 1); ok(g.t > t0, '고르면 판이 다시 간다');
+      // 같은 시드면 같은 카드
+      const a = fresh(), b = fresh();
+      for (const x of [a, b]) { bombAt(x, 'beast', 85, 9, 15); postAt(x, 9.5, 15); run(x, 3); }
+      eq(a.choice.join(), b.choice.join(), '같은 시드면 같은 카드');
+    }
+    // 한 번에 초소 둘을 부수면 두 번 고른다. 한 번만 가질 수 있는 카드는 다시 나오지 않는다
+    {
+      const g = fresh(); bombAt(g, 'beast', 85, 9, 15); postAt(g, 10, 15); postAt(g, 8, 15);
+      run(g, 3);
+      ok(g.choice, '첫째 고르기');
+      const first = g.choice.find(id => S.MUTS[id].max === 1) || g.choice[0];
+      S.chooseMut(g, first);
+      ok(g.choice && g.choice.length === 3, '둘째 고르기가 이어서 나온다');
+      if (S.MUTS[first].max === 1) ok(!g.choice.includes(first), '한 번만 가질 수 있는 카드는 다시 나오지 않는다');
+      S.chooseMut(g, g.choice[0]); ok(g.choice === null, '다 고르면 판이 간다');
+    }
+    // 연쇄 도화선: 빽빽한 잡몹 무리에서도 한 번만 이어진다(끝없이 번지지 않는다)
+    {
+      const g = fresh(); g.muts.chain_fuse = 1; bombAt(g, 'armor', 85, 9, 15);   // 갑주: 소용돌이가 무리를 끌지 않게
+      const pack = [];
+      for (let i = 0; i < 30; i++) pack.push(foe(g, 9 + (i % 6) * 0.9 - 2.2, 15 + Math.floor(i / 6) * 0.9 - 1.8));
+      for (let i = 0; i < 30; i++) pack.push(foe(g, 9 + (i % 6) * 0.9 - 2.2, 18.7 + Math.floor(i / 6) * 0.9));   // 본 폭발 밖 무리
+      run(g, 2);
+      const firstWave = pack.filter(e => e.dead).length, chains = g.clusters.filter(b => b.isChain).length;
+      ok(firstWave > 0 && chains === firstWave, '본 폭발로 죽은 잡몹마다 연쇄 폭발 하나 (' + chains + ')');
+      let maxQ = 0; for (let i = 0; i < 60; i++) { S.step(g, 1 / 60, still); maxQ = Math.max(maxQ, g.clusters.length); }
+      ok(g.clusters.length === 0 && maxQ <= chains, '연쇄 폭발로 죽은 잡몹은 다시 잇지 않는다');
+      ok(pack.some(e => e.dead && e.y > 18.5) && pack.some(e => !e.dead), '연쇄는 한 겹만 번진다');
+    }
+    // 집속탄으로 죽은 잡몹도 연쇄를 잇는다
+    {
+      const g = fresh(); g.muts.chain_fuse = 1; bombAt(g, 'ranger', 85, 9, 15); run(g, 2);
+      const b = g.clusters[0]; foe(g, b.x, b.y);
+      run(g, 30); ok(g.fx.some(f => f.k === 'subboom' && f.chain) || g.clusters.some(c => c.isChain) || g.kills >= 2, '집속탄으로 죽은 잡몹도 연쇄 폭발');
+    }
+    // 과식 본능: 혼 불안정도 +50%, 익은 폭발 반경 +30%
+    {
+      const g = fresh(); g.muts.gluttony = 1; soulAt(g, 'armor', 1); soulAt(g, 'ranger', 1);
+      const u = g.units[0]; g.pinned = u.uid; u.inst = 0; soulAt(g, 'beast', 1);
+      approx(u.inst, C.soul[1].inst * (1 + M.gluttonyInst), 1e-9, '과식 본능: 불안정도 1.5배');
+      const g2 = fresh(); g2.muts.gluttony = 1; bombAt(g2, 'armor', 85, 9, 15); run(g2, 2);
+      approx(g2.fx.find(f => f.k === 'boom').r, C.blastRadius * (1 + M.gluttonyR), 1e-9, '과식 본능: 익은 폭발 반경 1.3배');
+      const g3 = fresh(); g3.muts.gluttony = 1; bombAt(g3, 'armor', 40, 9, 15); run(g3, 2);
+      ok(g3.fx.find(f => f.k === 'boom').r < C.blastRadius, '덜 익은 폭발은 넓어지지 않는다');
+    }
+    // 쌍둥이 심장: 익은 폭발이면 심장 둘
+    {
+      const g = fresh(); g.muts.twin_heart = 1; bombAt(g, 'armor', 85, 9, 15); run(g, 2);
+      ok(g.hearts.length === 2 && Math.abs(g.hearts[0].x - g.hearts[1].x - 2 * -M.twinDx) < 1e-9, '쌍둥이 심장: 익은 폭발에 심장 둘');
+      const g2 = fresh(); g2.muts.twin_heart = 1; bombAt(g2, 'armor', 60, 9, 15); run(g2, 2);
+      eq(g2.hearts.length, 1, '덜 익은 폭발은 심장 하나');
+    }
+    // 흡혈 심장: 심장을 주우면 네크로맨서 +20, 둘레 적 기절
+    {
+      const g = fresh(); g.muts.blood_heart = 1; const n = g.necro; n.hp = 50; g.units = [];
+      const near = foe(g, n.x + 2, n.y, { stun: 0 }), far = foe(g, n.x + 8, n.y, { stun: 0 });
+      g.hearts.push({ x: n.x, y: n.y, genes: { beast: 3, armor: 0, ranger: 0 }, main: 'beast', molts: 0, mutant: false, keep: 1, wait: 0, age: 0, ttl: 12 });
+      S.step(g, 1 / 60, still);
+      ok(g.units.length === 1 && n.hp >= 50 + M.bloodHeal - 5, '흡혈 심장: 계승하면 네크로맨서 회복 (' + n.hp.toFixed(1) + ')');
+      ok(near.stun > 1 && far.stun <= 0, '흡혈 심장: 둘레의 적만 기절');
+    }
+    // 광폭 유지: 익은 채 들어도 체력이 새지 않고 화력 2배
+    {
+      const g = fresh(); g.spawnT = 1e9; const u = g.units[0]; u.inst = 85; const m = S.stats(u).maxHp; u.hp = m;
+      const calm = (u.inst = 0, S.stats(u).dmg); u.inst = 85;
+      g.choice = ['mad_blood', 'gluttony', 'twin_heart']; S.chooseMut(g, 'mad_blood');
+      run(g, 120);
+      ok(u.hp === m && !(u.down > 0), '광폭 유지: 익은 채 2초 들어도 체력 그대로');
+      approx(S.stats(u).dmg / calm, M.madFrenzyMul, 1e-9, '광폭 유지: 광기 화력 2배');
+      const g2 = fresh(); g2.muts.mad_blood = 1; soulAt(g2, 'armor', 1); ok(g2.units[1].mad, '그 뒤에 되살린 키메라도 광폭 유지');
+    }
+    // 고속 재연성: 계승하면 불안정도 40%, 5초 동안 공속·이속 2배
+    {
+      const g = fresh(); g.muts.fast_molt = 1; const n = g.necro; g.units = [];
+      g.hearts.push({ x: n.x, y: n.y, genes: { beast: 3, armor: 0, ranger: 0 }, main: 'beast', molts: 0, mutant: false, keep: 1, wait: 0, age: 0, ttl: 12 });
+      S.step(g, 1 / 60, still);
+      const u = g.units[0], fast = S.stats(u);
+      ok(u.inst === M.fastInst && u.hasteT > 4.9, '고속 재연성: 40%에서 시작');
+      run(g, 60 * 5 + 2);
+      const slow = S.stats(u);
+      approx(slow.cd / fast.cd, M.fastMul, 1e-9, '고속 재연성: 공격 간격 절반이 5초 뒤 끝난다'); approx(fast.spd / slow.spd, M.fastMul, 1e-9, '고속 재연성: 이속 2배');
+    }
+    // 공성 특화: 40% 이상 덜 익은 폭발도 초소를 바로 부수고, 대장 상한 50%
+    {
+      const g = fresh(); g.muts.post_breaker = 1; bombAt(g, 'beast', 45, 9, 15); const p = postAt(g, 9.4, 15); run(g, 2);
+      ok(p.dead, '공성 특화: 45% 폭발로 초소가 한 번에 부서진다');
+      const g2 = fresh(); g2.muts.post_breaker = 1; bombAt(g2, 'beast', 20, 9, 15); const p2 = postAt(g2, 9.4, 15); run(g2, 2);
+      ok(!p2.dead && p2.hp === C.postHits, '공성 특화: 40% 미만은 그대로 통하지 않는다');
+      const g3 = fresh(); g3.muts.post_breaker = 1; bombAt(g3, 'beast', 85, 9, 15);
+      const boss = S.spawnBoss(g3); boss.x = 9.5; boss.y = 15; boss.mode = 'chase'; boss.stun = 99; run(g3, 2);
+      approx(boss.hp, boss.maxHp * (1 - M.breakerBossCap), 1, '공성 특화: 대장 폭발 상한 50%');
+    }
+    // 특수 폭발 증폭: 집속탄 8발, 소용돌이 4.5초·반경 1.8배, 방벽 6초
+    {
+      const g = fresh(); g.muts.mega_special = 1; bombAt(g, 'ranger', 85, 9, 15); run(g, 2); eq(g.clusters.length, C.megaSpecial.rangerN, '증폭: 집속탄 8발');
+      const g2 = fresh(); g2.muts.mega_special = 1; bombAt(g2, 'beast', 85, 9, 15); run(g2, 2);
+      ok(g2.vortexes[0].maxT === C.megaSpecial.beastT && Math.abs(g2.vortexes[0].r - C.blastRadius * C.megaSpecial.beastR) < 1e-9, '증폭: 소용돌이 4.5초, 반경 1.8배');
+      const g3 = fresh(); g3.muts.mega_special = 1; bombAt(g3, 'armor', 85, 9, 15); run(g3, 2);
+      ok(g3.necro.shieldT > C.megaSpecial.armorT - 0.1, '증폭: 방벽 6초');
+      const n = g3.necro, e = foe(g3, n.x + 0.6, n.y, { stun: 0, cd: 0, dmg: 5 }), d0 = Math.hypot(e.x - n.x, e.y - n.y);
+      run(g3, 3);
+      ok(Math.hypot(e.x - n.x, e.y - n.y) > d0 + 1, '증폭된 방벽: 막을 때마다 적을 밀어낸다');
+    }
+  }
   // 뛰어드는 중인 키메라는 혼을 먹지 않는다
   {
     const g = fresh(); soulAt(g, 'armor', 1); soulAt(g, 'ranger', 1);
@@ -366,6 +496,7 @@ const approx = (a, b, tol, msg) => { if (!(Math.abs(a - b) <= tol)) throw new Er
       S.detonate(g);
       for (let i = 0; i < 90 && g.units.indexOf(u) >= 0; i++) S.step(g, 1 / 60, { x: 0, y: 0 });
       g.hearts = []; g.souls = [];
+      g.offered = (g.offered || 0) + (g.choice ? 1 : 0); g.choice = null;   // 변이 카드는 고르지 않고 넘긴다(이 확인은 변이 없이)
     };
     const g = fresh(); g.units = [];
     const p1 = { post: true, x: 4, y: 5, r: 0.9, hp: C.postHits, maxHp: C.postHits, cd: 99, dead: false }, p2 = { post: true, x: 14, y: 5, r: 0.9, hp: C.postHits, maxHp: C.postHits, cd: 99, dead: false };
@@ -374,6 +505,7 @@ const approx = (a, b, tol, msg) => { if (!(Math.abs(a - b) <= tol)) throw new Er
     blastAt(g, p1, 45); ok(!p1.dead && p1.hp === 1, '반쯤 익은 폭발: 초소가 한 번 깎인다');
     blastAt(g, p1, 45); ok(p1.dead && g.postsDown === 1 && !g.boss, '두 번째에 부서진다. 아직 대장은 없다');
     blastAt(g, p2, 90); ok(p2.dead && g.postsDown === 2, '불안정도가 찬 폭발: 한 번에 부서진다');
+    eq(g.offered, 2, '초소를 부술 때마다 변이 카드가 나온다');
     ok(g.boss && g.enemies.indexOf(g.boss) >= 0 && g.boss.mode === 'warn', '초소를 다 부수면 대장이 예고와 함께 나타난다');
     // 대장은 찬 폭발로도 한 번에 죽지 않는다
     const boss = g.boss; boss.mode = 'chase'; boss.stun = 99; boss.x = 9; boss.y = 9;
@@ -508,7 +640,7 @@ const approx = (a, b, tol, msg) => { if (!(Math.abs(a - b) <= tol)) throw new Er
     ok(!b.ok && b.reason === 'max', '상한이면 못 산다');
   }
   console.log('규칙 확인: 골드(처음 정복만), 소환수 능력치·네크로맨서 체력 강화, 예전 유전자 강화 환불, 저장 읽기·소급·깨진 저장, 구매');
-  console.log('규칙 확인: 되살리기, 흡수와 불안정도, 과부하, 탈피 폭발, 심장 계승, 수동 자폭, 연결, 돌격조와 갑주 방어, 종류별 특수 폭발(집속탄·소용돌이·방벽)');
+  console.log('규칙 확인: 되살리기, 흡수와 불안정도, 과부하, 탈피 폭발, 심장 계승, 수동 자폭, 연결, 돌격조와 갑주 방어, 종류별 특수 폭발(집속탄·소용돌이·방벽), 초소 변이 3지선다(멈춤·결정론·연쇄 한 번·카드 8종)');
 }
 
 // ---- 봇 ----
@@ -547,10 +679,11 @@ function bot(g, policy, mem) {
   x += (g.W / 2 - n.x) * 0.05; y += (g.H - 7 - n.y) * 0.05;   // 할 일이 없으면 시작 지점 근처(초소 사격 밖)에 머문다
   return { x, y };
 }
-function run(seed, policy, opts) {
+function run(seed, policy, opts, prefer) {
   const g = S.newGame(seed, opts), mem = { last: -9 };
   let guard = 0;
   while (!g.over) {
+    if (g.choice) S.chooseMut(g, g.choice.includes(prefer) ? prefer : g.choice[0]);   // 봇은 변이 카드 중 첫 장을 고른다(카드 순서는 시드로 섞인다). prefer가 나오면 그것
     S.step(g, 1 / 60, bot(g, policy, mem));
     g.events.length = 0;
     if (++guard > 60 * 1200) throw new Error('판이 끝나지 않는다');
@@ -590,6 +723,15 @@ for (const policy of ['play', 'spam', 'nomolt', 'idle']) {
 
 // 참고: 골드로 산 시작 강화가 구역 배율(+25%)을 얼마나 상쇄하나. 'd구역 시작 때 그때까지 번 골드로 살 수 있는 만큼' vs 강화 없음.
 // 재미 판정이 아니다. 지표: 정복, 처음 먹인 시각, 다 익은 폭발 수, 다 익은 폭발 없이 끝난 판, 처음 다 익은 폭발 시각
+// 참고: 변이 카드 하나를 나올 때마다 고르면 정복이 얼마나 느나(재미 판정이 아니다). 'play' 봇, 강화 없음
+if (process.argv.includes('--muts')) {
+  const N = 40;
+  console.log('카드 | 1구역 | 2구역 | 3구역');
+  for (const id of [null, ...Object.keys(S.MUTS)]) {
+    const row = [1, 2, 3].map(d => { let w = 0; for (let s = 1; s <= N; s++) if (run(s, 'play', { district: d }, id).over === 'win') w++; return w + '/' + N; });
+    console.log((id ? S.MUTS[id].name : '아무거나(첫 장)') + ' | ' + row.join(' | '));
+  }
+}
 if (process.argv.includes('--gold')) {
   const G = S.CFG.gold, N = 40;
   // d구역까지 번 골드(처음 정복만 셈)를 모든 종류의 체력·공격력에 고르게 쓴 단계 수
