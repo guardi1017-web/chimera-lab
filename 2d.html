@@ -1054,7 +1054,10 @@
 
   let g = null, mode = 'title', inp = { x: 0, y: 0 }, stick = null, keys = {}, last = 0;
   let retryDistrict = 1;   // 끝 화면의 '다시' 버튼이 여는 구역
-  let subN = 0, shieldSndT = 0;   // 집속탄 피치 순서, 방벽 소리 간격
+  let subN = 0, subT = -1e9, shieldSndT = 0;   // 집속탄 피치 계단과 마지막으로 터진 시각, 방벽 소리 간격
+  // 폭발 손맛(화면만): 바닥 그을음, 튀는 파편, 처치 수 글자. 규칙(sim)과 따로 Math.random을 쓴다(같은 시드 같은 판은 그대로)
+  let scorch = [], debris = [], popups = [], seenFx = new WeakSet();
+  const SCORCH_T = 4.5, DEBRIS_T = 0.45, POPUP_T = 0.9;
   let flash = 0, hitstop = 0;   // 익은 폭발 연출: 화면 번쩍임, 판을 잠깐 멈춤(그림만, 규칙은 그대로)
   let scale = 1, dpr = 1, camX = 0, camY = 0, shake = 0, beatT = 0, lastTap = null, seed = (Date.now() % 100000) + 1;
 
@@ -1085,7 +1088,7 @@
     },
     absorb() { this.tone('sawtooth', 150, 400, 0.08, 0.18); },                    // 혼이 빨려 드는 짧은 스윕
     beat() { this.tone('sine', 70, 45, 0.12, 0.35); this.tone('sine', 62, 40, 0.12, 0.25, 0.16); },   // 과부하: 심장 박동
-    boom() { this.noise(0.45, 0.6, 1200); this.tone('sine', 90, 28, 0.5, 0.7); this.tone('sine', 55, 25, 0.6, 0.4, 0.05); },   // 익은 폭발: 크고 길게
+    boom() { this.tone('square', 420, 90, 0.04, 0.22); this.noise(0.45, 0.6, 1200); this.tone('sine', 90, 28, 0.5, 0.7); this.tone('sine', 55, 25, 0.6, 0.4, 0.05); },   // 익은 폭발: 날카로운 크랙(퍽) 뒤에 크고 긴 쿠웅
     fizz() { this.noise(0.15, 0.2, 500); this.tone('sine', 140, 70, 0.12, 0.15); },   // 덜 익은 폭발: 피식
     ripe() { this.tone('sine', 440, 880, 0.18, 0.16); },   // 80%를 넘는 순간
     siren() { for (let i = 0; i < 3; i++) this.tone('square', i % 2 ? 660 : 880, i % 2 ? 660 : 880, 0.13, 0.12, i * 0.17); },   // 돌격조 예고
@@ -1095,7 +1098,7 @@
     clash() { this.noise(0.12, 0.35, 3000); this.tone('square', 220, 110, 0.15, 0.15); },
     hurt() { this.tone('sawtooth', 180, 60, 0.18, 0.25); },
     rush() { this.tone('sawtooth', 300, 900, 0.2, 0.12); },
-    sub(i) { const f = 150 + (i % 5) * 22; this.noise(0.12, 0.3, 900); this.tone('sine', f, f * 0.4, 0.12, 0.35); },   // 집속탄: 짧은 퍽, 한 발마다 피치가 조금씩 다르다
+    sub(i) { const f = 150 + Math.min(i, 10) * 35; this.noise(0.12, 0.3, 900); this.tone('sine', f, f * 0.4, 0.12, 0.35); },   // 집속탄·연쇄: 짧은 퍽. 0.6초 안에 이어 터질수록 한 계단씩 높아진다
     shield() { this.tone('triangle', 900, 600, 0.08, 0.07); },   // 갑주 방벽이 막았다: 가볍게 팅
   };
 
@@ -1164,6 +1167,7 @@
     g = S.newGame(seed++, { district, start: { hp: save.up.hp, stat: save.up.stat } });
     mode = 'play'; shake = 0; flash = 0; hitstop = 0; lastTap = null;
     titleEl.hidden = true; endEl.hidden = true; mutEl.hidden = true; mutFor = null;
+    scorch = []; debris = []; popups = []; subN = 0;
     inp.x = inp.y = 0; stick = null;
   }
   document.getElementById('startBtn').addEventListener('click', () => start());
@@ -1319,7 +1323,7 @@
     }
     const mh = S.stats(u).maxHp;
     // 익은 채(80~99%)면 체력이 샌다: 막대를 빨갛게 늘 보이고, 핏방울이 떨어진다.
-    if (u.down <= 0 && u.state === 'ok' && frenzy) {
+    if (u.down <= 0 && u.state === 'ok' && frenzy && !u.mad) {   // 광폭 유지면 체력이 새지 않는다
       bar(u.x, u.y + u.r + 0.3, Math.max(1, u.r * 1.6), u.hp / mh, COL.danger);
       if (!reduced) for (let i = 0; i < 3; i++) { const k = (now / 700 + i / 3 + u.uid * 0.37) % 1; ctx.save(); ctx.globalAlpha = 1 - k; ctx.fillStyle = COL.danger; circle(u.x + (i - 1) * u.r * 0.5, u.y + u.r * 0.4 + k * 1.1, 0.12); ctx.fill(); ctx.restore(); }
     }
@@ -1367,7 +1371,7 @@
     if (V) {
       ctx.clearRect(0, 0, cv.width, cv.height);
       if (!g) return;
-      V.render(g, now, { shake: reduced ? 0 : shake, reduced });
+      V.render(g, now, { shake: reduced ? 0 : shake, reduced, scorch, scorchT: SCORCH_T });
     } else {
       ctx.fillStyle = COL.ground; ctx.fillRect(0, 0, cv.width, cv.height);
       if (!g) return;
@@ -1390,6 +1394,8 @@
     ctx.lineWidth = 0.08; ctx.strokeRect(0, 0, S.W, S.H);
 
     // 혼: 불량은 작고 흐리다. 신선한 것은 푸른 고리, 순혈 코어는 크고 금빛으로 뛴다.
+    // 바닥 그을음: 익은 폭발 자리, 4.5초 동안 옅어진다
+    for (const s of scorch) { const a = s.t / SCORCH_T; ctx.save(); ctx.fillStyle = '#3a1a12'; for (let i = 0; i < 3; i++) { ctx.globalAlpha = a * 0.33; circle(s.x, s.y, s.r * (1 - i * 0.28)); ctx.fill(); } ctx.restore(); }
     for (const s of g.souls) {
       if (s.ttl < 3 && Math.floor(now / 120) % 2 === 0) continue;
       const pulse = reduced ? 1 : 1 + 0.1 * Math.sin(now / 150 + s.x);
@@ -1441,7 +1447,7 @@
       const u = g.units.find(x => x.uid === g.link.uid);
       if (u) {
         const soul = g.souls.find(s => s.x === g.link.x && s.y === g.link.y);
-        const add = soul ? S.CFG.soul[soul.q].inst : 0, willPop = add > 0 && u.inst + add >= 100;
+        const add = soul ? S.CFG.soul[soul.q].inst * (soul.q === 3 ? 1 : 1 + S.CFG.mut.gluttonyInst * (g.muts.gluttony || 0)) : 0, willPop = add > 0 && u.inst + add >= 100;   // 과식 본능이면 실제처럼 더 오른다
         ctx.save(); ctx.strokeStyle = willPop ? COL.danger : COL.necro; ctx.lineWidth = 0.14; ctx.setLineDash([0.3, 0.2]); ctx.lineDashOffset = reduced ? 0 : -now / 60;
         ctx.beginPath(); ctx.moveTo(g.link.x, g.link.y); ctx.lineTo(u.x, u.y); ctx.stroke();
         ctx.setLineDash([]); circle(u.x, u.y, u.r + 0.6); ctx.stroke(); circle(g.link.x, g.link.y, 0.75); ctx.stroke();
@@ -1492,7 +1498,11 @@
         ctx.lineWidth = 0.1; circle(u.x, u.y, u.r + 0.3 + k * 1.2); ctx.stroke();
       }
       else if (f.k === 'boom') {
-        const k = 1 - f.t / (f.weak ? 0.4 : 0.7);
+        const k = 1 - f.t / (f.weak ? 0.4 : 0.7), el = (f.weak ? 0.4 : 0.7) - f.t;
+        if (!f.weak) {   // 흰 섬광(0.08초) → 붉은 원 → 빠르게 퍼지는 얇은 금빛 충격파 두 겹
+          if (el < 0.08) { ctx.save(); ctx.globalAlpha = 1 - el / 0.08; ctx.fillStyle = '#fff'; circle(f.x, f.y, f.r * 0.5); ctx.fill(); ctx.restore(); }
+          for (const [sp, tt] of [[2.6, 0.3], [3.6, 0.45]]) if (el < tt) { const q = el / tt; ctx.save(); ctx.globalAlpha = 1 - q; ctx.strokeStyle = COL.great; ctx.lineWidth = 0.09; circle(f.x, f.y, f.r * (0.4 + q * sp)); ctx.stroke(); ctx.restore(); }
+        }
         ctx.save(); ctx.globalAlpha = (1 - k) * (f.weak ? 0.25 : 0.75); ctx.fillStyle = f.weak ? COL.dim : COL.danger; circle(f.x, f.y, f.r * (0.4 + k * 0.6)); ctx.fill();
         ctx.globalAlpha = 1 - k; ctx.strokeStyle = f.weak ? COL.dim : COL.great; ctx.lineWidth = 0.3; circle(f.x, f.y, f.r * (0.3 + k)); ctx.stroke(); ctx.restore();
       }
@@ -1528,7 +1538,7 @@
       if (u.down > 0 || u.state !== 'ok') continue;
       const [x, y] = scr(u.x, u.y, 0), w = Math.max(1, u.r * 1.6) * ppu, by = y + u.r * ppu * 0.5 + 6;
       // 익은 채(80~99%)면 체력이 샌다: 막대를 빨갛게 늘 보이고, 핏방울이 떨어진다.
-      if (S.isFrenzy(u)) {
+      if (S.isFrenzy(u) && !u.mad) {
         const ww = Math.max(36, w * 1.3);
         ctx.fillStyle = COL.grid; ctx.fillRect(x - ww / 2, by, ww, 7);
         ctx.fillStyle = COL.danger; ctx.fillRect(x - ww / 2, by, ww * Math.max(0, u.hp / mh), 7);
@@ -1544,6 +1554,7 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const px = V ? V.pxPerUnit() : scale / dpr, w = cv.width / dpr, hh = cv.height / dpr, pad = 16, bw = w - pad * 2;
     if (V) drawMarks3D(now);
+    drawJuice();
     for (const u of g.units) { const [x, y] = scr(u.x, u.y, u.r * 1.1); label(String(S.levelOf(u)), x, y, Math.max(13, u.r * px * 0.9), V ? COL.ink : COL.ground); }
     // 화면 밖에서 겨누는 돌격조: 가장자리에 느낌표
     for (const e of g.enemies) {
@@ -1614,7 +1625,8 @@
       else if (ev === 'raise') Sound.raise();
       else if (ev === 'rebirth') Sound.rebirth();
       else if (ev === 'block') { Sound.clash(); shake = Math.max(shake, 0.25); }
-      else if (ev === 'subboom') { Sound.sub(subN++); buzz(25); shake = Math.max(shake, 0.35); }
+      else if (ev === 'subboom') { const t = performance.now(); subN = t - subT < 600 ? subN + 1 : 0; subT = t; Sound.sub(subN); buzz(25); shake = Math.max(shake, 0.35); }
+      else if (ev === 'multikill') { buzz([90, 30, 60]); shake = Math.max(shake, 1.0); if (!reduced) hitstop = Math.max(hitstop, 0.1); }   // 한 번에 셋 이상: 더 세게
       else if (ev === 'shieldblock') { const t = performance.now(); if (t - shieldSndT > 120) { Sound.shield(); shieldSndT = t; } }   // 여러 발을 한꺼번에 막아도 소리는 0.12초에 한 번
       else if (ev === 'necrohit') { Sound.hurt(); shake = Math.max(shake, 0.3); }
       else if (ev === 'rush') Sound.rush();
@@ -1744,6 +1756,43 @@
     mutEl.hidden = true; mutFor = null;   // 초소 둘을 한꺼번에 부쉈으면 다음 프레임에 다음 셋이 뜬다
   }
 
+  // 새로 생긴 폭발에서 그을음·파편·처치 수 글자를 만들고, 있는 것들을 흘려보낸다
+  function juice(dt) {
+    for (const f of g.fx) {
+      if ((f.k !== 'boom' && f.k !== 'subboom') || seenFx.has(f)) continue;
+      seenFx.add(f);
+      const ripe = f.k === 'boom' && !f.weak;
+      if (ripe) scorch.push({ x: f.x, y: f.y, r: f.r * 0.8, t: SCORCH_T });
+      if ((ripe || f.k === 'subboom') && !reduced) {
+        const n = ripe ? 18 + Math.floor(Math.random() * 7) : 8 + Math.floor(Math.random() * 3);
+        for (let i = 0; i < n; i++) {
+          const a = Math.random() * Math.PI * 2, v = (ripe ? 9 : 6) + Math.random() * (ripe ? 7 : 4);
+          debris.push({ x: f.x, y: f.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: DEBRIS_T * (0.7 + Math.random() * 0.3), gold: Math.random() < 0.45, s: 0.6 + Math.random() * 0.6 });
+        }
+      }
+      if (f.kills >= S.CFG.multiKill) popups.push({ x: f.x, y: f.y, n: f.kills, t: POPUP_T });
+    }
+    const fr = Math.exp(-7 * dt);   // 마찰: 빠르게 튀어 나가 금방 멎는다
+    for (const d of debris) { d.x += d.vx * dt; d.y += d.vy * dt; d.vx *= fr; d.vy *= fr; d.t -= dt; }
+    for (const s of scorch) s.t -= dt;
+    for (const p of popups) p.t -= dt;
+    debris = debris.filter(d => d.t > 0); scorch = scorch.filter(s => s.t > 0); popups = popups.filter(p => p.t > 0);
+  }
+  // 파편과 처치 수 글자: 화면 좌표로 그린다(2D·3D 같은 코드)
+  function drawJuice() {
+    const px = V ? V.pxPerUnit() : scale / dpr;
+    for (const d of debris) {
+      const [x, y] = scr(d.x, d.y, 0.4), k = d.t / DEBRIS_T, w = Math.max(1.5, 0.2 * px * d.s * k);
+      ctx.fillStyle = d.gold ? COL.great : COL.danger; ctx.fillRect(x - w / 2, y - w / 2, w, w);
+    }
+    for (const p of popups) {
+      const k = 1 - p.t / POPUP_T, [x, y] = scr(p.x, p.y, 1.5), big = p.n >= 6;
+      ctx.save(); ctx.globalAlpha = k < 0.7 ? 1 : 1 - (k - 0.7) / 0.3;
+      label(p.n + ' KILL' + (big ? '!!' : '!'), x, y - 18 - k * 40, (big ? 34 : 26) * (k < 0.12 ? 0.6 + k / 0.3 : 1), big ? COL.great : COL.ink);
+      ctx.restore();
+    }
+  }
+
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000 || 0);
     last = now;
@@ -1753,6 +1802,7 @@
       else if (hitstop > 0) hitstop -= dt;
       else S.step(g, dt, inp);
       consumeEvents(dt);
+      juice(dt);
       if (g.over) showEnd();
     }
     draw(now);

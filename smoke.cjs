@@ -394,3 +394,21 @@ const base = JSON.stringify(S.Save.load(JSON.stringify({ v: 1, best: 1, cur: 1, 
   if (els.mutModal.hidden || els.mutList.kids.length !== 3 || els.mutList.kids[0].disabled !== true) throw new Error('초소 둘이면 다음 셋이 잠긴 채 이어서 떠야 한다');
   console.log('변이 3지선다: 판 멈춤, 끌던 입력 끊김, 0.35초 잠금(먼저 누른 카드 무시), 고르면 소리와 함께 다시 간다, 초소 둘이면 두 번');
 }
+
+// ---- 폭발 손맛: 한 번에 여섯 이상 잡으면 "N KILL!!" 글자가 뜨고 사라진다. 판(규칙)은 같은 시드면 같다 ----
+{
+  store['chimera-lab-save-v1'] = JSON.stringify({ v: 1, best: 0, cur: 0, gold: 0, up: { hp: 0 } });
+  freshSession(ls);
+  fire('startBtn', 'click', {}); frames(3);
+  game.spawnT = 1e9; game.eliteIdx = 99; game.enemies = []; game.posts = []; game.postsTotal = 0;
+  const texts = []; ctx.fillText = t => { texts.push(t); };
+  const u = game.units[0]; u.main = 'armor'; u.inst = 85; u.x = game.necro.x; u.y = game.necro.y - 3;
+  S.detonate(game);
+  for (let i = 0; i < 7; i++) game.enemies.push({ elite: false, arch: 'beast', g: 1, x: u.x + (i - 3) * 0.4, y: u.y, hp: 9, maxHp: 9, dmg: 0, r: 0.42, cd: 99, face: 0, stun: 99, bleed: 0, bleedT: 0 });
+  frames(10);
+  if (!texts.includes('7 KILL!!')) throw new Error('일곱을 한 번에 잡으면 "7 KILL!!": ' + texts.filter(t => /KILL/.test(t)).join(','));
+  frames(60); texts.length = 0; frames(10);   // 약 1.3초 뒤
+  if (texts.some(t => /KILL/.test(t))) throw new Error('처치 수 글자는 1초 안에 사라져야 한다');
+  delete ctx.fillText;
+  console.log('폭발 손맛: 한 번에 7마리 → "7 KILL!!" 글자, 1초 안에 사라짐');
+}

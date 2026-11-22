@@ -21,6 +21,7 @@ const HEX = {
 };
 const COL = {};
 for (const k in HEX) COL[k] = new THREE.Color(HEX[k]);
+const SCORCH = new THREE.Color('#3a1a12'), WHITE = new THREE.Color('#ffffff');   // 바닥 그을음, 폭발 섬광
 const VIEW_W = 13;                 // 화면 가로에 들어오는 판의 폭(2D와 같다)
 const ELEV = 35 * Math.PI / 180;   // 내려다보는 각
 const R2 = Math.SQRT1_2;
@@ -523,8 +524,10 @@ function drawFx(f) {
     const k = 1 - f.t / 0.4;
     dec.disc(f.x, f.y, f.r * (0.4 + k * 0.5), COL.dim, (1 - k) * 0.25, 0, Math.PI * 2, H);
     dec.ring(f.x, f.y, f.r * (0.3 + k * 0.8), 0.12, COL.dim, 1 - k, 0, Math.PI * 2, H + 0.01);
-  } else if (f.k === 'boom') {   // 익은 폭발: 붉은 원판, 금빛 고리 두 겹, 밖으로 튀는 파편 줄
-    const k = 1 - f.t / 0.7, e = 1 - (1 - k) * (1 - k);
+  } else if (f.k === 'boom') {   // 익은 폭발: 흰 섬광 → 붉은 원판, 금빛 고리 두 겹, 밖으로 튀는 파편 줄, 빠르게 퍼지는 얇은 충격파 두 겹
+    const k = 1 - f.t / 0.7, e = 1 - (1 - k) * (1 - k), el = 0.7 - f.t;
+    if (el < 0.08) dec.disc(f.x, f.y, f.r * 0.5, WHITE, 1 - el / 0.08, 0, Math.PI * 2, H + 0.04);
+    for (const [sp, tt] of [[2.6, 0.3], [3.6, 0.45]]) if (el < tt) { const q = el / tt; dec.ring(f.x, f.y, f.r * (0.4 + q * sp), 0.09, COL.great, 1 - q, 0, Math.PI * 2, H + 0.05); }
     dec.disc(f.x, f.y, f.r * (0.5 + e * 0.6), COL.danger, (1 - k) * 0.75, 0, Math.PI * 2, H);
     dec.ring(f.x, f.y, f.r * (0.3 + e * 1.1), 0.45 * (1 - k) + 0.08, COL.great, 1 - k, 0, Math.PI * 2, H + 0.01);
     dec.ring(f.x, f.y, f.r * (0.2 + e * 1.6), 0.12, COL.ink, (1 - k) * 0.8, 0, Math.PI * 2, H + 0.02);
@@ -593,6 +596,8 @@ const view = {
     target.x += (tx - target.x) * 0.28; target.z += (tz - target.z) * 0.28;
     placeCamera(opts.shake);
     dec.reset();
+    // 바닥 그을음(화면 쪽이 만든 목록): 익은 폭발 자리, 옅어지며 사라진다
+    for (const s of opts.scorch || []) { const a = s.t / opts.scorchT; for (let i = 0; i < 3; i++) dec.disc(s.x, s.y, s.r * (1 - i * 0.28), SCORCH, a * 0.33, 0, Math.PI * 2, 0.02 + i * 0.002); }
     for (const s of g.souls) drawSoul(s, now, reduced);
     for (const h of g.hearts) drawHeart(h, now, reduced);
     for (const p of g.posts) drawPost(p, n, now, reduced);
@@ -602,7 +607,7 @@ const view = {
       const u = g.units.find(x => x.uid === g.link.uid);
       if (u) {
         const soul = g.souls.find(s => s.x === g.link.x && s.y === g.link.y);
-        const add = soul ? S.CFG.soul[soul.q].inst : 0, willPop = add > 0 && u.inst + add >= 100, c = willPop ? COL.danger : COL.necro;
+        const add = soul ? S.CFG.soul[soul.q].inst * (soul.q === 3 ? 1 : 1 + S.CFG.mut.gluttonyInst * (g.muts.gluttony || 0)) : 0, willPop = add > 0 && u.inst + add >= 100, c = willPop ? COL.danger : COL.necro;   // 과식 본능이면 실제처럼 더 오른다
         dec.dashLine(g.link.x, g.link.y, u.x, u.y, 0.14, 0.3, 0.2, reduced ? 0 : -now / 60 * 0.5, c, 1, 0.06);
         dec.ring(u.x, u.y, u.r + 0.6, 0.14, c, 1, 0, Math.PI * 2, 0.06); dec.ring(g.link.x, g.link.y, 0.75, 0.14, c, 1, 0, Math.PI * 2, 0.06);
         if (add > 0) { const a0 = -Math.PI / 2 + Math.PI * 2 * Math.min(1, u.inst / 100); dec.ring(u.x, u.y, u.r + 0.38, 0.1, COL.danger, 0.45, a0, a0 + Math.PI * 2 * Math.min(1 - u.inst / 100, add / 100), 0.06); }
