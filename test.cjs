@@ -7,7 +7,7 @@ const approx = (a, b, tol, msg) => { if (!(Math.abs(a - b) <= tol)) throw new Er
 
 // ---- 규칙 ----
 {
-  const fresh = () => { const g = S.newGame(5); g.spawnT = 1e9; g.eliteIdx = 99; g.posts = []; g.postsTotal = 0; return g; };   // 적도 초소도 없는 빈 판
+  const fresh = () => { const g = S.newGame(5); g.spawnT = 1e9; g.eliteIdx = 99; g.posts = []; g.postsTotal = 0; g.enemies = []; return g; };   // 적도 초소도(수비대도) 없는 빈 판
   const soulAt = (g, type, q) => { g.feedT = 0; g.souls.push({ x: g.necro.x, y: g.necro.y, type, q, ttl: 5 }); S.step(g, 1 / 60, { x: 0, y: 0 }); };
   const foe = (g, x, y, extra) => { const e = Object.assign({ elite: false, arch: 'beast', g: 1, x, y, hp: 18, maxHp: 18, dmg: 0, r: 0.42, cd: 99, face: 0, stun: 99, bleed: 0, bleedT: 0 }, extra || {}); g.enemies.push(e); return e; };
 
@@ -144,7 +144,7 @@ const approx = (a, b, tol, msg) => { if (!(Math.abs(a - b) <= tol)) throw new Er
 
   // 익은 채(80~99%) 들고 있으면 체력이 샌다. 그렇게 쓰러지면 일어날 때까지 터뜨릴 수 없다. 79%면 새지 않는다
   {
-    const quiet = g => { g.spawnT = 1e9; g.eliteIdx = 99; g.posts = []; };
+    const quiet = g => { g.spawnT = 1e9; g.eliteIdx = 99; g.posts = []; g.enemies = []; };
     const g = fresh(); quiet(g); const u = g.units[0], m = S.stats(u).maxHp;
     u.inst = C.frenzyAt - 1; u.hp = m;
     for (let i = 0; i < 60 * 3; i++) S.step(g, 1 / 60, { x: 0, y: 0 });
@@ -379,6 +379,72 @@ const approx = (a, b, tol, msg) => { if (!(Math.abs(a - b) <= tol)) throw new Er
       const n = g3.necro, e = foe(g3, n.x + 0.6, n.y, { stun: 0, cd: 0, dmg: 5 }), d0 = Math.hypot(e.x - n.x, e.y - n.y);
       run(g3, 3);
       ok(Math.hypot(e.x - n.x, e.y - n.y) > d0 + 1, '증폭된 방벽: 막을 때마다 적을 밀어낸다');
+    }
+  }
+  // 9차: 초소 수비대, 무리 스폰, 어그로 분리, 호위, 처치 수
+  {
+    const still = { x: 0, y: 0 };
+    // 수비대: 초소마다 다섯, 1등급, 초소 둘레 1.5~2.4. 네크로맨서가 멀면 서 있다
+    {
+      const g = S.newGame(9); g.spawnT = 1e9; g.eliteIdx = 99;
+      const gs = g.enemies.filter(e => e.guard);
+      eq(gs.length, g.posts.length * C.guard.n, '초소마다 수비대 ' + C.guard.n);
+      ok(gs.every(e => e.g === 1 && !e.elite && e.home && Math.hypot(e.x - e.home.x, e.y - e.home.y) <= C.guard.r1 + 1e-9 && Math.hypot(e.x - e.home.x, e.y - e.home.y) >= C.guard.r0 - 0.5), '수비대는 1등급, 초소 둘레');
+      const pos = gs.map(e => e.x + ',' + e.y).join();
+      for (let i = 0; i < 120; i++) S.step(g, 1 / 60, still);
+      eq(gs.map(e => e.x + ',' + e.y).join(), pos, '네크로맨서가 멀면 수비대는 움직이지 않는다');
+      // 맞은 수비대만 깨어난다
+      const hit = gs[0]; hit.bleed = 0.01; hit.bleedT = 0.02; S.step(g, 1 / 60, still);
+      const x0 = hit.x, y0 = hit.y; S.step(g, 0.2, still);
+      ok(!hit.guard && Math.hypot(hit.x - x0, hit.y - y0) > 0.1 && gs[1].guard, '맞으면 그 수비대만 깨어난다');
+      // 네크로맨서가 초소에 다가가면 그 초소의 수비대가 깨어난다
+      const home = gs[5].home; g.necro.x = home.x; g.necro.y = home.y + C.guard.wake - 0.5; S.step(g, 1 / 60, still);
+      ok(gs.filter(e => e.home === home).every(e => !e.guard) && gs.filter(e => e.home !== home && e !== hit).every(e => e.guard), '다가간 초소의 수비대만 깨어난다');
+    }
+    // 무리 스폰: 1등급은 한 지점에 뭉쳐 나오고(15초 전 2~3, 뒤 3~4) 체력·공격력이 낮다
+    {
+      const g = fresh(); g.eliteIdx = 99; g.spawnT = 0; g.necro.hp = 1e9;
+      S.step(g, 1 / 60, still);
+      const p1 = g.enemies.slice();
+      ok(p1.length >= C.pack.early[0] && p1.length <= C.pack.early[1], '15초 전 무리는 2~3마리 (' + p1.length + ')');
+      const cx = p1.reduce((a, e) => a + e.x, 0) / p1.length, cy = p1.reduce((a, e) => a + e.y, 0) / p1.length;
+      ok(p1.every(e => Math.hypot(e.x - cx, e.y - cy) <= C.pack.r * 2 + 1e-9), '무리는 한 지점에 뭉쳐 나온다');
+      const e0 = p1[0];
+      const FH = { beast: 18, ranger: 18, armor: 75 }, FD = { beast: 4, ranger: 5, armor: 8 };
+      approx(e0.maxHp, FH[e0.arch] * C.pack.hp, 1e-9, '무리 잡몹 체력 0.6배'); approx(e0.dmg, FD[e0.arch] * C.pack.dmg, 1e-9, '무리 잡몹 공격력 0.55배');
+      g.enemies = []; g.t = 20; g.spawnT = 0;
+      const sizes = [];
+      for (let i = 0; i < 40; i++) { const n0 = g.enemies.length; g.spawnT = 0; S.step(g, 1 / 600, still); const add = g.enemies.length - n0; if (add > 1) sizes.push(add); g.enemies = []; }
+      ok(sizes.length && sizes.every(n => n >= C.pack.late[0] && n <= C.pack.late[1]), '15초 뒤 무리는 3~4마리 (' + sizes.join(',') + ')');
+    }
+    // 어그로 분리: 1등급 잡몹은 3.5 안의 키메라를 친다. 2등급은 네크로맨서를 노린다
+    {
+      const g = fresh(); const n = g.necro, u = g.units[0]; u.x = n.x + 6; u.y = n.y; u.hp = 1e6;
+      const small = foe(g, u.x - 3.2, n.y, { stun: 0, cd: 0, dmg: 3 }), mid = foe(g, u.x - 2, n.y + 0.5, { g: 2, stun: 0, cd: 0, dmg: 3 });
+      const h0 = n.hp, sx = small.x, mx = mid.x;
+      for (let i = 0; i < 6; i++) S.step(g, 1 / 60, still);
+      ok(small.x > sx, '1등급 잡몹: 네크로맨서를 두고 3.5 안의 키메라에게 간다');
+      ok(mid.x < mx, '2등급: 네크로맨서에게 간다');
+      ok(n.hp === h0, '이 사이 네크로맨서는 맞지 않는다');
+    }
+    // 호위: 키메라는 네크로맨서에게 가장 가까운 적부터 친다
+    {
+      const g = fresh(); const n = g.necro, u = g.units[0]; u.x = n.x + 3; u.y = n.y; u.cd = 99;
+      const nearU = foe(g, u.x + 1, n.y), nearN = foe(g, n.x - 1.5, n.y);
+      for (let i = 0; i < 20; i++) S.step(g, 1 / 60, still);
+      ok(u.x < n.x + 3 - 0.5 && !nearU.dead, '키메라는 자기 옆 적보다 네크로맨서 옆 적에게 간다');
+    }
+    // 처치 수: 폭발 fx에 kills, 셋 이상이면 multikill. 집속탄은 살아남은 적을 민다
+    {
+      const g = fresh(); const u = g.units[0]; u.main = 'armor'; u.inst = 85; u.x = 9; u.y = 15; S.detonate(g);
+      for (let i = 0; i < 4; i++) foe(g, 9 + i * 0.5 - 0.75, 15.5);
+      S.step(g, 1 / 60, still);
+      const b = g.fx.find(f => f.k === 'boom');
+      ok(b && b.kills === 4 && g.events.includes('multikill'), '익은 폭발: 처치 4 → multikill');
+      const g2 = fresh(); const r = g2.units[0]; r.main = 'ranger'; r.inst = 85; r.x = 9; r.y = 15; S.detonate(g2); S.step(g2, 1 / 60, still);
+      const cl = g2.clusters[0], tough = foe(g2, cl.x + 0.8, cl.y, { elite: true, hp: 1e6, maxHp: 1e6, r: 0.95, mode: 'chase', rechargeT: 99, stun: 99, cd: 99, dmg: 0 }), tx = tough.x;
+      for (let i = 0; i < 30; i++) S.step(g2, 1 / 60, still);
+      ok(tough.x > tx + 0.5 && g2.fx.filter(f => f.k === 'subboom').every(f => typeof f.kills === 'number'), '집속탄: 살아남은 적을 밀고, 처치 수를 넘긴다');
     }
   }
   // 뛰어드는 중인 키메라는 혼을 먹지 않는다
@@ -640,7 +706,7 @@ const approx = (a, b, tol, msg) => { if (!(Math.abs(a - b) <= tol)) throw new Er
     ok(!b.ok && b.reason === 'max', '상한이면 못 산다');
   }
   console.log('규칙 확인: 골드(처음 정복만), 소환수 능력치·네크로맨서 체력 강화, 예전 유전자 강화 환불, 저장 읽기·소급·깨진 저장, 구매');
-  console.log('규칙 확인: 되살리기, 흡수와 불안정도, 과부하, 탈피 폭발, 심장 계승, 수동 자폭, 연결, 돌격조와 갑주 방어, 종류별 특수 폭발(집속탄·소용돌이·방벽), 초소 변이 3지선다(멈춤·결정론·연쇄 한 번·카드 8종)');
+  console.log('규칙 확인: 되살리기, 흡수와 불안정도, 과부하, 탈피 폭발, 심장 계승, 수동 자폭, 연결, 돌격조와 갑주 방어, 종류별 특수 폭발(집속탄·소용돌이·방벽), 초소 변이 3지선다(멈춤·결정론·연쇄 한 번·카드 8종), 수비대·무리·어그로 분리·호위·처치 수');
 }
 
 // ---- 봇 ----

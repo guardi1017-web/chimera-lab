@@ -168,7 +168,7 @@
     // mega_special 변이를 가지면 바뀌는 값(사수 발 수, 맹수 시간·반경, 갑주 시간과 막을 때마다 반경 안 적을 미는 거리)
     megaSpecial: { rangerN: 8, beastT: 4.5, beastR: 1.8, armorT: 6, pushR: 2.5, push: 1.5 },
     // 초소 변이(2026-11-22 8차 지시서 2단계). 초소를 부술 때마다 판이 멈추고 셋 중 하나를 고른다. 판 안에서만 간다.
-    mut: { pick: 3, chainT: 0.15, chainR: 1.6, gluttonyInst: 0.5, gluttonyR: 0.3, bloodHeal: 20, bloodStunR: 3.5, bloodStun: 1.2,
+    mut: { pick: 3, chainT: 0.15, chainR: 2.4, gluttonyInst: 0.5, gluttonyR: 0.3, bloodHeal: 20, bloodStunR: 3.5, bloodStun: 1.2,
       madFrenzyMul: 2, fastInst: 40, fastT: 5, fastMul: 2, breakerCharge: 0.5, breakerBossCap: 0.5, twinDx: 0.55 },
     blastRadius: 3.2, blastEliteFrac: 0.1, blastKnock: 3, blastStun: 1.2,
     rushSpeed: 14, rushMax: 1.0, rushReach: 10, rushBigBonus: 1.5,   // 뛰어들 수 있는 거리, 큰 표적에게 주는 거리 덤
@@ -192,7 +192,14 @@
     statStep: { hp: 0.15, dmg: 0.15, cd: 0.1, spd: 0.08, range: 0.12, taken: 0.1 },
     eliteHp: 260, eliteHpStep: 0.5,
     chargeSpeed: 13, chargeDmg: 25, eliteDmg: 12, rechargeEvery: 7, aimTime: 1.2,
-    spawnStart: 1.8, spawnEnd: 1.05, foeGradeMul: 1.35,
+    spawnStart: 4.5, spawnEnd: 2.7, foeGradeMul: 1.35,
+    // 무리와 수비대(2026-11-22 9차 지시서). 1등급 잡몹은 한 지점에 뭉쳐 나온다: early초 전에는 early[0]~[1]마리, 그 뒤 late[0]~[1]마리. 무리 잡몹의 체력·공격력은 hp·dmg배.
+    // 지시서 값(간격 2.6~1.5초, 4~5마리, 체력 0.75배)은 봇 1구역 정복 33→4/40이라 사용자가 간격·마릿수·스탯을 다시 정함(2026-11-22).
+    // 초소마다 둘레(guardR0~guardR1)에 1등급 수비대 guardN마리. 네크로맨서가 그 초소 guardWake 안에 오거나 맞기 전까지 서 있다.
+    // 1등급 잡몹은 aggroR 안에 키메라가 있으면 네크로맨서 대신 가장 가까운 키메라를 친다.
+    pack: { early: [2, 3], late: [3, 4], earlyT: 15, r: 1.2, hp: 0.6, dmg: 0.55 }, foeCap: 48,
+    guard: { n: 5, r0: 1.5, r1: 2.4, wake: 6.5 }, aggroR: 3.5,
+    subKnock: 1.2, multiKill: 3,
     // 잡몹 종류의 비율(나머지는 갑주). 처음부터 셋 다 나와 첫 소환부터 종류를 고를 수 있다(2026-11-16 사용자 결정, 전에는 10초까지 군견만)
     foeMixEarly: { beast: 0.5, ranger: 0.25 }, foeMixLate: { beast: 0.42, ranger: 0.28 }, foeMixLateAt: 35,
   };
@@ -329,6 +336,15 @@
     const count = Math.min(5, 2 + district);
     for (let i = 0; i < count; i++) g.posts.push({ post: true, x: spots[i][0], y: spots[i][1], r: 0.9, hp: CFG.postHits, maxHp: CFG.postHits, cd: 1, dead: false });
     g.postsTotal = count;
+    // 초소 수비대: 1등급 잡몹이 초소 둘레에 모여 서 있다
+    const gd = CFG.guard;
+    for (const p of g.posts) for (let i = 0; i < gd.n; i++) {
+      const a = (i / gd.n + g.rand() * 0.15) * Math.PI * 2, d = gd.r0 + (gd.r1 - gd.r0) * g.rand();
+      const r = g.rand(), arch = r < CFG.foeMixEarly.beast ? 'beast' : r < CFG.foeMixEarly.beast + CFG.foeMixEarly.ranger ? 'ranger' : 'armor';
+      const e = makeFoe(g, arch, 1, clamp(p.x + Math.cos(a) * d, 0.6, W - 0.6), clamp(p.y + Math.sin(a) * d, 0.6, H - 0.6), 1);
+      e.guard = true; e.home = p;
+      g.enemies.push(e);
+    }
     return g;
   }
 
@@ -368,18 +384,25 @@
       g.events.push('warn');
     }
     g.spawnT -= dt;
-    if (g.spawnT > 0 || g.enemies.length >= 36) return;
+    if (g.spawnT > 0 || g.enemies.length >= CFG.foeCap) return;
     const k = Math.min(1, g.t / DURATION), r = g.rand(), r2 = g.rand();
     g.spawnT = (CFG.spawnStart + (CFG.spawnEnd - CFG.spawnStart) * k) * (0.8 + 0.4 * g.rand());
     const mix = g.t < CFG.foeMixLateAt ? CFG.foeMixEarly : CFG.foeMixLate;
     const arch = r < mix.beast ? 'beast' : r < mix.beast + mix.ranger ? 'ranger' : 'armor';
     let grade = 1;
     if (g.t >= 18) grade = r2 < (g.t < 50 ? 0.7 : 0.5) ? 1 : 2;
-    const n = arch === 'beast' && grade === 1 && g.t > 30 ? 2 : 1;
-    for (let i = 0; i < n; i++) {
-      const p = edgePoint(g, 7), f = FOE[arch], m = Math.pow(CFG.foeGradeMul, grade - 1), hp = f.hp * m * (grade === 2 ? 1.6 : 1) * g.scale;
-      g.enemies.push({ elite: false, arch, g: grade, x: p.x, y: p.y, hp, maxHp: hp, dmg: f.dmg * m * g.scale, r: f.r + 0.12 * (grade - 1), cd: 0.4, face: 0, stun: 0, bleed: 0, bleedT: 0 });
+    const p = edgePoint(g, 7);
+    if (grade === 2) { g.enemies.push(makeFoe(g, arch, 2, p.x, p.y, 1)); return; }   // 중형은 예전처럼 하나씩
+    // 1등급은 한 지점에 무리로(체력은 낮게)
+    const pk = CFG.pack, [lo, hi] = g.t < pk.earlyT ? pk.early : pk.late, n = lo + Math.floor(g.rand() * (hi - lo + 1));
+    for (let i = 0; i < n && g.enemies.length < CFG.foeCap; i++) {
+      const a = i / n * Math.PI * 2 + g.rand(), d = pk.r * Math.sqrt(g.rand());
+      g.enemies.push(makeFoe(g, arch, 1, clamp(p.x + Math.cos(a) * d, 0.6, W - 0.6), clamp(p.y + Math.sin(a) * d, 0.6, H - 0.6), pk.hp, pk.dmg));
     }
+  }
+  function makeFoe(g, arch, grade, x, y, hpMul, dmgMul) {
+    const f = FOE[arch], m = Math.pow(CFG.foeGradeMul, grade - 1), hp = f.hp * m * (grade === 2 ? 1.6 : 1) * g.scale * hpMul;
+    return { elite: false, arch, g: grade, x, y, hp, maxHp: hp, dmg: f.dmg * m * g.scale * (dmgMul || 1), r: f.r + 0.12 * (grade - 1), cd: 0.4, face: 0, stun: 0, bleed: 0, bleedT: 0 };
   }
 
   function killEnemy(g, e) {
@@ -397,7 +420,7 @@
   }
   function damageEnemy(g, e, dmg, u, s) {
     if (e.dead) return;
-    e.hp -= dmg;
+    e.hp -= dmg; e.guard = false;   // 수비대는 맞으면 깨어난다
     if (u && s && s.lifesteal > 0 && u.down <= 0) u.hp = Math.min(s.maxHp, u.hp + dmg * s.lifesteal);
     if (e.hp <= 0) killEnemy(g, e);
   }
@@ -525,7 +548,7 @@
   function explode(g, u) {
     const c = u.charge || 0, st = stats(u);   // c: 0(불안정도 0%) ~ 1(80% 이상)
     const R = CFG.blastRadius * (CFG.blastMinRadius + (1 - CFG.blastMinRadius) * c) * (c >= 1 ? 1 + CFG.mut.gluttonyR * mutN(g, 'gluttony') : 1);
-    const bossCap = mutN(g, 'post_breaker') ? CFG.mut.breakerBossCap : CFG.bossBlastCap, chain = mutN(g, 'chain_fuse') > 0;
+    const bossCap = mutN(g, 'post_breaker') ? CFG.mut.breakerBossCap : CFG.bossBlastCap, chain = mutN(g, 'chain_fuse') > 0, k0 = g.kills;
     const eliteFrac = CFG.blastEliteFrac + (1 - CFG.blastEliteFrac) * c;
     for (const e of g.enemies) {
       if (e.dead || dist(e, u) > R + e.r) continue;
@@ -561,8 +584,10 @@
     if (g.pinned === u.uid) g.pinned = null;
     g.molts++;
     if (c >= 1) { g.ripeBlasts++; if (g.firstRipeT === null) g.firstRipeT = g.t; specialBlast(g, u, R); }
-    g.fx.push({ k: 'boom', x: u.x, y: u.y, r: R, weak: c < 1, t: c < 1 ? 0.4 : 0.7 });
-    g.events.push(c < 1 ? 'boomweak' : 'boom');   // 연출용: 익은 폭발과 덜 익은 폭발을 다르게 보이고 들리게
+    const kills = g.kills - k0;
+    g.fx.push({ k: 'boom', x: u.x, y: u.y, r: R, weak: c < 1, kills, t: c < 1 ? 0.4 : 0.7 });
+    g.events.push(c < 1 ? 'boomweak' : 'boom');
+    if (kills >= CFG.multiKill) g.events.push('multikill');   // 연출용: 익은 폭발과 덜 익은 폭발을 다르게 보이고 들리게
     drawChoice(g);
   }
   // 연쇄 도화선: 폭발로 죽은 잡몹 자리에 작은 폭발을 예약한다. 그 작은 폭발로 죽은 잡몹은 다시 잇지 않는다(한 번만 연쇄)
@@ -604,13 +629,17 @@
   }
   // 집속탄 하나가 터진다: 잡몹은 즉사, 돌격조·대장은 본 폭발 피해의 일부, 초소는 건드리지 않는다
   function subBoom(g, b) {
+    const k0 = g.kills;
     for (const e of g.enemies) {
       if (e.dead || dist(e, b) > b.r + e.r) continue;
       if (e.elite) { if (b.frac > 0) damageEnemy(g, e, e.maxHp * (e.boss ? (mutN(g, 'post_breaker') ? CFG.mut.breakerBossCap : CFG.bossBlastCap) : 1) * b.frac + 0.01, null, null); }
       else { killEnemy(g, e); if (!b.isChain && mutN(g, 'chain_fuse')) chainAt(g, e); }
+      if (!e.dead && !(e.elite && e.mode === 'charge')) knock(e, b.x, b.y, CFG.subKnock);   // 살아남은 적은 살짝 밀린다
     }
-    g.fx.push({ k: 'subboom', x: b.x, y: b.y, r: b.r, chain: !!b.isChain, t: 0.35 });
+    const kills = g.kills - k0;
+    g.fx.push({ k: 'subboom', x: b.x, y: b.y, r: b.r, chain: !!b.isChain, kills, t: 0.35 });
     g.events.push('subboom');
+    if (kills >= CFG.multiKill) g.events.push('multikill');
   }
   // 갑주 방벽이 네크로맨서에게 오는 공격 하나를 막는다
   function shieldBlock(g, src) {
@@ -747,9 +776,10 @@
       let best = null, bd = 1e9;
       for (const e of g.enemies) {
         if (e.dead || dist(e, n) > LEASH) continue;
-        const d = dist(e, u);
+        const d = dist(e, n);   // 호위: 네크로맨서에게 가장 가까운 적부터
         if (d < bd) { bd = d; best = e; }
       }
+      if (best) bd = dist(best, u);
       if (u.main === 'armor') { if (u.hitsTaken >= 4) shockwave(g, u, s); }
       else if (best) { u.skillT -= dt; if (u.skillT <= 0 && useSkill(g, u, s, best, bd)) { u.skillT = s.skillCd; bd = dist(best, u); } }
       if (best && !best.dead) {
@@ -785,6 +815,7 @@
       if (e.dead) continue;
       if (e.bleedT > 0) { e.bleedT -= dt; damageEnemy(g, e, e.bleed * dt, null, null); if (e.dead) continue; }
       if (e.stun > 0) { e.stun -= dt; continue; }
+      if (e.guard) { if (dist(e.home, n) < CFG.guard.wake || e.home.dead) e.guard = false; else continue; }   // 수비대: 초소 곁에 서 있다
       e.cd -= dt;
       if (e.elite && e.mode !== 'chase') {
         if (e.mode === 'warn' || e.mode === 'aim') {
@@ -839,7 +870,7 @@
       for (const u of g.units) {
         if (u.down > 0 || u.state !== 'ok') continue;
         const d = dist(e, u);
-        const pull = u.main === 'armor' ? 4 : (e.arch === 'ranger' && !e.elite ? 0 : u.r + e.r + 0.5);
+        const pull = Math.max(u.main === 'armor' ? 4 : (e.arch === 'ranger' && !e.elite ? 0 : u.r + e.r + 0.5), !e.elite && e.g === 1 ? CFG.aggroR : 0);   // 1등급 잡몹은 가까운 키메라에게 붙는다
         if (d < pull && (isNecro || d < td)) { tgt = u; isNecro = false; td = d; }
       }
       const reach = f.range + tgt.r + e.r, shooter = e.arch === 'ranger' && !e.elite;

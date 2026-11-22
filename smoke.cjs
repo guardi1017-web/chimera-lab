@@ -75,6 +75,7 @@ for (let i = 0; i < 60 * 40; i++) {
   game.necro.hp = 100;   // 흐름을 끝까지 보려고 죽지 않게 한다
   game.postsTotal = 99;   // 이 흐름에서는 대장이 나오지 않게 한다(억지로 먹여 키운 키메라가 대장을 잡으면 정복이 저장되어 뒤의 확인이 어긋난다)
   if (game.link) sawLink = true;
+  if (game.choice) { frames(22); for (const f of els.mutList.kids[0].handlers.click) f({}); }   // 초소가 부서져 변이 카드가 뜨면 잠금이 풀린 뒤 첫 장을 고른다
   if (i % 90 === 20) game.souls.push({ x: game.necro.x + 2, y: game.necro.y, type: S.KINDS[(i / 90 | 0) % 3], q: 1 + ((i / 90 | 0) % 3), ttl: 6 });
   if (i % 90 === 21) { const s = game.souls[game.souls.length - 1]; game.necro.x = s.x - 1.5; game.necro.y = s.y; }
   if (i % 90 === 40) { const s = game.souls[game.souls.length - 1]; if (s) { game.necro.x = s.x; game.necro.y = s.y; } }
@@ -108,7 +109,7 @@ if (!pins || !booms || !sawLink || !tones) throw new Error('입력·연결선·�
   // 320ms 간격의 두 번 톡톡도 자폭으로 읽힌다
   const before = game.molts;
   tap(game.necro.x + 3, game.necro.y + 3); now += 320; tap(game.necro.x + 3, game.necro.y + 3);
-  if (!(game.units.some(u => u.state === 'rush') || game.molts > before)) throw new Error('320ms 간격의 두 번 톡톡이 자폭으로 읽히지 않는다');
+  if (!(game.units.some(u => u.state === 'rush') || game.molts > before)) throw new Error('320ms 간격의 두 번 톡톡이 자폭으로 읽히지 않는다 ' + JSON.stringify({ choice: game.choice, st: game.units.map(u => u.state + u.down), over: game.over }));
 }
 console.log('입력 확인: 찍기 ' + pins + '번, 자폭 ' + booms + '번, 연결선, 누른 순간의 키메라, 위쪽 칸, 320ms 두 번 톡톡, 소리 호출 ' + tones + '번');
 
