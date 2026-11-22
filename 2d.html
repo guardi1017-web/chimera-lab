@@ -169,7 +169,7 @@
     megaSpecial: { rangerN: 8, beastT: 4.5, beastR: 1.8, armorT: 6, pushR: 2.5, push: 1.5 },
     // 초소 변이(2026-11-22 8차 지시서 2단계). 초소를 부술 때마다 판이 멈추고 셋 중 하나를 고른다. 판 안에서만 간다.
     mut: { pick: 3, chainT: 0.15, chainR: 2.4, gluttonyInst: 0.5, gluttonyR: 0.3, bloodHeal: 20, bloodStunR: 3.5, bloodStun: 1.2,
-      madFrenzyMul: 2, fastInst: 40, fastT: 5, fastMul: 2, breakerCharge: 0.5, breakerBossCap: 0.5, twinDx: 0.55 },
+      madFrenzyMul: 2, fastInst: 40, fastT: 5, fastMul: 2, breakerCharge: 0.5, breakerBossCap: 0.5, twinDx: 0.55, twinKeep: 0.5 },   // twinKeep: 쌍둥이 심장의 둘째 심장이 담는 유전자 비율(탈피 보너스 없음, 2026-11-22 사용자: 너무 세다)
     blastRadius: 3.2, blastEliteFrac: 0.1, blastKnock: 3, blastStun: 1.2,
     rushSpeed: 14, rushMax: 1.0, rushReach: 10, rushBigBonus: 1.5,   // 뛰어들 수 있는 거리, 큰 표적에게 주는 거리 덤
     // 덜 익은 폭탄(불안정도 80% 미만)은 약하고 대가가 있다: 반경이 좁고, 잡몹을 즉사시키지 못하고, 심장이 유전자를 덜 지킨다
@@ -231,7 +231,7 @@
   }
   // 초소 변이 카드. max: 같은 카드를 몇 번까지 가질 수 있는지(없으면 제한 없음)
   const MUTS = {
-    twin_heart: { name: '쌍둥이 심장', desc: '익은 폭발 시 심장이 2개 떨어진다', max: 1 },
+    twin_heart: { name: '쌍둥이 심장', desc: '익은 폭발 시 유전자 절반짜리 심장이 하나 더 떨어진다', max: 1 },
     chain_fuse: { name: '연쇄 도화선', desc: '폭발로 죽은 잡몹이 작은 연쇄 폭발을 일으킨다', max: 1 },
     gluttony: { name: '과식 본능', desc: '혼 불안정도 +50%, 익은 폭발 반경 +30%' },
     blood_heart: { name: '흡혈 심장', desc: '심장을 주우면 네크로맨서 체력 +20, 주변 적 기절' },
@@ -581,8 +581,8 @@
         g.choiceQ++;
       } else g.events.push('posthit');
     }
-    const heart = dx => ({ x: clamp(u.x + dx, 0.8, W - 0.8), y: clamp(u.y, 0.8, H - 0.8), genes: Object.assign({}, u.genes), main: u.main, molts: u.molts + (c >= 1 ? 1 : 0), mutant: u.mutant, keep: CFG.heartWeakKeep + (1 - CFG.heartWeakKeep) * c, wait: CFG.heartWeakWait * (1 - c), age: 0, ttl: CFG.heartTtl });
-    if (c >= 1 && mutN(g, 'twin_heart')) g.hearts.push(heart(-CFG.mut.twinDx), heart(CFG.mut.twinDx));   // 쌍둥이 심장
+    const heart = (dx, twin) => ({ x: clamp(u.x + dx, 0.8, W - 0.8), y: clamp(u.y, 0.8, H - 0.8), genes: Object.assign({}, u.genes), main: u.main, molts: u.molts + (c >= 1 && !twin ? 1 : 0), mutant: u.mutant, keep: (CFG.heartWeakKeep + (1 - CFG.heartWeakKeep) * c) * (twin ? CFG.mut.twinKeep : 1), wait: CFG.heartWeakWait * (1 - c), age: 0, ttl: CFG.heartTtl });
+    if (c >= 1 && mutN(g, 'twin_heart')) g.hearts.push(heart(-CFG.mut.twinDx), heart(CFG.mut.twinDx, true));   // 쌍둥이 심장: 둘째는 유전자 절반, 탈피 보너스 없음
     else g.hearts.push(heart(0));
     g.units = g.units.filter(x => x !== u);
     if (g.pinned === u.uid) g.pinned = null;
@@ -1117,9 +1117,10 @@
     shield() { this.tone('triangle', 900, 600, 0.08, 0.07); },
     // 평타: 맹수 물기(짧은 찢는 소리), 갑주 쿠당(낮게), 사수 탕(짧고 높게). 자주 나니 작게
     hit(kind) {
-      if (kind === 'beast') { this.noise(0.05, 0.12, 2600); this.tone('sawtooth', 320, 120, 0.05, 0.06); }
-      else if (kind === 'armor') { this.tone('sine', 150, 55, 0.09, 0.22); this.noise(0.06, 0.12, 700); }
-      else { this.tone('square', 950, 280, 0.04, 0.05); this.noise(0.03, 0.1, 4500); }
+      // 폰 스피커는 200Hz 아래를 거의 못 낸다: 셋 다 들리는 높이에서 모양을 다르게 한다
+      if (kind === 'beast') { this.tone('triangle', 760, 360, 0.035, 0.16); this.tone('triangle', 640, 300, 0.035, 0.13, 0.05); }   // 맹수: 짧게 두 번 '착-착' 물기
+      else if (kind === 'armor') { this.tone('square', 330, 320, 0.13, 0.07); this.tone('square', 497, 480, 0.1, 0.05); this.tone('sine', 220, 110, 0.08, 0.15); }   // 갑주: 쇠가 울리는 '깡'
+      else { this.noise(0.07, 0.22, 3200); this.tone('sawtooth', 1500, 200, 0.05, 0.06); }   // 사수: 잡음이 큰 '탕'
     },   // 갑주 방벽이 막았다: 가볍게 팅
   };
 

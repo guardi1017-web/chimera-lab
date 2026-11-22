@@ -73,9 +73,10 @@
     shield() { this.tone('triangle', 900, 600, 0.08, 0.07); },
     // 평타: 맹수 물기(짧은 찢는 소리), 갑주 쿠당(낮게), 사수 탕(짧고 높게). 자주 나니 작게
     hit(kind) {
-      if (kind === 'beast') { this.noise(0.05, 0.12, 2600); this.tone('sawtooth', 320, 120, 0.05, 0.06); }
-      else if (kind === 'armor') { this.tone('sine', 150, 55, 0.09, 0.22); this.noise(0.06, 0.12, 700); }
-      else { this.tone('square', 950, 280, 0.04, 0.05); this.noise(0.03, 0.1, 4500); }
+      // 폰 스피커는 200Hz 아래를 거의 못 낸다: 셋 다 들리는 높이에서 모양을 다르게 한다
+      if (kind === 'beast') { this.tone('triangle', 760, 360, 0.035, 0.16); this.tone('triangle', 640, 300, 0.035, 0.13, 0.05); }   // 맹수: 짧게 두 번 '착-착' 물기
+      else if (kind === 'armor') { this.tone('square', 330, 320, 0.13, 0.07); this.tone('square', 497, 480, 0.1, 0.05); this.tone('sine', 220, 110, 0.08, 0.15); }   // 갑주: 쇠가 울리는 '깡'
+      else { this.noise(0.07, 0.22, 3200); this.tone('sawtooth', 1500, 200, 0.05, 0.06); }   // 사수: 잡음이 큰 '탕'
     },   // 갑주 방벽이 막았다: 가볍게 팅
   };
 
