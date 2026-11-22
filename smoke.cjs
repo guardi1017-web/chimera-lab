@@ -357,3 +357,39 @@ const base = JSON.stringify(S.Save.load(JSON.stringify({ v: 1, best: 1, cur: 1, 
   if (!els.downBtn.hidden) throw new Error('1구역에서 지면 내려가기 버튼이 없어야 한다');
   console.log('내려가기: 4구역에서 지면 "3구역으로 내려가기" → 3구역 정복은 초소 골드 +' + sv.gold + '만, 진행 그대로 → "4구역으로". 1구역에서는 버튼 없음');
 }
+
+// ---- 초소 변이 3지선다: 판이 멈추고 카드 셋, 뜬 직후 0.35초 잠금, 고르면 다시 간다 ----
+{
+  store['chimera-lab-save-v1'] = JSON.stringify({ v: 1, best: 0, cur: 0, gold: 0, up: { hp: 0 } });
+  freshSession(ls);
+  fire('startBtn', 'click', {}); frames(3);
+  game.spawnT = 1e9; game.eliteIdx = 99; game.posts.forEach(p => { p.cd = 99; });
+  // 끌던 중에 초소가 부서진다(카드가 뜬다)
+  const d = { pointerId: 7, clientX: 200, clientY: 500 };
+  fire('game', 'pointerdown', d); fire('game', 'pointermove', { pointerId: 7, clientX: 260, clientY: 500 }); frames(2);
+  game.choice = ['twin_heart', 'gluttony', 'chain_fuse'];
+  frames(1);
+  const cards = els.mutList.kids;
+  if (els.mutModal.hidden || cards.length !== 3) throw new Error('변이 모달이 카드 셋으로 떠야 한다: ' + els.mutModal.hidden + ' / ' + cards.length);
+  if (cards[1].kids[0].textContent !== '과식 본능' || !cards[1].kids[1].textContent) throw new Error('카드에 이름과 설명: ' + cards[1].kids[0].textContent);
+  const t0 = game.t, x0 = game.necro.x;
+  fire('game', 'pointermove', { pointerId: 7, clientX: 330, clientY: 500 });
+  frames(5);
+  if (game.t !== t0 || game.necro.x !== x0) throw new Error('고르는 동안 판과 네크로맨서가 멈춰야 한다');
+  if (!cards.every(b => b.disabled)) throw new Error('뜬 직후에는 카드가 잠겨 있어야 한다');
+  for (const f of cards[0].handlers.click) f({});
+  if (!game.choice || game.muts.twin_heart) throw new Error('0.35초 안에 누른 카드는 무시해야 한다');
+  frames(20);   // 약 0.42초 뒤
+  if (cards.some(b => b.disabled)) throw new Error('0.35초 뒤에는 카드가 풀려야 한다');
+  const before = tones;
+  for (const f of cards[1].handlers.click) f({});
+  if (game.choice || game.muts.gluttony !== 1 || !els.mutModal.hidden || tones <= before) throw new Error('고르면 변이가 붙고 모달이 닫히고 소리가 난다');
+  fire('game', 'pointerup', { pointerId: 7, clientX: 330, clientY: 500 });
+  frames(5);
+  if (!(game.t > t0) || game.necro.x !== x0) throw new Error('고른 뒤 판이 다시 가고, 끌던 손가락은 이어지지 않는다');
+  // 한 번에 초소 둘: 두 번 이어서 뜬다
+  game.choice = ['twin_heart', 'mad_blood', 'chain_fuse']; game.choiceQ = 1; frames(1); frames(22);
+  for (const f of els.mutList.kids[0].handlers.click) f({}); frames(1);
+  if (els.mutModal.hidden || els.mutList.kids.length !== 3 || els.mutList.kids[0].disabled !== true) throw new Error('초소 둘이면 다음 셋이 잠긴 채 이어서 떠야 한다');
+  console.log('변이 3지선다: 판 멈춤, 끌던 입력 끊김, 0.35초 잠금(먼저 누른 카드 무시), 고르면 소리와 함께 다시 간다, 초소 둘이면 두 번');
+}

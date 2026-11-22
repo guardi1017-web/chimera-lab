@@ -130,7 +130,7 @@
     const district = opts && opts.district ? opts.district : save.cur + 1;
     g = S.newGame(seed++, { district, start: { hp: save.up.hp, stat: save.up.stat } });
     mode = 'play'; shake = 0; flash = 0; hitstop = 0; lastTap = null;
-    titleEl.hidden = true; endEl.hidden = true;
+    titleEl.hidden = true; endEl.hidden = true; mutEl.hidden = true; mutFor = null;
     inp.x = inp.y = 0; stick = null;
   }
   document.getElementById('startBtn').addEventListener('click', () => start());
@@ -643,6 +643,7 @@
   const KIND_NAME = { beast: '맹수', armor: '갑주', ranger: '사수' };
   function showEnd() {
     mode = 'over';
+    mutEl.hidden = true; mutFor = null;
     const won = g.over === 'win';
     document.getElementById('endTitle').textContent = won ? g.district + '구역 정복' : g.district + '구역에서 쓰러졌다';
     document.getElementById('endPosts').textContent = g.postsDown + ' / ' + g.postsTotal;
@@ -680,12 +681,43 @@
     document.getElementById('againBtn').focus();
   }
 
+  // 초소를 부수면 판이 멈추고 변이 카드 셋이 뜬다. 끌던 손가락이 바로 카드를 누르지 않게 0.35초 동안 잠근다.
+  const mutEl = document.getElementById('mutModal'), mutList = document.getElementById('mutList');
+  const MUT_LOCK_MS = 350;
+  let mutFor = null, mutAt = 0;   // 모달이 보여 주는 카드 셋(g.choice), 뜬 시각
+  function openMut() {
+    mutFor = g.choice; mutAt = performance.now();
+    stick = null; inp.x = inp.y = 0; keys = {};
+    if (lastTap) { clearTimeout(lastTap.timer); lastTap = null; }
+    mutList.textContent = '';
+    const btns = g.choice.map(id => {
+      const m = S.MUTS[id], b = document.createElement('button'), nm = document.createElement('span'), ds = document.createElement('span'), have = g.muts[id] || 0;
+      b.type = 'button'; b.className = 'mut'; b.disabled = true;
+      nm.className = 'mutName'; nm.textContent = m.name + (have ? ' (' + (have + 1) + '번째)' : '');
+      ds.className = 'mutDesc'; ds.textContent = m.desc;
+      b.appendChild(nm); b.appendChild(ds);
+      b.addEventListener('click', () => pickMut(id));
+      mutList.appendChild(b);
+      return b;
+    });
+    mutEl.hidden = false;
+    const forThis = mutFor;
+    setTimeout(() => { if (mutFor === forThis) for (const b of btns) b.disabled = false; }, MUT_LOCK_MS);
+  }
+  function pickMut(id) {
+    if (!g.choice || mutFor !== g.choice || performance.now() - mutAt < MUT_LOCK_MS) return;
+    if (!S.chooseMut(g, id)) return;
+    Sound.purify();
+    mutEl.hidden = true; mutFor = null;   // 초소 둘을 한꺼번에 부쉈으면 다음 프레임에 다음 셋이 뜬다
+  }
+
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000 || 0);
     last = now;
     if (mode === 'play') {
       readInput();
-      if (hitstop > 0) hitstop -= dt;
+      if (g.choice) { if (mutFor !== g.choice) openMut(); }
+      else if (hitstop > 0) hitstop -= dt;
       else S.step(g, dt, inp);
       consumeEvents(dt);
       if (g.over) showEnd();

@@ -69,6 +69,11 @@
   button.buy:disabled { color: var(--dim); outline-color: var(--grid); cursor: default; }
   #end #againBtn { background: transparent; color: var(--ink); outline: 2px solid var(--dim); outline-offset: -2px; }
   #end #againBtn.solo { background: var(--ink); color: var(--ground); outline: 0; }
+  #mutList { display: grid; gap: 10px; }
+  button.mut { font-family: var(--font-body); text-align: left; padding: 16px 18px; background: var(--great); display: grid; gap: 4px; }
+  button.mut:disabled { opacity: 0.55; cursor: default; }   /* 뜬 직후 0.35초 잠금 */
+  .mutName { font-family: var(--font-display); font-size: 1.25rem; }
+  .mutDesc { font-size: 0.95rem; }
   button:focus-visible { outline: 3px solid var(--necro); outline-offset: 3px; }
 </style>
 
@@ -112,6 +117,11 @@
     <button id="buyHp" class="buy" type="button">네크로맨서 체력 +10</button>
     <button id="againBtn" type="button">1구역부터 다시</button>
     <button id="downBtn" class="sub" type="button" hidden>1구역으로 내려가기 (초소 골드 모으기)</button>
+  </section>
+
+  <section class="veil" id="mutModal" hidden>
+    <h2>초소 파괴 — 변이 선택</h2>
+    <div id="mutList"></div>
   </section>
 </div>
 
