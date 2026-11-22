@@ -25,6 +25,10 @@
   // 폭발 손맛(화면만): 바닥 그을음, 튀는 파편, 처치 수 글자. 규칙(sim)과 따로 Math.random을 쓴다(같은 시드 같은 판은 그대로)
   let scorch = [], debris = [], popups = [], seenFx = new WeakSet();
   const SCORCH_T = 4.5, DEBRIS_T = 0.45, POPUP_T = 0.9;
+  const hitSndT = {};   // 평타 소리: 종류마다 0.06초에 한 번만
+  // 공격 몸짓: 휘두르는 동안 바라보는 쪽으로 나갔다 돌아온다(사수는 반동으로 뒤로)
+  const LUNGE = { beast: 0.45, armor: 0.35, ranger: -0.18 };
+  const lungeOf = u => (reduced || !(u.swing > 0) ? 0 : Math.sin(Math.PI * (1 - u.swing / S.CFG.hit.swing)) * LUNGE[u.main]);
   let flash = 0, hitstop = 0;   // 익은 폭발 연출: 화면 번쩍임, 판을 잠깐 멈춤(그림만, 규칙은 그대로)
   let scale = 1, dpr = 1, camX = 0, camY = 0, shake = 0, beatT = 0, lastTap = null, seed = (Date.now() % 100000) + 1;
 
@@ -66,7 +70,13 @@
     hurt() { this.tone('sawtooth', 180, 60, 0.18, 0.25); },
     rush() { this.tone('sawtooth', 300, 900, 0.2, 0.12); },
     sub(i) { const f = 150 + Math.min(i, 10) * 35; this.noise(0.12, 0.3, 900); this.tone('sine', f, f * 0.4, 0.12, 0.35); },   // 집속탄·연쇄: 짧은 퍽. 0.6초 안에 이어 터질수록 한 계단씩 높아진다
-    shield() { this.tone('triangle', 900, 600, 0.08, 0.07); },   // 갑주 방벽이 막았다: 가볍게 팅
+    shield() { this.tone('triangle', 900, 600, 0.08, 0.07); },
+    // 평타: 맹수 물기(짧은 찢는 소리), 갑주 쿠당(낮게), 사수 탕(짧고 높게). 자주 나니 작게
+    hit(kind) {
+      if (kind === 'beast') { this.noise(0.05, 0.12, 2600); this.tone('sawtooth', 320, 120, 0.05, 0.06); }
+      else if (kind === 'armor') { this.tone('sine', 150, 55, 0.09, 0.22); this.noise(0.06, 0.12, 700); }
+      else { this.tone('square', 950, 280, 0.04, 0.05); this.noise(0.03, 0.1, 4500); }
+    },   // 갑주 방벽이 막았다: 가볍게 팅
   };
 
   function resize() {
@@ -241,7 +251,8 @@
     const jx = amp ? Math.sin(now / 23 + u.uid) * amp : 0, jy = amp ? Math.cos(now / 19 + u.uid * 2) * amp : 0;
     const blink = frenzy && !reduced && Math.floor(now / 110) % 2 === 0;
     ctx.save();
-    ctx.translate(u.x + jx, u.y + jy);
+    const lg = lungeOf(u);
+    ctx.translate(u.x + jx + Math.cos(u.face) * lg, u.y + jy + Math.sin(u.face) * lg);
     ctx.globalAlpha = u.down > 0 ? 0.3 : 1;
     ctx.rotate(u.face);
     const sb = u.main === 'beast' ? 0 : gn.beast, sa = u.main === 'armor' ? 0 : gn.armor, sr = u.main === 'ranger' ? 0 : gn.ranger;
@@ -323,6 +334,7 @@
     ctx.restore();
     if (e.stun > 0) { ctx.strokeStyle = COL.great; ctx.lineWidth = 0.07; ctx.beginPath(); ctx.arc(e.x, e.y - e.r - 0.3, 0.2, now / 90, now / 90 + 4.5); ctx.stroke(); }
     if (e.hp < e.maxHp) bar(e.x, e.y - e.r - 0.35, e.elite ? 2 : 0.9, e.hp / e.maxHp, COL.danger);
+    if (e.flash > 0) { ctx.save(); ctx.globalAlpha = e.flash / S.CFG.hit.flash * 0.8; ctx.fillStyle = '#fff'; circle(e.x, e.y, e.r * 1.05); ctx.fill(); ctx.restore(); }   // 맞으면 하얗게 번쩍
   }
 
   function label(text, x, y, size, col) {
@@ -453,7 +465,10 @@
 
     for (const f of g.fx) {
       if (f.k === 'hit') { ctx.strokeStyle = COL.ink; ctx.lineWidth = f.big ? 0.14 : 0.08; circle(f.x, f.y, 0.25 + (0.15 - f.t) * (f.big ? 6 : 3)); ctx.stroke(); }
-      else if (f.k === 'shot') { ctx.strokeStyle = COL[f.arch]; ctx.lineWidth = f.arch === 'ranger' ? 0.14 : 0.07; ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.lineTo(f.tx, f.ty); ctx.stroke(); }
+      else if (f.k === 'shot') {
+        ctx.strokeStyle = COL[f.arch]; ctx.lineWidth = f.uid ? 0.24 : f.arch === 'ranger' ? 0.14 : 0.07; ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.lineTo(f.tx, f.ty); ctx.stroke();
+        if (f.uid) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 0.08; ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.lineTo(f.tx, f.ty); ctx.stroke(); }   // 소환수 사수 탄: 굵고 밝은 심
+      }
       else if (f.k === 'die') { ctx.strokeStyle = COL[f.arch]; ctx.lineWidth = f.big ? 0.2 : 0.1; circle(f.x, f.y, 0.4 + (0.35 - f.t) * (f.big ? 8 : 3)); ctx.stroke(); }
       else if (f.k === 'block') { ctx.strokeStyle = COL.armor; ctx.lineWidth = 0.22; ctx.beginPath(); ctx.arc(f.x, f.y, f.r * 1.6, f.face - 1.1, f.face + 1.1); ctx.stroke(); }
       else if (f.k === 'raise') { ctx.strokeStyle = COL[f.arch]; ctx.lineWidth = 0.14; circle(f.x, f.y, 0.5 + (0.45 - f.t) * 3); ctx.stroke(); }
@@ -593,6 +608,7 @@
       else if (ev === 'rebirth') Sound.rebirth();
       else if (ev === 'block') { Sound.clash(); shake = Math.max(shake, 0.25); }
       else if (ev === 'subboom') { const t = performance.now(); subN = t - subT < 600 ? subN + 1 : 0; subT = t; Sound.sub(subN); buzz(25); shake = Math.max(shake, 0.35); }
+      else if (ev.startsWith('hit:')) { const k = ev.slice(4), t = performance.now(); if (!(t - (hitSndT[k] || -1e9) < 60)) { hitSndT[k] = t; Sound.hit(k); } }
       else if (ev === 'multikill') { buzz([90, 30, 60]); shake = Math.max(shake, 1.0); if (!reduced) hitstop = Math.max(hitstop, 0.1); }   // 한 번에 셋 이상: 더 세게
       else if (ev === 'shieldblock') { const t = performance.now(); if (t - shieldSndT > 120) { Sound.shield(); shieldSndT = t; } }   // 여러 발을 한꺼번에 막아도 소리는 0.12초에 한 번
       else if (ev === 'necrohit') { Sound.hurt(); shake = Math.max(shake, 0.3); }
@@ -726,7 +742,15 @@
   // 새로 생긴 폭발에서 그을음·파편·처치 수 글자를 만들고, 있는 것들을 흘려보낸다
   function juice(dt) {
     for (const f of g.fx) {
-      if ((f.k !== 'boom' && f.k !== 'subboom') || seenFx.has(f)) continue;
+      if (seenFx.has(f)) continue;
+      if ((f.k === 'hit' || f.k === 'shot') && f.uid) {   // 키메라 평타가 닿은 자리에 작은 불꽃
+        seenFx.add(f);
+        if (reduced) continue;
+        const x = f.k === 'shot' ? f.tx : f.x, y = f.k === 'shot' ? f.ty : f.y, n = 3 + Math.floor(Math.random() * 2);
+        for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, v = 3 + Math.random() * 3; debris.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: DEBRIS_T * 0.6, gold: true, s: 0.35 }); }
+        continue;
+      }
+      if (f.k !== 'boom' && f.k !== 'subboom') continue;
       seenFx.add(f);
       const ripe = f.k === 'boom' && !f.weak;
       if (ripe) scorch.push({ x: f.x, y: f.y, r: f.r * 0.8, t: SCORCH_T });

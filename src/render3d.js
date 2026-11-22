@@ -318,6 +318,7 @@ function buildUnitBody(rec, u) {
 }
 function disposeOwn(group) { group.traverse(o => { if (o.userData.own && o.geometry) o.geometry.dispose(); }); }
 
+const LUNGE = { beast: 0.45, armor: 0.35, ranger: -0.18 };
 function drawUnit(u, now, reduced) {
   const rec = sync(u, makeUnit);
   if (rec.sig !== unitSig(u)) { disposeOwn(rec.body); buildUnitBody(rec, u); }
@@ -326,7 +327,9 @@ function drawUnit(u, now, reduced) {
   const jx = amp ? Math.sin(now / 23 + u.uid) * amp : 0, jz = amp ? Math.cos(now / 19 + u.uid * 2) * amp : 0;
   const blink = frenzy && !reduced && Math.floor(now / 110) % 2 === 0;
   const r = u.r * (1 + (reduced ? 0 : u.pop * 0.8));
-  rec.root.position.set(u.x + jx, 0, u.y + jz);
+  // 공격 몸짓: 휘두르는 동안 바라보는 쪽으로 나갔다 돌아온다(사수는 반동으로 뒤로)
+  const lg = reduced || !(u.swing > 0) ? 0 : Math.sin(Math.PI * (1 - u.swing / S.CFG.hit.swing)) * LUNGE[u.main];
+  rec.root.position.set(u.x + jx + Math.cos(u.face) * lg, 0, u.y + jz + Math.sin(u.face) * lg);
   rec.turn.rotation.y = faceToY(u.face);
   rec.body.scale.setScalar(r);
   rec.body.position.y = r * 0.95;
@@ -377,12 +380,17 @@ function makeEnemy(e) {
   if (e.elite) { const w = mesh(GEO.wedge, lambert('ink'), 1.45, 0.9, 0); turn.add(w); }   // 돌격조: 앞쪽의 쐐기
   if (e.boss) { const crown = new THREE.Mesh(new THREE.TorusGeometry(0.6, 0.1, 6, 18), basic('great')); crown.rotation.x = Math.PI / 2; crown.position.y = 2.35; turn.add(crown); }
   if (!e.elite && e.g >= 2) { const band = mesh(GEO.cyl, lambert('ink'), 0, 0.12, 0); band.scale.set(1.9, 0.12, 1.9); turn.add(band); }
-  return { root, turn };
+  // 맞으면 하얗게 번쩍: 몸을 덮는 흰 공(이 적만의 재질)
+  const flashMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false });
+  const flash = new THREE.Mesh(GEO.dot, flashMat); flash.position.y = 0.9; flash.visible = false; root.add(flash);
+  return { root, turn, flash, flashMat, dispose() { flashMat.dispose(); } };
 }
 function drawEnemy(e, now, reduced) {
   const rec = sync(e, () => makeEnemy(e));
-  rec.root.position.set(e.x, 0, e.y);
-  rec.root.scale.setScalar(e.r / 0.5 * 0.5);
+  const fl = e.flash > 0 ? e.flash / S.CFG.hit.flash : 0, sh = fl && !reduced ? 0.08 * fl : 0;   // 맞으면 번쩍이고 살짝 떤다
+  rec.root.position.set(e.x + (sh ? (Math.random() - 0.5) * sh : 0), 0, e.y + (sh ? (Math.random() - 0.5) * sh : 0));
+  rec.root.scale.setScalar(e.r / 0.5 * 0.5 * (1 + (reduced ? 0 : 0.22 * fl)));   // 맞은 순간 살짝 부푼다
+  rec.flash.visible = fl > 0; if (fl > 0) { rec.flashMat.opacity = Math.min(1, 0.4 + fl); rec.flash.scale.setScalar(1.1); }
   rec.turn.rotation.y = faceToY(e.face);
   if (e.elite && (e.mode === 'warn' || e.mode === 'aim')) {   // 돌진 예고: 겨눈 방향으로 붉은 길
     const a = e.face, L = 40, w = 0.9 + (reduced ? 0 : 0.25 * Math.sin(now / 60));
@@ -511,7 +519,10 @@ function drawHero(n, now) {
 function drawFx(f) {
   const H = 0.05;
   if (f.k === 'hit') dec.ring(f.x, f.y, 0.25 + (0.15 - f.t) * (f.big ? 6 : 3), f.big ? 0.14 : 0.08, COL.ink, 1);
-  else if (f.k === 'shot') dec.line(f.x, f.y, f.tx, f.ty, f.arch === 'ranger' ? 0.14 : 0.07, COL[f.arch], 1, 0.9);
+  else if (f.k === 'shot') {
+    dec.line(f.x, f.y, f.tx, f.ty, f.uid ? 0.24 : f.arch === 'ranger' ? 0.14 : 0.07, COL[f.arch], 1, 0.9);
+    if (f.uid) dec.line(f.x, f.y, f.tx, f.ty, 0.08, WHITE, 1, 0.92);   // 소환수 사수 탄: 굵고 밝은 심
+  }
   else if (f.k === 'die') dec.ring(f.x, f.y, 0.4 + (0.35 - f.t) * (f.big ? 8 : 3), f.big ? 0.2 : 0.1, COL[f.arch], 1);
   else if (f.k === 'block') dec.ring(f.x, f.y, f.r * 1.6, 0.22, COL.armor, 1, f.face - 1.1, f.face + 1.1, 0.5);
   else if (f.k === 'raise') dec.ring(f.x, f.y, 0.5 + (0.45 - f.t) * 3, 0.14, COL[f.arch], 1);
