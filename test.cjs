@@ -447,6 +447,18 @@ const approx = (a, b, tol, msg) => { if (!(Math.abs(a - b) <= tol)) throw new Er
       ok(tough.x > tx + 0.5 && g2.fx.filter(f => f.k === 'subboom').every(f => typeof f.kills === 'number'), '집속탄: 살아남은 적을 밀고, 처치 수를 넘긴다');
     }
   }
+  // 평타 타격감: 잡몹은 맞으면 밀리고 멈칫한다(돌격조는 아니다). 키메라는 휘두르고 적은 번쩍인다(화면용 시간)
+  {
+    const g = fresh(); const u = g.units[0]; u.x = g.necro.x; u.y = g.necro.y - 2; u.cd = 0;
+    const e = foe(g, u.x + u.r + 0.5, u.y, { hp: 999, maxHp: 999, stun: 0 }), x0 = e.x;
+    g.events = []; S.step(g, 1 / 60, { x: 0, y: 0 });
+    ok(e.hp < 999 && e.x > x0 + C.hit.knock.beast * 0.9 && e.stun > 0 && e.flash > 0 && u.swing > 0, '평타: 잡몹이 밀리고 멈칫하고 번쩍인다, 키메라는 휘두른다');
+    ok(g.events.includes('hit:beast'), '평타 소리용 알림(종류별)');
+    const g2 = fresh(); const v = g2.units[0]; v.x = g2.necro.x; v.y = g2.necro.y - 2; v.cd = 0;
+    const el = foe(g2, v.x + v.r + 0.7, v.y, { elite: true, hp: 999, maxHp: 999, r: 0.95, mode: 'chase', rechargeT: 99, stun: 0, cd: 99 }), ex = el.x;
+    S.step(g2, 1 / 60, { x: 0, y: 0 });
+    ok(el.hp < 999 && Math.abs(el.x - ex) < 0.1 && !(el.stun > 0), '돌격조는 평타에 밀리거나 멈칫하지 않는다');
+  }
   // 뛰어드는 중인 키메라는 혼을 먹지 않는다
   {
     const g = fresh(); soulAt(g, 'armor', 1); soulAt(g, 'ranger', 1);
@@ -706,7 +718,7 @@ const approx = (a, b, tol, msg) => { if (!(Math.abs(a - b) <= tol)) throw new Er
     ok(!b.ok && b.reason === 'max', '상한이면 못 산다');
   }
   console.log('규칙 확인: 골드(처음 정복만), 소환수 능력치·네크로맨서 체력 강화, 예전 유전자 강화 환불, 저장 읽기·소급·깨진 저장, 구매');
-  console.log('규칙 확인: 되살리기, 흡수와 불안정도, 과부하, 탈피 폭발, 심장 계승, 수동 자폭, 연결, 돌격조와 갑주 방어, 종류별 특수 폭발(집속탄·소용돌이·방벽), 초소 변이 3지선다(멈춤·결정론·연쇄 한 번·카드 8종), 수비대·무리·어그로 분리·호위·처치 수');
+  console.log('규칙 확인: 되살리기, 흡수와 불안정도, 과부하, 탈피 폭발, 심장 계승, 수동 자폭, 연결, 돌격조와 갑주 방어, 종류별 특수 폭발(집속탄·소용돌이·방벽), 초소 변이 3지선다(멈춤·결정론·연쇄 한 번·카드 8종), 수비대·무리·어그로 분리·호위·처치 수, 평타 타격감');
 }
 
 // ---- 봇 ----

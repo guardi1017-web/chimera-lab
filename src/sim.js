@@ -64,6 +64,9 @@
     pack: { early: [2, 3], late: [3, 4], earlyT: 15, r: 1.2, hp: 0.6, dmg: 0.55 }, foeCap: 48,
     guard: { n: 5, r0: 1.5, r1: 2.4, wake: 6.5 }, aggroR: 3.5,
     subKnock: 1.2, multiKill: 3,
+    // 평타 타격감(2026-11-22 사용자 요청): 잡몹(돌격조·대장 빼고)은 맞으면 종류별 거리만큼 밀리고 stagger초 멈칫한다.
+    // swing·flash는 화면용 시간(공격 몸짓, 맞은 적의 번쩍임)
+    hit: { knock: { beast: 0.18, armor: 0.35, ranger: 0.12 }, stagger: 0.12, swing: 0.18, flash: 0.1 },
     // 잡몹 종류의 비율(나머지는 갑주). 처음부터 셋 다 나와 첫 소환부터 종류를 고를 수 있다(2026-11-16 사용자 결정, 전에는 10초까지 군견만)
     foeMixEarly: { beast: 0.5, ranger: 0.25 }, foeMixLate: { beast: 0.42, ranger: 0.28 }, foeMixLateAt: 35,
   };
@@ -285,6 +288,7 @@
   function damageEnemy(g, e, dmg, u, s) {
     if (e.dead) return;
     e.hp -= dmg; e.guard = false;   // 수비대는 맞으면 깨어난다
+    if (u) e.flash = CFG.hit.flash;   // 키메라에게 맞으면 화면에서 잠깐 번쩍인다
     if (u && s && s.lifesteal > 0 && u.down <= 0) u.hp = Math.min(s.maxHp, u.hp + dmg * s.lifesteal);
     if (e.hp <= 0) killEnemy(g, e);
   }
@@ -615,6 +619,7 @@
       const idx = g.units.indexOf(u);
       u.pop = Math.max(0, u.pop - dt);
       if (u.hasteT > 0) u.hasteT = Math.max(0, u.hasteT - dt);
+      if (u.swing > 0) u.swing = Math.max(0, u.swing - dt);
       if (u.state === 'rush') {
         if (u.target && !u.target.dead) { u.tx = u.target.x; u.ty = u.target.y; }
         u.rushT += dt;
@@ -651,10 +656,15 @@
         if (bd > reach) moveToward(u, best.x, best.y, s.spd * dt);
         else u.face = Math.atan2(best.y - u.y, best.x - u.x);
         if (bd <= reach + 0.1 && u.cd <= 0) {
-          u.cd = s.cd;
-          if (s.ranged) g.fx.push({ k: 'shot', x: u.x, y: u.y, tx: best.x, ty: best.y, arch: 'ranger', t: 0.16 });
-          else g.fx.push({ k: 'hit', x: best.x, y: best.y, big: s.level >= 3, t: 0.15 });
+          u.cd = s.cd; u.swing = CFG.hit.swing;
+          if (s.ranged) g.fx.push({ k: 'shot', x: u.x, y: u.y, tx: best.x, ty: best.y, arch: 'ranger', uid: u.uid, t: 0.16 });
+          else g.fx.push({ k: 'hit', x: best.x, y: best.y, big: s.level >= 3, uid: u.uid, t: 0.15 });
+          g.events.push('hit:' + u.main);
           damageEnemy(g, best, s.dmg, u, s);
+          if (!best.dead && !best.elite) {   // 평타 타격감: 잡몹은 밀리고 잠깐 멈칫한다
+            knock(best, u.x, u.y, CFG.hit.knock[u.main]);
+            best.stun = Math.max(best.stun, CFG.hit.stagger);
+          }
         }
       } else if (!best) {
         const a = Math.PI / 2 + idx * Math.PI * 2 / 3;
@@ -677,6 +687,7 @@
 
     for (const e of g.enemies) {
       if (e.dead) continue;
+      if (e.flash > 0) e.flash = Math.max(0, e.flash - dt);
       if (e.bleedT > 0) { e.bleedT -= dt; damageEnemy(g, e, e.bleed * dt, null, null); if (e.dead) continue; }
       if (e.stun > 0) { e.stun -= dt; continue; }
       if (e.guard) { if (dist(e.home, n) < CFG.guard.wake || e.home.dead) e.guard = false; else continue; }   // 수비대: 초소 곁에 서 있다
