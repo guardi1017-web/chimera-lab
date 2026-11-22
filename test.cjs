@@ -326,6 +326,7 @@ const approx = (a, b, tol, msg) => { if (!(Math.abs(a - b) <= tol)) throw new Er
     {
       const g = fresh(); g.muts.twin_heart = 1; bombAt(g, 'armor', 85, 9, 15); run(g, 2);
       ok(g.hearts.length === 2 && Math.abs(g.hearts[0].x - g.hearts[1].x - 2 * -M.twinDx) < 1e-9, '쌍둥이 심장: 익은 폭발에 심장 둘');
+      ok(g.hearts[0].keep === 1 && g.hearts[0].molts === 1 && g.hearts[1].keep === M.twinKeep && g.hearts[1].molts === 0, '쌍둥이 심장: 둘째는 유전자 절반, 탈피 보너스 없음');
       const g2 = fresh(); g2.muts.twin_heart = 1; bombAt(g2, 'armor', 60, 9, 15); run(g2, 2);
       eq(g2.hearts.length, 1, '덜 익은 폭발은 심장 하나');
     }

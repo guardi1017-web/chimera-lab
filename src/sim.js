@@ -33,7 +33,7 @@
     megaSpecial: { rangerN: 8, beastT: 4.5, beastR: 1.8, armorT: 6, pushR: 2.5, push: 1.5 },
     // 초소 변이(2026-11-22 8차 지시서 2단계). 초소를 부술 때마다 판이 멈추고 셋 중 하나를 고른다. 판 안에서만 간다.
     mut: { pick: 3, chainT: 0.15, chainR: 2.4, gluttonyInst: 0.5, gluttonyR: 0.3, bloodHeal: 20, bloodStunR: 3.5, bloodStun: 1.2,
-      madFrenzyMul: 2, fastInst: 40, fastT: 5, fastMul: 2, breakerCharge: 0.5, breakerBossCap: 0.5, twinDx: 0.55 },
+      madFrenzyMul: 2, fastInst: 40, fastT: 5, fastMul: 2, breakerCharge: 0.5, breakerBossCap: 0.5, twinDx: 0.55, twinKeep: 0.5 },   // twinKeep: 쌍둥이 심장의 둘째 심장이 담는 유전자 비율(탈피 보너스 없음, 2026-11-22 사용자: 너무 세다)
     blastRadius: 3.2, blastEliteFrac: 0.1, blastKnock: 3, blastStun: 1.2,
     rushSpeed: 14, rushMax: 1.0, rushReach: 10, rushBigBonus: 1.5,   // 뛰어들 수 있는 거리, 큰 표적에게 주는 거리 덤
     // 덜 익은 폭탄(불안정도 80% 미만)은 약하고 대가가 있다: 반경이 좁고, 잡몹을 즉사시키지 못하고, 심장이 유전자를 덜 지킨다
@@ -95,7 +95,7 @@
   }
   // 초소 변이 카드. max: 같은 카드를 몇 번까지 가질 수 있는지(없으면 제한 없음)
   const MUTS = {
-    twin_heart: { name: '쌍둥이 심장', desc: '익은 폭발 시 심장이 2개 떨어진다', max: 1 },
+    twin_heart: { name: '쌍둥이 심장', desc: '익은 폭발 시 유전자 절반짜리 심장이 하나 더 떨어진다', max: 1 },
     chain_fuse: { name: '연쇄 도화선', desc: '폭발로 죽은 잡몹이 작은 연쇄 폭발을 일으킨다', max: 1 },
     gluttony: { name: '과식 본능', desc: '혼 불안정도 +50%, 익은 폭발 반경 +30%' },
     blood_heart: { name: '흡혈 심장', desc: '심장을 주우면 네크로맨서 체력 +20, 주변 적 기절' },
@@ -445,8 +445,8 @@
         g.choiceQ++;
       } else g.events.push('posthit');
     }
-    const heart = dx => ({ x: clamp(u.x + dx, 0.8, W - 0.8), y: clamp(u.y, 0.8, H - 0.8), genes: Object.assign({}, u.genes), main: u.main, molts: u.molts + (c >= 1 ? 1 : 0), mutant: u.mutant, keep: CFG.heartWeakKeep + (1 - CFG.heartWeakKeep) * c, wait: CFG.heartWeakWait * (1 - c), age: 0, ttl: CFG.heartTtl });
-    if (c >= 1 && mutN(g, 'twin_heart')) g.hearts.push(heart(-CFG.mut.twinDx), heart(CFG.mut.twinDx));   // 쌍둥이 심장
+    const heart = (dx, twin) => ({ x: clamp(u.x + dx, 0.8, W - 0.8), y: clamp(u.y, 0.8, H - 0.8), genes: Object.assign({}, u.genes), main: u.main, molts: u.molts + (c >= 1 && !twin ? 1 : 0), mutant: u.mutant, keep: (CFG.heartWeakKeep + (1 - CFG.heartWeakKeep) * c) * (twin ? CFG.mut.twinKeep : 1), wait: CFG.heartWeakWait * (1 - c), age: 0, ttl: CFG.heartTtl });
+    if (c >= 1 && mutN(g, 'twin_heart')) g.hearts.push(heart(-CFG.mut.twinDx), heart(CFG.mut.twinDx, true));   // 쌍둥이 심장: 둘째는 유전자 절반, 탈피 보너스 없음
     else g.hearts.push(heart(0));
     g.units = g.units.filter(x => x !== u);
     if (g.pinned === u.uid) g.pinned = null;
