@@ -543,6 +543,11 @@ function drawFx(f) {
   else if (f.k === 'clash') { const k = 1 - f.t / 0.4; for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; dec.line(f.x + Math.cos(a) * (0.3 + k), f.y + Math.sin(a) * (0.3 + k), f.x + Math.cos(a) * (0.9 + k * 2), f.y + Math.sin(a) * (0.9 + k * 2), 0.2, COL.ink, 1, 0.5); } }
   else if (f.k === 'rebirth') { const k = 1 - f.t / 0.6; dec.ring(f.x, f.y, 0.4 + k * 2.4, 0.2, COL.great, 1); dec.ring(f.x, f.y, 0.4 + k * 4, 0.08, COL.great, 1); }
   else if (f.k === 'down') dec.ring(f.x, f.y, 0.6 + (0.5 - f.t) * 2, 0.1, COL.danger, 1);
+  else if (f.k === 'subboom') {   // 집속탄 하나: 작은 붉은 원판과 금빛 고리
+    const k = 1 - f.t / 0.35;
+    dec.disc(f.x, f.y, f.r * (0.4 + k * 0.6), COL.danger, (1 - k) * 0.6, 0, Math.PI * 2, H);
+    dec.ring(f.x, f.y, f.r * (0.3 + k * 0.8), 0.22 * (1 - k) + 0.06, COL.great, 1 - k, 0, Math.PI * 2, H + 0.01);
+  }
 }
 
 let g = null;
@@ -610,6 +615,14 @@ const view = {
       for (let i = 0; i < 4; i++) { const a0 = i * Math.PI / 2 + (reduced ? 0 : now / 500); dec.ring(t.x, t.y, rr, ripe ? 0.13 : 0.08, COL.danger, ripe ? 1 : 0.55, a0 + 0.25, a0 + Math.PI / 2 - 0.25, 0.07); }
     }
     for (const u of g.units) drawUnit(u, now, reduced);
+    // 맹수 소용돌이: 도는 붉은 고리 두 겹. 사수 집속탄: 깜빡이는 점. 갑주 방벽: 네크로맨서 둘레 푸른 고리(1초 남으면 깜빡)
+    for (const v of g.vortexes) {
+      const a = Math.min(1, v.t / 0.5), rot = reduced ? 0 : now / 260;
+      for (let j = 0; j < 2; j++) { const rr = v.r * (j ? 0.55 : 1), d = j ? -1.6 : 1;
+        for (let i = 0; i < 3; i++) { const a0 = rot * d + i * Math.PI * 2 / 3; dec.ring(v.x, v.y, rr, j ? 0.14 : 0.2, COL.danger, 0.85 * a, a0, a0 + Math.PI * 0.45, 0.06); } }
+    }
+    for (const b of g.clusters) dec.disc(b.x, b.y, 0.3, Math.floor(now / 70) % 2 ? COL.danger : COL.beast, 1, 0, Math.PI * 2, 0.07);
+    if (n.shieldT > 0 && !(n.shieldT < 1 && Math.floor(now / 110) % 2)) dec.ring(n.x, n.y, n.r + 0.55, 0.22, COL.armor, 0.9, 0, Math.PI * 2, 0.08);
     necro.position.set(n.x, 0, n.y);
     drawHero(n, now);
     dec.ring(n.x, n.y, n.r + 0.16, 0.08, COL.ink, 1);

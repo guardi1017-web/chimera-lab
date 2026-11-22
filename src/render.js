@@ -21,6 +21,7 @@
 
   let g = null, mode = 'title', inp = { x: 0, y: 0 }, stick = null, keys = {}, last = 0;
   let retryDistrict = 1;   // 끝 화면의 '다시' 버튼이 여는 구역
+  let subN = 0, shieldSndT = 0;   // 집속탄 피치 순서, 방벽 소리 간격
   let flash = 0, hitstop = 0;   // 익은 폭발 연출: 화면 번쩍임, 판을 잠깐 멈춤(그림만, 규칙은 그대로)
   let scale = 1, dpr = 1, camX = 0, camY = 0, shake = 0, beatT = 0, lastTap = null, seed = (Date.now() % 100000) + 1;
 
@@ -61,6 +62,8 @@
     clash() { this.noise(0.12, 0.35, 3000); this.tone('square', 220, 110, 0.15, 0.15); },
     hurt() { this.tone('sawtooth', 180, 60, 0.18, 0.25); },
     rush() { this.tone('sawtooth', 300, 900, 0.2, 0.12); },
+    sub(i) { const f = 150 + (i % 5) * 22; this.noise(0.12, 0.3, 900); this.tone('sine', f, f * 0.4, 0.12, 0.35); },   // 집속탄: 짧은 퍽, 한 발마다 피치가 조금씩 다르다
+    shield() { this.tone('triangle', 900, 600, 0.08, 0.07); },   // 갑주 방벽이 막았다: 가볍게 팅
   };
 
   function resize() {
@@ -425,8 +428,20 @@
     }
     for (const u of g.units) drawUnit(u, now);
 
+    // 맹수 소용돌이: 도는 붉은 고리 두 겹(끝날 무렵 옅어진다)
+    for (const v of g.vortexes) {
+      const a = Math.min(1, v.t / 0.5), rot = reduced ? 0 : now / 260;
+      ctx.save(); ctx.globalAlpha = 0.85 * a; ctx.strokeStyle = COL.danger;
+      for (let j = 0; j < 2; j++) { const rr = v.r * (j ? 0.55 : 1), d = j ? -1.6 : 1; ctx.lineWidth = j ? 0.14 : 0.2;
+        for (let i = 0; i < 3; i++) { const a0 = rot * d + i * Math.PI * 2 / 3; ctx.beginPath(); ctx.arc(v.x, v.y, rr, a0, a0 + Math.PI * 0.45); ctx.stroke(); } }
+      ctx.restore();
+    }
+    // 사수 집속탄: 터지기 전까지 깜빡이는 점
+    for (const b of g.clusters) { ctx.fillStyle = Math.floor(now / 70) % 2 ? COL.danger : COL.beast; circle(b.x, b.y, 0.28); ctx.fill(); }
     ctx.fillStyle = n.hurt > 0 ? COL.danger : COL.necro;
     circle(n.x, n.y, n.r); ctx.fill();
+    // 갑주 방벽: 네크로맨서 둘레 두꺼운 푸른 원(1초 남으면 깜빡)
+    if (n.shieldT > 0 && !(n.shieldT < 1 && Math.floor(now / 110) % 2)) { ctx.save(); ctx.globalAlpha = 0.9; ctx.strokeStyle = COL.armor; ctx.lineWidth = 0.22; circle(n.x, n.y, n.r + 0.55); ctx.stroke(); ctx.restore(); }
     ctx.strokeStyle = COL.ink; ctx.lineWidth = 0.08; circle(n.x, n.y, n.r + 0.16); ctx.stroke();
     ctx.fillStyle = COL.ground; circle(n.x, n.y, 0.16); ctx.fill();
 
@@ -455,6 +470,7 @@
       else if (f.k === 'rebirth') { const k = 1 - f.t / 0.6; ctx.strokeStyle = COL.great; ctx.lineWidth = 0.2; circle(f.x, f.y, 0.4 + k * 2.4); ctx.stroke(); ctx.lineWidth = 0.08; circle(f.x, f.y, 0.4 + k * 4); ctx.stroke(); }
       else if (f.k === 'down') { ctx.strokeStyle = COL.danger; ctx.lineWidth = 0.1; circle(f.x, f.y, 0.6 + (0.5 - f.t) * 2); ctx.stroke(); }
       else if (f.k === 'ripe') { const u = g.units.find(x => x.uid === f.uid), k = 1 - f.t / 0.6; ctx.strokeStyle = COL.great; ctx.lineWidth = 0.2 * (1 - k) + 0.05; circle(u ? u.x : f.x, u ? u.y : f.y, 0.5 + k * 2.2); ctx.stroke(); }
+      else if (f.k === 'subboom') { const k = 1 - f.t / 0.35; ctx.save(); ctx.globalAlpha = (1 - k) * 0.6; ctx.fillStyle = COL.danger; circle(f.x, f.y, f.r * (0.4 + k * 0.6)); ctx.fill(); ctx.globalAlpha = 1 - k; ctx.strokeStyle = COL.great; ctx.lineWidth = 0.18; circle(f.x, f.y, f.r * (0.3 + k * 0.8)); ctx.stroke(); ctx.restore(); }
       else if (f.k === 'postfall') { const k = 1 - f.t / 0.9; ctx.strokeStyle = COL.great; ctx.lineWidth = 0.3 * (1 - k) + 0.06; circle(f.x, f.y, 0.8 + k * 4); ctx.stroke(); }
     }
 
@@ -565,6 +581,8 @@
       else if (ev === 'raise') Sound.raise();
       else if (ev === 'rebirth') Sound.rebirth();
       else if (ev === 'block') { Sound.clash(); shake = Math.max(shake, 0.25); }
+      else if (ev === 'subboom') { Sound.sub(subN++); buzz(25); shake = Math.max(shake, 0.35); }
+      else if (ev === 'shieldblock') { const t = performance.now(); if (t - shieldSndT > 120) { Sound.shield(); shieldSndT = t; } }   // 여러 발을 한꺼번에 막아도 소리는 0.12초에 한 번
       else if (ev === 'necrohit') { Sound.hurt(); shake = Math.max(shake, 0.3); }
       else if (ev === 'rush') Sound.rush();
       else if (ev === 'postdown') { Sound.clash(); Sound.purify(); buzz([40, 60, 40]); shake = Math.max(shake, 0.6); }
