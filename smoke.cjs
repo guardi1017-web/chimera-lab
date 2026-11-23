@@ -125,6 +125,8 @@ game.postsDown = game.postsTotal;
 const boss = S.spawnBoss(game);
 frames(3);
 boss.hp = 0.5; boss.bleed = 100; boss.bleedT = 1;
+// 큰 폭발 직후면 화면이 hitstop으로 판을 잠깐 멈춘다(그동안 step 없음): 고정 3프레임이 아니라 끝날 때까지 기다린다(최대 2초)
+for (let i = 0; i < 120 && game.over !== 'win'; i++) frames(1);
 frames(3);
 if (game.over !== 'win' || els.end.hidden !== false) throw new Error('대장을 잡았는데 끝 화면이 뜨지 않았다');
 if (!/1구역 정복/.test(els.endTitle.textContent)) throw new Error('정복 제목이 아니다: ' + els.endTitle.textContent);
