@@ -8,8 +8,22 @@
 <body>
 <title>키메라 실험실</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=Gowun+Dodum&display=swap">
 <style>
+  /* 글꼴: 저장소 안의 서브셋(python src/vendor/sync_fonts.py → src/vendor/fonts/) */
+  @font-face {
+    font-family: 'Gowun Batang';
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+    src: url('./src/vendor/fonts/GowunBatang-Bold.subset.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'Gowun Dodum';
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+    src: url('./src/vendor/fonts/GowunDodum-Regular.subset.woff2') format('woff2');
+  }
   /* 배치: 화면 전체가 판이다. 글은 시작과 끝의 덮개에만 있고, 판 중에는 위쪽 띠 하나만 남는다. */
   :root {
     --ground: #15121c;   /* 봉쇄된 밤거리의 아스팔트 */
@@ -40,8 +54,70 @@
     padding-left: max(24px, env(safe-area-inset-left, 0px));
     padding-right: max(24px, env(safe-area-inset-right, 0px));
     overflow-y: auto;
+    z-index: 2;
   }
+  /* In-play guidance (render.js hud): district 1 goal banner and one-time tip line. Never blocks touches; veils (z 2) cover it. */
+  .hudMsg { position: absolute; left: 50%; transform: translateX(-50%); z-index: 1; box-sizing: border-box; width: max-content; max-width: calc(100% - 32px); margin: 0; padding: 8px 14px; text-align: center; background: var(--veil); pointer-events: none; }
+  #goalBanner { top: max(28%, 196px); font-family: var(--font-display); font-weight: 700; font-size: 1.35rem; color: var(--great); border-top: 2px solid var(--great); border-bottom: 2px solid var(--great); }
+  /* Zone 1 act shift (render.js actBanner): the same banner, tinted as an alarm */
+  #goalBanner[data-kind="alarm"] { color: var(--danger); border-color: var(--danger); }
+  #tipLine { bottom: max(28px, env(safe-area-inset-bottom, 0px)); font-size: 1rem; color: var(--ink); border-left: 4px solid var(--necro); }
+  /* Boss HUD (render.js bossStep): title/name tag and a thick HP bar with quarter ticks, under the canvas top band (y < 92px) and above the goal banner. Replaces the old 7px strip. */
+  #bossHud { position: absolute; top: 96px; left: max(16px, env(safe-area-inset-left, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); z-index: 1; box-sizing: border-box; max-width: 30rem; margin-inline: auto; padding: 6px 10px 8px; display: grid; gap: 4px; background: var(--veil); border-left: 4px solid var(--danger); pointer-events: none; }
+  .bossTag { display: flex; gap: 10px; align-items: baseline; }
+  #bossTitle { font-size: 0.85rem; color: var(--dim); }
+  #bossName { font-family: var(--font-display); font-weight: 700; font-size: 1.2rem; color: var(--danger); }
+  #bossBar { position: relative; height: 18px; background: var(--grid); outline: 2px solid var(--ink); overflow: hidden; }
+  #bossFill { height: 100%; width: 100%; background: var(--danger); transition: width 0.15s linear; }
+  #bossBar::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent calc(25% - 1px), var(--ground) 0 25%, transparent 0 calc(50% - 1px), var(--ground) 0 50%, transparent 0 calc(75% - 1px), var(--ground) 0 75%, transparent 0); }
+  #bossHpText { font-size: 0.85rem; font-variant-numeric: tabular-nums; text-align: right; }
+  /* Phased boss (render.js bossStep): phase ticks at boss.phaseAt replace the quarter ticks; roar and weak point states tint the HUD */
+  #bossTicks { position: absolute; inset: 0; pointer-events: none; }
+  .phaseTick { position: absolute; top: 0; bottom: 0; width: 4px; margin-left: -2px; background: var(--great); box-shadow: 0 0 0 1px var(--ground); }
+  .phaseTick[data-passed="1"] { background: var(--dim); }
+  #bossHud[data-phased="1"] #bossBar::after { display: none; }
+  #bossState { margin-left: auto; font-family: var(--font-display); font-weight: 700; font-size: 1rem; }
+  #bossHud[data-state="roar"] { border-left-color: var(--great); animation: bossRoar 0.12s ease-in-out infinite alternate; }
+  #bossHud[data-state="roar"] #bossState { color: var(--danger); }
+  #bossHud[data-state="weak"] { border-left-color: var(--great); outline: 2px solid var(--great); }
+  #bossHud[data-state="weak"] #bossState { color: var(--great); }
+  #bossHud[data-state="weak"] #bossFill { background: var(--great); }
+  @keyframes bossRoar { from { transform: translateX(-2px); } to { transform: translateX(2px); } }
+  @media (prefers-reduced-motion: reduce) { #bossHud[data-state="roar"] { animation: none; } }
+  @media (prefers-reduced-motion: reduce) { #bossFill { transition: none; } }
+  /* Conquest banner (render.js startVictory): shown during the boss-kill sequence, hidden when the result screen (#end) opens. */
+  #victoryBanner { top: 34%; z-index: 1; font-family: var(--font-display); font-weight: 700; font-size: clamp(2.2rem, 10vw, 3.2rem); line-height: 1.2; color: var(--great); padding: 12px 28px; border-top: 3px solid var(--great); border-bottom: 3px solid var(--great); text-shadow: 0 0 18px var(--great); }
+  #victoryBanner.conquer { animation: conquer 0.45s ease-out both; }
+  @keyframes conquer { from { opacity: 0; transform: translateX(-50%) scale(1.35); } to { opacity: 1; transform: translateX(-50%) scale(1); } }
+  @media (prefers-reduced-motion: reduce) { #victoryBanner.conquer { animation: none; } }
   .veil > * { max-width: 26rem; width: 100%; margin-inline: auto; }
+  /* Home (#title): no veil. Big logo on top, a clear stage in the middle where the board (the 3D stage later) shows through,
+     the main CTA at thumb height and a compact icon row under it. Only the controls panel (#helpModal) is a veil. */
+  .home {
+    position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; gap: 10px;
+    background: linear-gradient(to bottom, rgba(21, 18, 28, 0.6), rgba(21, 18, 28, 0) 24%, rgba(21, 18, 28, 0) 55%, rgba(21, 18, 28, 0.8));
+    padding-top: max(24px, env(safe-area-inset-top, 0px));
+    padding-bottom: max(18px, env(safe-area-inset-bottom, 0px));
+    padding-left: max(20px, env(safe-area-inset-left, 0px));
+    padding-right: max(20px, env(safe-area-inset-right, 0px));
+    pointer-events: none;
+  }
+  .home > * { pointer-events: auto; max-width: 26rem; width: 100%; margin-inline: auto; }
+  .home .logo { flex: none; font-size: clamp(2.4rem, 11vw, 3.4rem); line-height: 1.15; text-align: center; color: var(--ink); text-shadow: 0 2px 0 var(--ground), 0 0 22px var(--necro); }
+  .homeStage { flex: 1 1 auto; min-height: 0; pointer-events: none; }
+  .homeDock { flex: 0 1 auto; min-height: 0; overflow-y: auto; display: grid; gap: 10px; }
+  .homeDock .shopSlot { background: var(--veil); padding: 12px; }
+  .homeDock .tabs { background: rgba(21, 18, 28, 0.7); }
+  button.cta { font-size: 1.7rem; padding: 20px 18px; min-height: 4.4rem; color: var(--ground); background: var(--great); }
+  .iconRow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  button.icon { font-family: var(--font-body); font-size: 0.9rem; padding: 8px 4px; display: grid; justify-items: center; gap: 2px; color: var(--ink); background: rgba(21, 18, 28, 0.72); outline: 2px solid var(--grid); outline-offset: -2px; }
+  button.icon::before { font-size: 1.35rem; line-height: 1; }
+  #shopBtn::before { content: "\2191"; }
+  #soundBtn::before { content: "\266A"; }
+  #soundBtn[aria-pressed="false"] { color: var(--dim); }
+  #soundBtn[aria-pressed="false"]::before { content: "\00D7"; }
+  #helpBtn::before { content: "?"; }
+  #helpModal { z-index: 3; }
   h1, h2 { font-family: var(--font-display); font-weight: 700; margin: 0; text-wrap: balance; }
   h1 { font-size: 2.1rem; }
   h2 { font-size: 1.9rem; }
@@ -75,11 +151,25 @@
   .statShop { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   button.buy.stat { font-size: 0.85rem; padding: 8px 10px; white-space: pre-line; line-height: 1.35; }
   button.buy:disabled { color: var(--dim); outline-color: var(--grid); cursor: default; }
+  /* 상점(#shop)은 하나다: 끝 화면(#endShop)과 제목 화면(#titleShop) 사이를 옮겨 보인다 */
+  .shopSlot, .shop { display: grid; gap: 12px; }
   #end #againBtn { background: transparent; color: var(--ink); outline: 2px solid var(--dim); outline-offset: -2px; }
   #end #againBtn.solo { background: var(--ink); color: var(--ground); outline: 0; }
+  /* Result screen (render.js showEnd): step 1 = title, short record, gold items revealed one by one; step 2 = next/retry, #shop, home */
+  .endStep { display: grid; gap: 12px; }
+  #endTitle { font-size: clamp(2.2rem, 10vw, 3rem); text-align: center; }
+  #end[data-result="win"] #endTitle { color: var(--great); }
+  #end[data-result="lose"] #endTitle { color: var(--danger); }
+  #endProgress { border-left: 4px solid var(--danger); padding-left: 12px; }
+  #endStep1 dl { font-size: 0.92rem; }
+  #rewardList { display: grid; gap: 6px; min-height: 1.5rem; }
+  .rw { padding: 6px 10px; background: rgba(242, 211, 94, 0.1); border-left: 3px solid var(--great); font-variant-numeric: tabular-nums; animation: rwIn 0.3s ease-out both; }
+  @keyframes rwIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .rw { animation: none; } }
+  .rwTotal { font-family: var(--font-display); font-size: 1.4rem; font-variant-numeric: tabular-nums; }
   #mutList { display: grid; gap: 10px; }
   button.mut { font-family: var(--font-body); text-align: left; padding: 16px 18px; background: var(--great); display: grid; gap: 4px; }
-  button.mut:disabled { opacity: 0.55; cursor: default; }   /* 뜬 직후 0.35초 잠금 */
+  button.mut:disabled, #resumeBtn:disabled { opacity: 0.55; cursor: default; }   /* 뜬 직후 0.35초 잠금 */
   .mutName { font-family: var(--font-display); font-size: 1.25rem; }
   .mutDesc { font-size: 0.95rem; }
   button:focus-visible { outline: 3px solid var(--necro); outline-offset: 3px; }
@@ -91,11 +181,37 @@
 <div id="stage">
   <canvas id="game3d" aria-hidden="true"></canvas>
   <canvas id="game" aria-label="키메라 실험 판"></canvas>
+  <p class="hudMsg" id="goalBanner" role="status" hidden></p>
+  <p class="hudMsg" id="tipLine" role="status" aria-live="polite" hidden></p>
+  <p class="hudMsg" id="victoryBanner" role="status" aria-live="assertive" hidden></p>
+  <div id="bossHud" role="group" aria-label="진압 대장" hidden>
+    <p class="bossTag"><span id="bossTitle"></span><strong id="bossName"></strong><span id="bossState" role="status" hidden></span></p>
+    <div id="bossBar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100" aria-labelledby="bossName"><div id="bossFill"></div><div id="bossTicks"></div></div>
+    <p id="bossHpText"></p>
+  </div>
 
-  <section class="veil" id="title">
-    <h1>키메라 실험실</h1>
+  <section class="home" id="title" aria-label="키메라 실험실">
+    <h1 class="logo">키메라 실험실</h1>
+    <div class="homeStage" id="homeStage" aria-hidden="true"></div>
+    <div class="homeDock">
+      <div id="titleShop" class="shopSlot" hidden>
+        <p>가진 골드 <span id="titleGold" class="gold">0골드</span></p>
+      </div>
+      <div id="titleStarter" class="tabs" role="group" aria-label="첫 소환수 종류"></div>
+      <button id="startBtn" class="cta" type="button">시작</button>
+      <div class="iconRow">
+        <button id="shopBtn" class="icon" type="button" aria-expanded="false" aria-controls="titleShop">강화</button>
+        <button id="soundBtn" class="icon" type="button" aria-pressed="true">소리 켜짐</button>
+        <button id="helpBtn" class="icon" type="button" aria-expanded="false" aria-controls="helpModal">조작&#xBC95;</button>
+      </div>
+      <button id="resetBtn" class="sub" type="button" hidden>1구역으로 되돌리기 (골드·강화는 그대로)</button>
+    </div>
+  </section>
+
+  <section class="veil" id="helpModal" role="dialog" aria-modal="true" aria-labelledby="helpTitle" hidden>
+    <h2 id="helpTitle">조작&#xBC95;</h2>
     <p>봉쇄된 서울의 밤. 네크로맨서는 직접 싸우지 못하고, 키메라 셋이 대신 싸운다.</p>
-    <p class="goal"><strong>목적:</strong> <span class="gold">봉쇄 초소</span>를 폭발로 모두 부수면 진압 대장이 나온다. 대장을 잡으면 구역을 차지하고 다음 구역이 열린다. 구역마다 키메라는 처음부터 키운다. 초소를 부술 때마다 <span class="gold">골드</span>를 받고(구역을 처음 차지하면 더), 끝 화면에서 소환수 능력치(종류마다)와 네크로맨서를 강화한다.</p>
+    <p class="goal"><strong>목적:</strong> <span class="gold">봉쇄 초소</span>를 폭발로 모두 부수면 진압 대장이 나온다. 대장을 잡으면 구역을 차지하고 다음 구역이 열린다. 구역마다 키메라는 처음부터 키운다. 초소를 부술 때마다 <span class="gold">골드</span>를 받고(구역을 처음 차지하면 더), 끝 화면이나 제목의 <strong>강화</strong> 버튼에서 소환수 능력치(종류마다)와 네크로맨서를 강화한다.</p>
     <ol class="how">
       <li><span class="step">1</span><span>누르고 끌면 움직인다. 적이 남긴 혼을 밟으면 키메라가 된다.</span></li>
       <li><span class="step">2</span><span>셋이 차면 연결선이 닿은 키메라가 혼을 먹어 커진다. 먹일 대상은 위쪽 칸을 눌러 바꾼다.</span></li>
@@ -108,32 +224,52 @@
       <li><span class="swatch armor"></span>방패 기동대: 막고 밀친다</li>
       <li><span class="swatch ranger"></span>소총수: 멀리서 쏜다</li>
     </ul>
-    <button id="startBtn" type="button">1구역으로</button>
-    <button id="resetBtn" class="sub" type="button" hidden>1구역으로 되돌리기 (골드·강화는 그대로)</button>
+    <button id="helpClose" type="button">확인</button>
   </section>
 
   <section class="veil" id="end" hidden>
-    <h2 id="endTitle">쓰러졌다</h2>
-    <dl>
-      <dt>부순 초소</dt><dd id="endPosts">0 / 3</dd>
-      <dt>잡은 적</dt><dd id="endKills">0마리</dd>
-      <dt>탈피</dt><dd id="endMolt">0번</dd>
-      <dt>가장 높은 등급</dt><dd id="endLevel">1등급</dd>
-      <dt>최고 기록</dt><dd id="endBest">0구역</dd>
-      <dt>골드</dt><dd id="endGold" class="gold">0골드</dd>
-    </dl>
-    <p id="aceAsk" class="gold" hidden></p>
-    <div id="aceList" hidden></div>
-    <div id="statTabs" class="tabs" role="group" aria-label="강화할 소환수 종류"></div>
-    <div id="statShop" class="statShop"></div>
-    <button id="buyHp" class="buy" type="button">네크로맨서 체력 +10</button>
-    <button id="againBtn" type="button">1구역부터 다시</button>
-    <button id="downBtn" class="sub" type="button" hidden>1구역으로 내려가기 (초소 골드 모으기)</button>
+    <div id="endStep1" class="endStep">
+      <h2 id="endTitle">쓰러졌다</h2>
+      <p id="endProgress" hidden></p>
+      <dl>
+        <dt>부순 초소</dt><dd id="endPosts">0 / 3</dd>
+        <dt>잡은 적</dt><dd id="endKills">0마리</dd>
+        <dt>탈피</dt><dd id="endMolt">0번</dd>
+        <dt>가장 높은 등급</dt><dd id="endLevel">1등급</dd>
+        <dt>최고 기록</dt><dd id="endBest">0구역</dd>
+      </dl>
+      <div id="rewardList" aria-live="polite"></div>
+      <p class="rwTotal">받은 골드 <span id="rewardGold" class="gold">0골드</span></p>
+      <p id="aceAsk" class="gold" hidden></p>
+      <button id="endContinue" class="cta" type="button">계속</button>
+    </div>
+    <div id="endStep2" class="endStep" hidden>
+      <div id="aceList" hidden></div>
+      <button id="againBtn" type="button">1구역부터 다시</button>
+      <div id="endStarter" class="tabs" role="group" aria-label="첫 소환수 종류"></div>
+      <button id="downBtn" class="sub" type="button" hidden>1구역으로 내려가기 (초소 골드 모으기)</button>
+      <p>가진 골드 <span id="endGold" class="gold">0골드</span></p>
+      <div id="endShop" class="shopSlot">
+        <div id="shop" class="shop">
+          <div id="statTabs" class="tabs" role="group" aria-label="강화할 소환수 종류"></div>
+          <div id="statShop" class="statShop"></div>
+          <button id="buyHp" class="buy" type="button">네크로맨서 체력 +10</button>
+          <button id="buySeed" class="buy" type="button">변이 &#xC528;&#xC557;</button>
+        </div>
+      </div>
+      <button id="homeBtn" class="sub" type="button">홈으로</button>
+    </div>
   </section>
 
   <section class="veil" id="mutModal" hidden>
     <h2>초소 파괴 — 변이 선택</h2>
     <div id="mutList"></div>
+  </section>
+
+  <section class="veil" id="pauseModal" hidden>
+    <h2>잠깐 멈춤</h2>
+    <p>앱이 뒤로 간 사이 판을 멈춰 두었다.</p>
+    <button id="resumeBtn" type="button">눌러서 계속</button>
   </section>
 </div>
 
@@ -145,6 +281,14 @@
   'use strict';
   const W = 18, H = 30, DURATION = 90, MAX_LEVEL = 10;
   const KINDS = ['beast', 'armor', 'ranger'];
+  // 대장 종류: 구역마다 갑주, 맹수, 사수 순으로 돈다(돌격조처럼)
+  const BOSS_ORDER = ['armor', 'beast', 'ranger'];
+  // 구역별 잡몹 종류 비율(나머지는 갑주). 구역 번호로 돈다(1, 4, 7…은 0번, 2, 5…는 1번, 3, 6…은 2번). 0번이 예전 foeMixEarly/foeMixLate 그대로
+  const FOE_MIXES = [
+    { early: { beast: 0.5, ranger: 0.25 }, late: { beast: 0.42, ranger: 0.28 } },
+    { early: { beast: 0.38, ranger: 0.37 }, late: { beast: 0.34, ranger: 0.38 } },   // 사수가 많다
+    { early: { beast: 0.4, ranger: 0.2 }, late: { beast: 0.32, ranger: 0.22 } },     // 갑주가 많다
+  ];
 
   // 밸런스 값은 여기 모은다.
   const CFG = {
@@ -173,7 +317,8 @@
     megaSpecial: { rangerN: 8, beastT: 4.5, beastR: 1.8, armorT: 6, pushR: 2.5, push: 1.5 },
     // 초소 변이(2026-11-22 8차 지시서 2단계). 초소를 부술 때마다 판이 멈추고 셋 중 하나를 고른다. 판 안에서만 간다.
     mut: { pick: 3, chainT: 0.15, chainR: 2.4, gluttonyInst: 0.5, gluttonyR: 0.3, bloodHeal: 20, bloodStunR: 3.5, bloodStun: 1.2,
-      madFrenzyMul: 2, fastInst: 40, fastT: 5, fastMul: 2, breakerCharge: 0.5, breakerBossCap: 0.5, twinDx: 0.55, twinKeep: 0.5 },   // twinKeep: 쌍둥이 심장의 둘째 심장이 담는 유전자 비율(탈피 보너스 없음, 2026-11-22 사용자: 너무 세다)
+      madFrenzyMul: 2, fastInst: 40, fastT: 5, fastMul: 2, breakerCharge: 0.5, breakerBossCap: 0.5, twinDx: 0.55, twinKeep: 0.5,
+      leapCd: 0.15, vortexR: 0.15, wallT: 1, quakeDmg: 0.2, volleyCd: 0.15, clusterR: 0.15 },   // twinKeep: 쌍둥이 심장의 둘째 심장이 담는 유전자 비율(탈피 보너스 없음, 2026-11-22 사용자: 너무 세다)
     blastRadius: 3.2, blastEliteFrac: 0.1, blastKnock: 3, blastStun: 1.2,
     rushSpeed: 14, rushMax: 1.0, rushReach: 10, rushBigBonus: 1.5,   // 뛰어들 수 있는 거리, 큰 표적에게 주는 거리 덤
     // 덜 익은 폭탄(불안정도 80% 미만)은 약하고 대가가 있다: 반경이 좁고, 잡몹을 즉사시키지 못하고, 심장이 유전자를 덜 지킨다
@@ -185,31 +330,64 @@
     moltBonus: 0.1, mutantBonus: 0.2,
     statPerGene: 0.35,
     eliteFirst: 20, eliteEvery: 25, eliteWarn: 1.5,   // 돌격조는 20초에 처음, 그 뒤 25초마다
+    eliteEveryLate: 18,        // 90초(DURATION) 뒤에 나온 돌격조부터 다음 돌격조까지의 간격(마지막 초소를 남겨 두고 오래 끌지 않게)
     postHits: 2, postRange: 4.2, postDmg: 3, postCd: 1.5,   // 초소: 폭발 두 번(불안정도가 찬 폭발은 한 번)에 부서진다
     bossHp: 600, bossBlastCap: 0.35,                   // 대장: 폭발 한 번에 최대 체력의 35%까지만
+    // 맹수 대장: 겨누는 시간이 짧고, 돌진 뒤 gap초에 한 번 더(chain번) 돌진한 다음 보통 간격으로 돌아간다.
+    // 사수 대장: every초마다 1등급 수비대 n마리를 둘레(r)에 부른다.
+    bossBeast: { aimTime: 0.6, gap: 1.5, chain: 1 }, bossRanger: { every: 6, n: 3, r: 1.8 },
+    // Lap 2+ (district 4+): weaker assist pattern added to the boss (districtScale also rises, so softer than lap-1 originals).
+    // armor/beast boss: summon n grade-1 escorts every `every` s. ranger boss: after a charge, chain more charges with `gap` s (normal aim time).
+    bossLap: { armor: { every: 8, n: 2, r: 1.8 }, beast: { every: 10, n: 2, r: 1.8 }, ranger: { chain: 1, gap: 3 } },
+    // District 1 armor boss (lap 0 only): three phases. hp <= at[0] -> phase 2 (roar, then bossLap.armor escorts), hp <= at[1] -> phase 3 (roar, then chain charges).
+    // Each shift happens once. roar: seconds the boss stands still. weakMul: chimera (non-blast) damage while stunned by a barricade hit (blasts keep bossBlastCap).
+    // Lap 1+ bosses keep their own patterns from full hp (no phases, no weak point).
+    // summon: phase 2 escorts, bossLap.armor with a longer gap and fewer escorts (set below CFG, bossLap.armor itself is untouched); first call waits a full gap after the roar.
+    // chainGap: >= bossLap.ranger.gap and < rechargeEvery, so the district 1 boss stays softer than lap 1+ bosses.
+    bossPhase: { at: [0.66, 0.33], roar: 1.6, weakMul: 2, chain: 1, chainGap: 4, summon: null },
+    // 돌격조 종류별 pattern(대장 pattern 코드를 같이 쓴다). 1구역 난이도를 지키려 bossLap보다 약하게: 맹수 돌격조는 돌진 뒤 gap초(< rechargeEvery)에 chain번 더,
+    // 사수 돌격조는 every초마다 1등급 escort n마리를 둘레 r에 부른다. 갑주 돌격조는 pattern 없음(예전 그대로)
+    eliteBeast: { chain: 1, gap: 4 }, eliteRanger: { every: 12, n: 1, r: 1.5 },
+    // Summon post (district 2+): one post per game calls n grade-1 escorts every `every` s while the necromancer is inside its firing range (eliteRanger values)
+    postSummon: { every: 12, n: 1, r: 1.5 },
     districtScale: 0.25,                               // 구역이 하나 오를 때마다 적의 체력과 피해가 이만큼 더
     // 골드: 판마다(이기든 지든) 부순 초소 하나에 perPost, 구역을 처음 정복하면 perClear를 더 받는다(2026-11-16 사용자 결정).
     // 골드로 사는 강화: 소환수 능력치(종류마다 따로, 그 종류의 모든 소환수에 붙는다)와 네크로맨서 체력.
     // geneRefund·geneMaxOld: 예전 '시작 맹수 유전자' 강화 한 단계에 쓴 골드와 그 상한(그 강화를 없애며 돌려준다, 2026-11-17)
-    gold: { perPost: 1, perClear: 3, statCost: 3, statMax: 5, hpCost: 3, hpStep: 10, hpMax: 8, geneRefund: 3, geneMaxOld: 8 },
+    // 돌격조 처치 수마다 perElite, 대장을 잡으면 perBoss를 더 받는다(이기든 지든, 판이 끝날 때 earn이 준다)
+    // statCost/hpCost: progressive price table, indexed by the level already owned (0..max-1); cheap first levels, later levels cost more.
+    // rangeRefund: the old flat price (3) paid per removed melee range level, refunded when an old save is read.
+    gold: { perPost: 1, perClear: 3, perElite: 1, perBoss: 2, statCost: [2, 3, 4, 5, 6], statMax: 5, hpCost: [2, 2, 3, 3, 4, 4, 5, 5], hpStep: 10, hpMax: 8, rangeRefund: 3, geneRefund: 3, geneMaxOld: 8, seedCost: 4, seedMax: 1, seedPerClear: 1 },   // seedCost/seedMax: one-shot mutation seed (buy before a run, at most 1 held). seedPerClear: seeds given on a first conquest (capped at seedMax)
     // 능력치 강화 한 단계: 체력·공격력·이속·사거리는 그만큼 오르고, 간격·받는 피해는 (1+값)으로 나눈다
-    statStep: { hp: 0.15, dmg: 0.15, cd: 0.1, spd: 0.08, range: 0.12, taken: 0.1 },
+    statStep: { hp: 0.15, dmg: 0.15, cd: 0.1, spd: 0.08, range: 0.12, leap: 0.12, quake: 0.12, taken: 0.1 },
+    // Shop list per kind (same slot order). Only ranger keeps range; beast buys leap (skill cooldown), armor buys quake (shockwave).
+    // leap: skillCd / (1 + leap*lv), never below skillCdMin. quake: shockwave dmg x(1 + quake*lv), needs hits - floor(lv/every) hits (>= minHits).
+    statKinds: { beast: ['hp', 'dmg', 'cd', 'spd', 'leap', 'taken'], armor: ['hp', 'dmg', 'cd', 'spd', 'quake', 'taken'], ranger: ['hp', 'dmg', 'cd', 'spd', 'range', 'taken'] },
+    skillCdMin: 1.5, shock: { hits: 4, every: 2, minHits: 2 },
     eliteHp: 260, eliteHpStep: 0.5,
     chargeSpeed: 13, chargeDmg: 25, eliteDmg: 12, rechargeEvery: 7, aimTime: 1.2,
     spawnStart: 4.5, spawnEnd: 2.7, foeGradeMul: 1.35,
+    // Mid (grade 2) spawn chance per lap: lap = floor((district - 1) / 3). Lap 0 keeps 30% (18-50 s) / 50% (50 s+); each lap adds midLapStep, capped at midMax
+    midLapStep: 0.10, midMax: 0.70,
     // 무리와 수비대(2026-11-22 9차 지시서). 1등급 잡몹은 한 지점에 뭉쳐 나온다: early초 전에는 early[0]~[1]마리, 그 뒤 late[0]~[1]마리. 무리 잡몹의 체력·공격력은 hp·dmg배.
     // 지시서 값(간격 2.6~1.5초, 4~5마리, 체력 0.75배)은 봇 1구역 정복 33→4/40이라 사용자가 간격·마릿수·스탯을 다시 정함(2026-11-22).
     // 초소마다 둘레(guardR0~guardR1)에 1등급 수비대 guardN마리. 네크로맨서가 그 초소 guardWake 안에 오거나 맞기 전까지 서 있다.
     // 1등급 잡몹은 aggroR 안에 키메라가 있으면 네크로맨서 대신 가장 가까운 키메라를 친다.
     pack: { early: [2, 3], late: [3, 4], earlyT: 15, r: 1.2, hp: 0.6, dmg: 0.55 }, foeCap: 48,
+    // Zone 1 three acts (district 1 only): every broken post sends one alarm wave next to it (packAt pack of pack + packStep*(postsDown-1) grade-1 foes
+    // plus `mid` grade-2 makeFoe), placed `off` beyond the post (away from the necromancer). The wave ignores foeCap so it is never dropped.
+    acts: 3, alarm: { pack: 2, packStep: 1, mid: 1, r: 1.2, off: 2.5 },
     guard: { n: 5, r0: 1.5, r1: 2.4, wake: 6.5 }, aggroR: 3.5,
     subKnock: 1.2, multiKill: 3,
+    // Barricades (BARRICADE_LAYOUTS): min distance from every post spot of the layout and from the start point, min open gap to walls and between barricades, max half-thickness of the thin side
+    barricade: { clearPost: 3.2, clearStart: 4, gap: 1.6, thin: 0.45 },
     // 평타 타격감(2026-11-22 사용자 요청): 잡몹(돌격조·대장 빼고)은 맞으면 종류별 거리만큼 밀리고 stagger초 멈칫한다.
     // swing·flash는 화면용 시간(공격 몸짓, 맞은 적의 번쩍임)
     hit: { knock: { beast: 0.18, armor: 0.35, ranger: 0.12 }, stagger: 0.12, swing: 0.18, flash: 0.1 },
     // 잡몹 종류의 비율(나머지는 갑주). 처음부터 셋 다 나와 첫 소환부터 종류를 고를 수 있다(2026-11-16 사용자 결정, 전에는 10초까지 군견만)
-    foeMixEarly: { beast: 0.5, ranger: 0.25 }, foeMixLate: { beast: 0.42, ranger: 0.28 }, foeMixLateAt: 35,
+    foeMixes: FOE_MIXES, foeMixEarly: FOE_MIXES[0].early, foeMixLate: FOE_MIXES[0].late, foeMixLateAt: 35,
   };
+  CFG.bossPhase.summon = Object.assign({}, CFG.bossLap.armor, { every: 12, n: 1 });   // phase 2 escorts of the district 1 armor boss
   // 주 유전자별 기본 능력(유전자 1개 기준)
   const BASE = {
     beast:  { hp: 50,  dmg: 7, cd: 0.5, spd: 6.6, range: 0.3, taken: 1,   skillCd: 4 },
@@ -243,6 +421,10 @@
     mega_special: { name: '특수 폭발 증폭', desc: '집속탄·소용돌이·방벽이 크게 강해진다', max: 1 },
     fast_molt: { name: '고속 재연성', desc: '심장 계승 시 불안정도 40%로 시작, 5초간 공속·이속 2배', max: 1 },
     post_breaker: { name: '공성 특화', desc: '덜 익은 폭발(40%+)도 초소를 바로 부순다, 대장 폭발 상한 50%', max: 1 },
+    // Per-kind cards (max 1 each, conservative). They only scale existing skillCd / CFG.special / shockwave numbers via mutN (CFG.mut.leapCd..clusterR).
+    beast_leap: { name: '맹수 도약 강화', desc: '맹수 도약 간격 -15%, 소용돌이 반경 +15%', max: 1 },
+    armor_bulwark: { name: '갑주 방벽 강화', desc: '갑주 방벽 +1초, 충격파 피해 +20%', max: 1 },
+    ranger_volley: { name: '사수 일제 사격 강화', desc: '사수 일제 사격 간격 -15%, 집속탄 반경 +15%', max: 1 },
   };
   const MUT_IDS = Object.keys(MUTS);
   const mutN = (g, id) => (g.muts && g.muts[id]) || 0;
@@ -258,9 +440,10 @@
   // 심장으로 깨어나도 같은 종류. 다른 유전자는 섞인 유전자로만 붙는다.
 
   // 능력과 기술은 모두 유전자 개수에서 나온다. 주 유전자가 몸과 기술을, 섞인 유전자가 그 변형을 정한다.
-  const NO_UP = { hp: 0, dmg: 0, cd: 0, spd: 0, range: 0, taken: 0 };
+  const NO_UP = { hp: 0, dmg: 0, cd: 0, spd: 0, range: 0, leap: 0, quake: 0, taken: 0 };
   function stats(u) {
-    const g = u.genes, b = BASE[u.main], total = geneTotal(u), q = u.up || NO_UP, ss = CFG.statStep;
+    const g = u.genes, b = BASE[u.main], total = geneTotal(u), q0 = u.up || NO_UP, ss = CFG.statStep, kl = CFG.statKinds[u.main], q = {};
+    for (const k in NO_UP) q[k] = kl.includes(k) && Number.isFinite(q0[k]) ? q0[k] : 0;   // only upgrades this kind can buy (melee: no range)
     const sb = u.main === 'beast' ? 0 : g.beast, sa = u.main === 'armor' ? 0 : g.armor, sr = u.main === 'ranger' ? 0 : g.ranger;
     const m = (1 + CFG.statPerGene * (total - 1)) * (1 + CFG.moltBonus * u.molts) * (u.mutant ? 1 + CFG.mutantBonus : 1);
     const fz = isFrenzy(u) ? (u.mad ? CFG.mut.madFrenzyMul : CFG.frenzyMul) : 1, hz = u.hasteT > 0 ? CFG.mut.fastMul : 1;   // mad: 광폭 유지 변이, hasteT: 고속 재연성
@@ -274,7 +457,8 @@
       taken: b.taken / ((1 + 0.12 * sa) * (1 + ss.taken * q.taken)),
       taunt: u.main === 'armor',
       lifesteal: Math.min(0.3, 0.05 * sb),             // 맹수 섞임: 흡혈
-      skillCd: b.skillCd / (1 + 0.12 * sb),            // 맹수 섞임: 기술이 빨리 돈다
+      skillCd: Math.min(b.skillCd / (1 + 0.12 * sb), Math.max(CFG.skillCdMin, b.skillCd / ((1 + 0.12 * sb) * (1 + ss.leap * q.leap)))),   // 맹수 섞임: 기술이 빨리 돈다 (+ leap upgrade, floor skillCdMin)
+      quakeHits: Math.max(CFG.shock.minHits, CFG.shock.hits - Math.floor(q.quake / CFG.shock.every)), quakeMul: 1 + ss.quake * q.quake,   // armor shockwave upgrade
       knock: (u.main === 'armor' ? 1.2 : 0) + Math.min(2.5, 0.5 * sa),   // 갑주 섞임: 밀치기
       stun: sa >= 2 ? 0.3 : 0,
       shards: Math.min(8, sr),                         // 사수 섞임: 기술을 쓸 때 사방으로 파편
@@ -297,6 +481,76 @@
 
   // 초소 자리: 시작 지점(아래쪽)에서 먼 순서. 가장 가까운 것도 사격 범위의 두 배쯤 떨어져 있다.
   const POST_SPOTS = [[4, 16], [14, 13], [8, 7.5], [15, 4.5], [3, 3.5], [9, 1.5]];
+  // 초소 자리 표: 구역 번호로 돈다(잡몹 비율과 같게). 표마다 시작 지점에서 가까운 순서이고, 가장 가까운 것도 postRange의 두 배 넘게 떨어져 있다. 0번이 예전 POST_SPOTS 그대로
+  const POST_LAYOUTS = [
+    POST_SPOTS,
+    [[14, 17], [4, 12.5], [11, 8], [3, 5], [15, 3], [8, 1.5]],
+    [[9, 15.5], [3, 11], [15, 9], [9, 5.5], [2.5, 2.5], [15.5, 2]],
+  ];
+  const tableIdx = (district, n) => { const d = Math.floor(+district); return ((Number.isFinite(d) && d >= 1 ? d : 1) - 1) % n; };
+  function postSpotsFor(district) { return POST_LAYOUTS[tableIdx(district, POST_LAYOUTS.length)]; }
+  // Barricade table: cycles by district like POST_LAYOUTS (district 1, 4, 7... use index 0). Row = [center x, center y, half width hw, half height hh] (axis-aligned box).
+  // In a game they appear as g.obstacles = [{ x, y, hw, hh }] (renderers read this directly). Necromancer, foes and chimeras cannot pass; rushing chimeras, souls and hearts can.
+  // Each box keeps CFG.barricade.clearPost from all post spots of its layout, clearStart from the start point, gap from walls/each other; thin side <= thin (items on it stay pickable).
+  const BARRICADE_LAYOUTS = [
+    [[14.5, 20, 1.2, 0.4], [3.5, 22, 0.4, 1.2], [3.5, 10.5, 1.2, 0.4]],
+    [[4, 20, 1.2, 0.4], [10, 13, 0.4, 1.2], [15, 10.5, 1, 0.4]],
+    [[13.5, 21, 1.2, 0.4], [4.5, 18, 0.4, 1.2], [13, 13.5, 0.4, 1]],
+  ];
+  function barricadesFor(district) { return BARRICADE_LAYOUTS[tableIdx(district, BARRICADE_LAYOUTS.length)]; }
+  const boxDist = (b, x, y) => Math.hypot(Math.max(0, Math.abs(x - b.x) - b.hw), Math.max(0, Math.abs(y - b.y) - b.hh));
+  // Push circle o (x, y, r) out of box b. Returns true if it overlapped.
+  function pushOutOf(o, b) {
+    const r = o.r || 0, cx = clamp(o.x, b.x - b.hw, b.x + b.hw), cy = clamp(o.y, b.y - b.hh, b.y + b.hh);
+    const dx = o.x - cx, dy = o.y - cy, d = Math.hypot(dx, dy);
+    if (d >= r) return false;
+    if (d > 1e-6) { o.x = cx + dx / d * r; o.y = cy + dy / d * r; return true; }
+    const L = o.x - (b.x - b.hw), R = b.x + b.hw - o.x, T = o.y - (b.y - b.hh), B = b.y + b.hh - o.y, m = Math.min(L, R, T, B);   // center inside: leave by the nearest side
+    if (m === L) o.x = b.x - b.hw - r; else if (m === R) o.x = b.x + b.hw + r; else if (m === T) o.y = b.y - b.hh - r; else o.y = b.y + b.hh + r;
+    return true;
+  }
+  function blockObstacles(g, o) { let hit = false; for (const b of g.obstacles || []) if (pushOutOf(o, b)) hit = true; return hit; }
+  // Entry fraction (0..1) of segment into box b grown by m, or -1 if it misses.
+  function boxHit(x0, y0, x1, y1, b, m) {
+    let t0 = 0, t1 = 1;
+    for (const [p, d, lo, hi] of [[x0, x1 - x0, b.x - b.hw - m, b.x + b.hw + m], [y0, y1 - y0, b.y - b.hh - m, b.y + b.hh + m]]) {
+      if (Math.abs(d) < 1e-9) { if (p < lo || p > hi) return -1; continue; }
+      let a = (lo - p) / d, c = (hi - p) / d;
+      if (a > c) { const s = a; a = c; c = s; }
+      t0 = Math.max(t0, a); t1 = Math.min(t1, c);
+      if (t0 > t1) return -1;
+    }
+    return t0;
+  }
+  // moveToward, but if a barricade blocks the straight line, head for the first corner of the shortest path around it (so walkers never stall against it).
+  function walkToward(g, o, tx, ty, d) {
+    const r = o.r || 0;
+    let hb = null, ht = 2, mt = 0, wx = tx, wy = ty;
+    for (const b of g.obstacles || []) {
+      const m = Math.min(0.7 * r, boxDist(b, tx, ty) - 0.05);
+      if (m < 0) continue;   // target hugs this barricade: go straight, the push-out slides along it
+      const t = boxHit(o.x, o.y, tx, ty, b, m);
+      if (t >= 0 && t < ht) { ht = t; hb = b; mt = m; }
+    }
+    if (hb) {
+      const m = r + 0.15, P = [], T = { x: tx, y: ty }, see = (a, c) => boxHit(a.x, a.y, c.x, c.y, hb, mt) < 0;
+      for (const sx of [-1, 1]) for (const sy of [-1, 1]) P.push({ x: hb.x + sx * (hb.hw + m), y: hb.y + sy * (hb.hh + m) });
+      const D = P.map(c => (see(o, c) ? dist(o, c) : 1e9)), first = [0, 1, 2, 3], done = [];
+      let best = 1e9, pick = -1;
+      for (let k = 0; k < 4; k++) {   // tiny Dijkstra over the four corners
+        let i = -1;
+        for (let j = 0; j < 4; j++) if (!done[j] && (i < 0 || D[j] < D[i])) i = j;
+        if (D[i] >= 1e9) break;
+        done[i] = true;
+        if (see(P[i], T) && D[i] + dist(P[i], T) < best) { best = D[i] + dist(P[i], T); pick = first[i]; }
+        for (let j = 0; j < 4; j++) if (!done[j] && see(P[i], P[j]) && D[i] + dist(P[i], P[j]) < D[j]) { D[j] = D[i] + dist(P[i], P[j]); first[j] = first[i]; }
+      }
+      if (pick >= 0) { wx = P[pick].x; wy = P[pick].y; }
+    }
+    moveToward(o, wx, wy, d);
+  }
+  function foeMixFor(district, late) { const m = FOE_MIXES[tableIdx(district, FOE_MIXES.length)]; return late ? m.late : m.early; }
+  const archOf = (mix, r) => (r < mix.beast ? 'beast' : r < mix.beast + mix.ranger ? 'ranger' : 'armor');
 
   // opts.district: 몇 번째 구역인지(1부터). 키메라는 구역마다 맹수 하나로 처음부터 키운다.
   // opts.start: 골드로 산 시작 강화 { genes: 시작 맹수에 더할 유전자 수, hp: 네크로맨서 체력 단계 }. 불안정도는 늘 0으로 시작한다.
@@ -305,7 +559,7 @@
     const out = {};
     for (const k of KINDS) {
       out[k] = {};
-      for (const s of Object.keys(CFG.statStep)) {
+      for (const s of CFG.statKinds[k]) {
         const v = o && o[k] ? Math.floor(+o[k][s]) : 0;
         out[k][s] = Number.isFinite(v) ? clamp(v, 0, CFG.gold.statMax) : 0;
       }
@@ -325,33 +579,47 @@
       pinned: null,             // 먹일 대상으로 찍어 둔 키메라(없으면 혼에 가장 가까운 키메라)
       link: null,               // 지금 연결된 혼과 키메라(화면의 예고선)
       feedT: 0,                 // 0이 되어야 다음 혼을 먹일 수 있다(실제 시간)
-      eliteIdx: 0, spawnT: 1.2,
+      eliteIdx: 0, eliteAt: CFG.eliteFirst, eliteAtIdx: 0, spawnT: 1.2,   // eliteAt: 다음 돌격조 시각, eliteAtIdx: 그 시각이 몇 번째 돌격조의 것인지
       kills: 0, raised: 0, absorbs: 0, molts: 0, rebirths: 0, eliteKills: 0, blocks: 0, maxLevel: 1,
       ripeBlasts: 0, firstFeedT: null, firstRipeT: null,   // 지표: 다 익은 폭발 수, 처음 먹인 시각, 처음 다 익은 폭발 시각
       district, scale: 1 + CFG.districtScale * (district - 1),
       posts: [], postsTotal: 0, postsDown: 0, boss: null,
+      // acts: zone 1 three-act rules on. alarms: alarm waves so far, alarm: last act shift info for banners ({ wave, act, acts, postsDown, postsTotal, x, y, t, foes, last })
+      // eliteRush: the next elite was pulled forward so one shows up before the last post falls
+      acts: district === 1, alarms: 0, alarm: null, eliteRush: false,
+      obstacles: barricadesFor(district).map(b => ({ x: b[0], y: b[1], hw: b[2], hh: b[3] })),   // barricades (copied per game)
     };
     // 네크로맨서는 직접 싸우지 못한다. 유전자 하나짜리 맹수 하나와 시작한다.
     const step = (v, max) => { const n = Math.floor(+(v || 0)); return Number.isFinite(n) ? clamp(n, 0, max) : 0; };
     const st = opts.start || {};
     g.necro.maxHp = g.necro.hp = 100 + CFG.gold.hpStep * step(st.hp, CFG.gold.hpMax);   // 골드로 산 체력
     g.statUp = statUpOf(st.stat);   // 골드로 산 소환수 능력치(종류마다)
-    g.units.push(makeUnit(g, { beast: 1 }, 'beast', g.necro.x, g.necro.y + 1.5));
+    // opts.starter: 첫 소환수 종류('beast' | 'armor' | 'ranger'). 없거나 KINDS에 없는 값이면 맹수(예전 그대로)
+    const starter = KINDS.includes(opts.starter) ? opts.starter : 'beast';
+    g.starter = starter;
+    const sg = {}; sg[starter] = 1;
+    g.units.push(makeUnit(g, sg, starter, g.necro.x, g.necro.y + 1.5));   // 그 종류의 골드 강화(statUp)가 그대로 붙는다
     // 봉쇄 초소: 구역이 오를수록 많아진다(셋에서 다섯까지)
     // 구역은 아래에서 시작해 위로 밀고 올라간다. 가까운 초소부터 놓는다.
-    const spots = POST_SPOTS;
+    const spots = postSpotsFor(district);
     const count = Math.min(5, 2 + district);
     for (let i = 0; i < count; i++) g.posts.push({ post: true, x: spots[i][0], y: spots[i][1], r: 0.9, hp: CFG.postHits, maxHp: CFG.postHits, cd: 1, dead: false });
     g.postsTotal = count;
+    // From district 2 the farthest post is the summon post; from lap 3 (district 7+) the second farthest one too.
+    // No rand used, so the rest of the layout (posts, guards) is unchanged for the same seed
+    const summonPosts = district < 2 ? 0 : Math.floor((district - 1) / 3) >= 2 ? 2 : 1;
+    for (let k = 1; k <= summonPosts; k++) { const sp = g.posts[count - k]; sp.summon = CFG.postSummon; sp.summonT = CFG.postSummon.every; }
     // 초소 수비대: 1등급 잡몹이 초소 둘레에 모여 서 있다
     const gd = CFG.guard;
     for (const p of g.posts) for (let i = 0; i < gd.n; i++) {
       const a = (i / gd.n + g.rand() * 0.15) * Math.PI * 2, d = gd.r0 + (gd.r1 - gd.r0) * g.rand();
-      const r = g.rand(), arch = r < CFG.foeMixEarly.beast ? 'beast' : r < CFG.foeMixEarly.beast + CFG.foeMixEarly.ranger ? 'ranger' : 'armor';
+      const r = g.rand(), arch = archOf(foeMixFor(district, false), r);
       const e = makeFoe(g, arch, 1, clamp(p.x + Math.cos(a) * d, 0.6, W - 0.6), clamp(p.y + Math.sin(a) * d, 0.6, H - 0.6), 1);
       e.guard = true; e.home = p;
       g.enemies.push(e);
     }
+    // opts.mutSeed: a gold-bought mutation seed was spent on this run -> one 3-card pick before play (same g.choiceQ/drawChoice/chooseMut flow as posts)
+    if (opts.mutSeed) { g.choiceQ++; drawChoice(g); }
     return g;
   }
 
@@ -378,34 +646,122 @@
     return { x, y };
   }
 
-  function spawn(g, dt) {
-    // 돌격조: 정해진 시각의 1.5초 전에 경고와 함께 화면 끝에 나타난다
-    if (g.t >= CFG.eliteFirst + CFG.eliteEvery * g.eliteIdx - CFG.eliteWarn) {
-      const p = edgePoint(g, 9), hp = CFG.eliteHp * (1 + CFG.eliteHpStep * Math.min(g.eliteIdx, 4)) * g.scale;
+  // 돌격조 다음 간격: 90초(DURATION) 전에 나온 돌격조 뒤에는 eliteEvery, 그 뒤에는 eliteEveryLate
+  const eliteGap = at => (at >= DURATION ? CFG.eliteEveryLate : CFG.eliteEvery);
+  // idx번째 돌격조의 시각(eliteFirst부터 eliteGap을 차례로 더한다)
+  function eliteTimeOf(idx) {
+    let t = CFG.eliteFirst;
+    for (let k = 0, n = Math.min(Math.max(0, Math.floor(+idx) || 0), 10000); k < n; k++) t += eliteGap(t);
+    return t;
+  }
+  // One elite appears at the board edge in 'warn' mode (spawn() on its timetable, or actShift() when the last post fell before it showed up)
+  function spawnElite(g) {
+    {
+      const p = edgePoint(g, 9), hp = CFG.eliteHp * (1 + CFG.eliteHpStep * Math.min(g.eliteIdx, 4)) * g.scale, arch = KINDS[(g.eliteIdx + tableIdx(g.district, KINDS.length)) % KINDS.length];   // kind order starts shifted by district (1: beast, 2: armor, 3: ranger, then cycles); hp step stays by eliteIdx
+      const chainMax = arch === 'beast' ? CFG.eliteBeast.chain : 0, summon = arch === 'ranger' ? CFG.eliteRanger : null;
       g.enemies.push({
-        elite: true, arch: KINDS[g.eliteIdx % 3], g: 3, x: p.x, y: p.y, hp, maxHp: hp, dmg: CFG.eliteDmg * g.scale, r: 0.95,
+        chainMax, chainGap: chainMax ? CFG.eliteBeast.gap : 0, chainLeft: chainMax, summon, summonT: summon ? summon.every : 0,
+        elite: true, arch, g: 3, x: p.x, y: p.y, hp, maxHp: hp, dmg: CFG.eliteDmg * g.scale, r: 0.95,
         cd: 0.5, face: 0, stun: 0, bleed: 0, bleedT: 0,
         mode: 'warn', modeT: CFG.eliteWarn, dx: 0, dy: 0, run: 0, runMax: 0, hitNecro: false, hitUnits: {}, rechargeT: CFG.rechargeEvery,
       });
       g.eliteIdx++;
+      if (g.eliteRush) { g.eliteRush = false; g.eliteAt = eliteTimeOf(g.eliteIdx); }   // pulled-forward elite: the rest keep the normal timetable (no extra, no duplicate)
+      else g.eliteAt += eliteGap(g.eliteAt);
+      g.eliteAtIdx = g.eliteIdx;
       g.events.push('warn');
     }
+  }
+  function spawn(g, dt) {
+    // 돌격조: 정해진 시각의 1.5초 전에 경고와 함께 화면 끝에 나타난다
+    if (g.eliteAtIdx !== g.eliteIdx) { g.eliteAt = eliteTimeOf(g.eliteIdx); g.eliteAtIdx = g.eliteIdx; }   // eliteIdx가 eliteAtIdx와 다르면 그 번호의 시각을 따른다
+    if (g.t >= g.eliteAt - CFG.eliteWarn) spawnElite(g);
     g.spawnT -= dt;
     if (g.spawnT > 0 || g.enemies.length >= CFG.foeCap) return;
-    const k = Math.min(1, g.t / DURATION), r = g.rand(), r2 = g.rand();
-    g.spawnT = (CFG.spawnStart + (CFG.spawnEnd - CFG.spawnStart) * k) * (0.8 + 0.4 * g.rand());
-    const mix = g.t < CFG.foeMixLateAt ? CFG.foeMixEarly : CFG.foeMixLate;
+    const c = spawnCurve(g), r = g.rand(), r2 = g.rand();
+    g.spawnT = c.gap * (0.8 + 0.4 * g.rand());
+    const mix = foeMixFor(g.district, c.late);
     const arch = r < mix.beast ? 'beast' : r < mix.beast + mix.ranger ? 'ranger' : 'armor';
     let grade = 1;
-    if (g.t >= 18) grade = r2 < (g.t < 50 ? 0.7 : 0.5) ? 1 : 2;
+    if (c.tEff >= 18) grade = r2 < 1 - c.mid ? 1 : 2;
     const p = edgePoint(g, 7);
     if (grade === 2) { g.enemies.push(makeFoe(g, arch, 2, p.x, p.y, 1)); return; }   // 중형은 예전처럼 하나씩
     // 1등급은 한 지점에 무리로(체력은 낮게)
-    const pk = CFG.pack, [lo, hi] = g.t < pk.earlyT ? pk.early : pk.late, n = lo + Math.floor(g.rand() * (hi - lo + 1));
-    for (let i = 0; i < n && g.enemies.length < CFG.foeCap; i++) {
-      const a = i / n * Math.PI * 2 + g.rand(), d = pk.r * Math.sqrt(g.rand());
-      g.enemies.push(makeFoe(g, arch, 1, clamp(p.x + Math.cos(a) * d, 0.6, W - 0.6), clamp(p.y + Math.sin(a) * d, 0.6, H - 0.6), pk.hp, pk.dmg));
+    const pk = CFG.pack, [lo, hi] = c.tEff < pk.earlyT ? pk.early : pk.late, n = lo + Math.floor(g.rand() * (hi - lo + 1));
+    packAt(g, arch, p.x, p.y, n, pk.r);
+  }
+  // Zone 1 acts: effective spawn time = max(real time, DURATION * postsDown / postsTotal), so each broken post lifts the curve one step.
+  // Other districts (or g.acts false) use real time only, exactly as before.
+  function spawnTimeOf(g) {
+    return g.acts && g.postsTotal > 0 ? Math.max(g.t, DURATION * Math.min(g.postsDown, g.postsTotal) / g.postsTotal) : g.t;
+  }
+  // Current act (1..CFG.acts) in zone 1, 0 elsewhere
+  function actOf(g) { return g.acts ? Math.min(CFG.acts, 1 + (g.postsDown || 0)) : 0; }
+  // Spawn curve (no rand): gap = base interval before the random 0.8~1.2 factor, mid = grade-2 chance once tEff >= 18 (midP = chance right now)
+  function spawnCurve(g) {
+    const tEff = spawnTimeOf(g), k = Math.min(1, tEff / DURATION);
+    const lap = Math.max(0, Math.floor(((g.district || 1) - 1) / 3)), mid = Math.min(CFG.midMax, (tEff < 50 ? 0.3 : 0.5) + CFG.midLapStep * lap);
+    return { act: actOf(g), tEff, k, gap: CFG.spawnStart + (CFG.spawnEnd - CFG.spawnStart) * k, mid, midP: tEff >= 18 ? mid : 0, late: tEff >= CFG.foeMixLateAt };
+  }
+  // Zone 1 act shift on a broken post p (called once on the live -> dead switch): alarm wave, banner info, and the elite pull before the last post
+  function actShift(g, p) {
+    const A = CFG.alarm, n = g.necro, c = spawnCurve(g), d = dist(p, n), ux = d > 1e-6 ? (p.x - n.x) / d : 0, uy = d > 1e-6 ? (p.y - n.y) / d : -1;
+    const x = clamp(p.x + ux * A.off, 0.6, W - 0.6), y = clamp(p.y + uy * A.off, 0.6, H - 0.6), mix = foeMixFor(g.district, c.late), wave = g.alarms + 1;
+    const foes = packAt(g, archOf(mix, g.rand()), x, y, A.pack + A.packStep * Math.max(0, g.postsDown - 1), A.r, Infinity);
+    for (let i = 0; i < A.mid; i++) { const e = makeFoe(g, archOf(mix, g.rand()), 2, x, y, 1); g.enemies.push(e); foes.push(e); }
+    for (const e of foes) e.alarm = wave;
+    g.alarms = wave;
+    // elite: 'rush' = first elite pulled forward (shows up eliteWarn later), 'now' = it came in right now, null = nothing changed
+    g.alarm = { wave, act: c.act, acts: CFG.acts, postsDown: g.postsDown, postsTotal: g.postsTotal, x, y, t: g.t, foes: foes.length, last: g.postsDown >= g.postsTotal, elite: null };
+    g.events.push('alarm');
+    // No elite yet and only the last post is left (or none): bring the first elite in now (warned as usual)
+    if (g.eliteIdx === 0 && g.postsDown >= g.postsTotal - 1 && g.eliteAt - CFG.eliteWarn > g.t) { g.eliteAt = g.t + CFG.eliteWarn; g.eliteRush = true; g.alarm.elite = 'rush'; }
+    // The last post fell and still no elite (the last two posts fell in the same step, or before the pulled elite showed up):
+    // spawn it right here, before the boss (explode calls spawnBoss after this). Treated as the pulled elite, so the rest keep the normal timetable
+    if (g.eliteIdx === 0 && g.postsDown >= g.postsTotal) { g.eliteRush = true; spawnElite(g); g.alarm.elite = 'now'; }
+  }
+  // 1등급 무리를 한 지점(x, y) 둘레 r 안에 놓는다(무리 잡몹 체력·공격력). 놓은 잡몹을 돌려준다
+  // cap: enemy limit (default foeCap; the zone 1 alarm wave passes Infinity)
+  function packAt(g, arch, x, y, n, r, cap) {
+    const pk = CFG.pack, out = [], lim = cap === undefined ? CFG.foeCap : cap;
+    for (let i = 0; i < n && g.enemies.length < lim; i++) {
+      const a = i / n * Math.PI * 2 + g.rand(), d = r * Math.sqrt(g.rand());
+      const e = makeFoe(g, arch, 1, clamp(x + Math.cos(a) * d, 0.6, W - 0.6), clamp(y + Math.sin(a) * d, 0.6, H - 0.6), pk.hp, pk.dmg);
+      g.enemies.push(e); out.push(e);
     }
+    return out;
+  }
+  // 연속 돌진·소환 pattern: 대장과 돌격조가 같이 쓴다.
+  // chain charges: beast boss by arch, others (bosses with assist flag, beast elites) by chainMax/chainGap
+  const bossChainOf = e => (e.boss && e.arch === 'beast' ? CFG.bossBeast.chain : e.chainMax || 0);
+  const bossGapOf = e => (e.boss && e.arch === 'beast' ? CFG.bossBeast.gap : e.chainGap);
+  // 사수 대장은 arch로, 나머지(보조 pattern 대장, 사수 돌격조)는 summon 값으로 every초마다 1등급 escort를 부른다
+  const summonOf = b => (b.boss && b.arch === 'ranger' ? CFG.bossRanger : b.summon);
+  function summonTick(g, b, dt) {
+    const o = summonOf(b);
+    if (!o) return;
+    b.summonT -= dt;
+    if (b.summonT > 0) return;
+    b.summonT = o.every;
+    const r = g.rand(), arch = archOf(foeMixFor(g.district, false), r);
+    for (const e of packAt(g, arch, b.x, b.y, o.n, o.r)) e.escort = true;
+  }
+  // Phase shifts of the phased boss (district 1 armor). Runs every step (also while stunned), each threshold only once, never back.
+  function bossPhaseTick(g, b) {
+    if (!b.phases || b.dead) return;
+    const P = CFG.bossPhase, f = b.hp / b.maxHp;
+    while (b.phase < 3 && f <= P.at[b.phase - 1]) {
+      b.phase++; b.roarT = P.roar; b.roars++;
+      if (b.mode !== 'chase') { b.mode = 'chase'; b.rechargeT = CFG.rechargeEvery; }   // drop a pending warn/aim/charge so no charge fires right after the roar
+      if (b.phase === 2) { b.summon = P.summon; b.summonT = P.summon.every; }   // first escorts one full gap after the roar (timer paused while roaring)
+      else { b.chainMax = P.chain; b.chainGap = P.chainGap; b.chainLeft = P.chain; }
+      g.events.push('roar');
+    }
+  }
+  function bossSummon(g, dt) {
+    const b = g.boss;
+    if (b && !b.dead) { bossPhaseTick(g, b); if (!(b.roarT > 0)) summonTick(g, b, dt); }   // no summon timer while roaring
+    for (const e of g.enemies.slice()) if (e.elite && !e.boss && !e.dead) summonTick(g, e, dt);
   }
   function makeFoe(g, arch, grade, x, y, hpMul, dmgMul) {
     const f = FOE[arch], m = Math.pow(CFG.foeGradeMul, grade - 1), hp = f.hp * m * (grade === 2 ? 1.6 : 1) * g.scale * hpMul;
@@ -427,6 +783,7 @@
   }
   function damageEnemy(g, e, dmg, u, s) {
     if (e.dead) return;
+    if (u && e.weak && e.stun > 0) dmg *= CFG.bossPhase.weakMul;   // weak point: only chimera attacks (blasts pass no unit)
     e.hp -= dmg; e.guard = false;   // 수비대는 맞으면 깨어난다
     if (u) e.flash = CFG.hit.flash;   // 키메라에게 맞으면 화면에서 잠깐 번쩍인다
     if (u && s && s.lifesteal > 0 && u.down <= 0) u.hp = Math.min(s.maxHp, u.hp + dmg * s.lifesteal);
@@ -458,6 +815,11 @@
   }
 
   // 주력 기술. 주 유전자가 무엇이냐에 따라 다르다.
+  // Skill cooldown after a skill: beast_leap / ranger_volley cut it (never below skillCdMin, never above the plain value)
+  function skillCdOf(g, u, s) {
+    const k = u.main === 'beast' ? mutN(g, 'beast_leap') * CFG.mut.leapCd : u.main === 'ranger' ? mutN(g, 'ranger_volley') * CFG.mut.volleyCd : 0;
+    return k > 0 ? Math.min(s.skillCd, Math.max(CFG.skillCdMin, s.skillCd * (1 - k))) : s.skillCd;
+  }
   function useSkill(g, u, s, best, bd) {
     if (u.main === 'beast') {
       if (!best || bd > 6) return false;
@@ -468,6 +830,7 @@
       best.bleed = Math.max(best.bleed, s.dmg * 0.5); best.bleedT = 3;
       damageEnemy(g, best, s.dmg * 2.5, u, s);
       applyControl(best, u, s); shards(g, u, s);
+      u.skillT = skillCdOf(g, u, s);
       return true;
     }
     if (u.main === 'ranger') {
@@ -485,6 +848,7 @@
         if (e) { damageEnemy(g, e, s.dmg * 0.8, u, s); applyControl(e, u, s); }
       }
       g.fx.push({ k: 'volley', x: u.x, y: u.y, face: a, t: 0.25 });
+      u.skillT = skillCdOf(g, u, s);
       return true;
     }
     return false;
@@ -495,7 +859,7 @@
     const R = 2.6 + u.r;
     for (const e of g.enemies) {
       if (e.dead || dist(e, u) > R) continue;
-      damageEnemy(g, e, s.dmg * 1.5, u, s);
+      damageEnemy(g, e, s.dmg * 1.5 * s.quakeMul * (1 + CFG.mut.quakeDmg * mutN(g, 'armor_bulwark')), u, s);
       applyControl(e, u, s);
     }
     g.fx.push({ k: 'wave', x: u.x, y: u.y, r: R, t: 0.3 });
@@ -563,7 +927,7 @@
       if (e.elite) {
         if (e.mode !== 'charge') knock(e, u.x, u.y, CFG.blastKnock);
         e.stun = Math.max(e.stun, CFG.blastStun);
-        if (e.mode === 'charge' || e.mode === 'aim' || e.mode === 'warn') { e.mode = 'chase'; e.rechargeT = CFG.rechargeEvery; }
+        if (e.mode === 'charge' || e.mode === 'aim' || e.mode === 'warn') { e.mode = 'chase'; e.rechargeT = CFG.rechargeEvery; e.chainLeft = bossChainOf(e); }
         damageEnemy(g, e, e.maxHp * (e.boss ? bossCap * (0.1 + 0.9 * c) : eliteFrac) + 0.01, null, null);
       } else {
         if (c >= 1) killEnemy(g, e);                              // 다 익은 폭탄: 잡몹 즉사
@@ -579,8 +943,11 @@
       p.hp -= hit;
       if (p.hp <= 0) {
         p.dead = true; g.postsDown++;
+        // Broken post leaves one pure core soul (q: 3) on its spot, same shape as killEnemy. Only on the live -> dead switch, so never twice
+        g.souls.push({ x: clamp(p.x, 0.8, W - 0.8), y: clamp(p.y, 0.8, H - 0.8), type: u.main, q: 3, ttl: CFG.soulTtl * 1.5 });
         g.fx.push({ k: 'postfall', x: p.x, y: p.y, t: 0.9 });
         g.events.push('postdown');
+        if (g.acts) actShift(g, p);
         if (g.postsDown >= g.postsTotal && !g.boss) spawnBoss(g);
         g.choiceQ++;
       } else g.events.push('posthit');
@@ -628,12 +995,12 @@
       const o = sp.ranger, n = mega ? M.rangerN : o.n;
       for (let i = 0; i < n; i++) {
         const a = -Math.PI / 2 + i * Math.PI * 2 / n;
-        g.clusters.push({ x: clamp(u.x + Math.cos(a) * R * o.dist, 0.4, W - 0.4), y: clamp(u.y + Math.sin(a) * R * o.dist, 0.4, H - 0.4), r: R * o.r, frac: o.frac, t: o.t0 + (o.t1 - o.t0) * i / Math.max(1, n - 1) });
+        g.clusters.push({ x: clamp(u.x + Math.cos(a) * R * o.dist, 0.4, W - 0.4), y: clamp(u.y + Math.sin(a) * R * o.dist, 0.4, H - 0.4), r: R * o.r * (1 + CFG.mut.clusterR * mutN(g, 'ranger_volley')), frac: o.frac, t: o.t0 + (o.t1 - o.t0) * i / Math.max(1, n - 1) });
       }
     } else if (u.main === 'beast') {
       const t = mega ? M.beastT : sp.beast.t;
-      g.vortexes.push({ x: u.x, y: u.y, r: R * (mega ? M.beastR : sp.beast.r), t, maxT: t });
-    } else if (u.main === 'armor') g.necro.shieldT = Math.max(g.necro.shieldT, mega ? M.armorT : sp.armor.t);
+      g.vortexes.push({ x: u.x, y: u.y, r: R * (mega ? M.beastR : sp.beast.r) * (1 + CFG.mut.vortexR * mutN(g, 'beast_leap')), t, maxT: t });
+    } else if (u.main === 'armor') g.necro.shieldT = Math.max(g.necro.shieldT, (mega ? M.armorT : sp.armor.t) + CFG.mut.wallT * mutN(g, 'armor_bulwark'));
   }
   // 집속탄 하나가 터진다: 잡몹은 즉사, 돌격조·대장은 본 폭발 피해의 일부, 초소는 건드리지 않는다
   function subBoom(g, b) {
@@ -661,9 +1028,17 @@
   }
   // 초소를 다 부수면 대장이 나타난다. 돌격조처럼 예고하고 달려들지만 훨씬 단단하다.
   function spawnBoss(g) {
-    const p = edgePoint(g, 9), hp = CFG.bossHp * g.scale;
+    const p = edgePoint(g, 9), hp = CFG.bossHp * g.scale, arch = BOSS_ORDER[((g.district || 1) - 1) % BOSS_ORDER.length];
+    // lap: 0 for districts 1-3, 1 for 4-6, ... Lap 1+ adds a weaker assist pattern per boss kind
+    const lap = Math.max(0, Math.floor(((g.district || 1) - 1) / 3)), L = CFG.bossLap, extra = lap >= 1;
+    const summon = extra && arch !== 'ranger' ? L[arch] : null, chainMax = extra && arch === 'ranger' ? L.ranger.chain : 0;
+    const phases = arch === 'armor' && lap === 0;
     g.boss = {
-      elite: true, boss: true, arch: 'armor', g: 3, x: p.x, y: p.y, hp, maxHp: hp, dmg: CFG.eliteDmg * 1.4 * g.scale, r: 1.35,
+      // phase 1..3, phaseAt: hp thresholds (null = no phases), roarT: roar time left, roars: shifts so far, weak: weak point open (barricade stun)
+      phases, phase: 1, phaseAt: phases ? CFG.bossPhase.at : null, roarT: 0, roars: 0, weak: false,
+      lap, summon, chainMax, chainGap: chainMax ? L.ranger.gap : 0,
+      chainLeft: arch === 'beast' ? CFG.bossBeast.chain : chainMax, summonT: summon ? summon.every : CFG.bossRanger.every,   // 남은 연속 돌진 횟수, 수비대를 부를 때까지 남은 시간
+      elite: true, boss: true, arch, g: 3, x: p.x, y: p.y, hp, maxHp: hp, dmg: CFG.eliteDmg * 1.4 * g.scale, r: 1.35,
       cd: 0.5, face: 0, stun: 0, bleed: 0, bleedT: 0,
       mode: 'warn', modeT: CFG.eliteWarn + 0.8, dx: 0, dy: 0, run: 0, runMax: 0, hitNecro: false, hitUnits: {}, rechargeT: CFG.rechargeEvery,
     };
@@ -737,6 +1112,7 @@
     if (mm > 1) { mx /= mm; my /= mm; }
     n.x = clamp(n.x + mx * NECRO_SPEED * dtReal, 0.6, W - 0.6);
     n.y = clamp(n.y + my * NECRO_SPEED * dtReal, 0.6, H - 0.6);
+    blockObstacles(g, n);
 
     // 자리가 찼을 때: 가까운 혼(또는 심장)과 먹일 키메라를 잇는다
     const full = g.units.length >= CFG.maxUnits;
@@ -754,6 +1130,7 @@
     n.hurt = Math.max(0, n.hurt - dt);
     n.shieldT = Math.max(0, n.shieldT - dt);
     spawn(g, dt);
+    bossSummon(g, dt);
 
     for (const u of g.units.slice()) {
       const idx = g.units.indexOf(u);
@@ -789,11 +1166,11 @@
         if (d < bd) { bd = d; best = e; }
       }
       if (best) bd = dist(best, u);
-      if (u.main === 'armor') { if (u.hitsTaken >= 4) shockwave(g, u, s); }
-      else if (best) { u.skillT -= dt; if (u.skillT <= 0 && useSkill(g, u, s, best, bd)) { u.skillT = s.skillCd; bd = dist(best, u); } }
+      if (u.main === 'armor') { if (u.hitsTaken >= s.quakeHits) shockwave(g, u, s); }
+      else if (best) { u.skillT -= dt; if (u.skillT <= 0 && useSkill(g, u, s, best, bd)) bd = dist(best, u); }
       if (best && !best.dead) {
         const reach = s.range + best.r + u.r;
-        if (bd > reach) moveToward(u, best.x, best.y, s.spd * dt);
+        if (bd > reach) walkToward(g, u, best.x, best.y, s.spd * dt);
         else u.face = Math.atan2(best.y - u.y, best.x - u.x);
         if (bd <= reach + 0.1 && u.cd <= 0) {
           u.cd = s.cd; u.swing = CFG.hit.swing;
@@ -809,7 +1186,7 @@
       } else if (!best) {
         const a = Math.PI / 2 + idx * Math.PI * 2 / 3;
         const tx = n.x + Math.cos(a) * (1.3 + u.r), ty = n.y + Math.sin(a) * (1.3 + u.r);
-        if (Math.hypot(tx - u.x, ty - u.y) > 0.15) moveToward(u, tx, ty, s.spd * dt);
+        if (Math.hypot(tx - u.x, ty - u.y) > 0.15) walkToward(g, u, tx, ty, s.spd * dt);
       }
     }
 
@@ -829,7 +1206,10 @@
       if (e.dead) continue;
       if (e.flash > 0) e.flash = Math.max(0, e.flash - dt);
       if (e.bleedT > 0) { e.bleedT -= dt; damageEnemy(g, e, e.bleed * dt, null, null); if (e.dead) continue; }
-      if (e.stun > 0) { e.stun -= dt; continue; }
+      const roaring = e.roarT > 0;
+      if (roaring) e.roarT = Math.max(0, e.roarT - dt);
+      if (e.stun > 0) { e.stun -= dt; if (e.stun <= 0) e.weak = false; continue; }
+      if (roaring) continue;   // roaring boss stands still
       if (e.guard) { if (dist(e.home, n) < CFG.guard.wake || e.home.dead) e.guard = false; else continue; }   // 수비대: 초소 곁에 서 있다
       e.cd -= dt;
       if (e.elite && e.mode !== 'chase') {
@@ -848,7 +1228,13 @@
         const stepLen = CFG.chargeSpeed * dt;
         e.x += e.dx * stepLen; e.y += e.dy * stepLen; e.run += stepLen;
         let stopped = false;
-        for (const u of g.units) {
+        if (blockObstacles(g, e)) {   // hit a barricade: charge stops like an armor block
+          e.stun = 1.5; stopped = true;
+          if (e.phases) e.weak = true;
+          g.fx.push({ k: 'clash', x: e.x, y: e.y, t: 0.4 });
+          g.events.push('barricade');
+        }
+        for (const u of stopped ? [] : g.units) {
           if (u.state !== 'ok' || u.down > 0 || e.hitUnits[u.uid] || dist(e, u) > e.r + u.r) continue;
           e.hitUnits[u.uid] = true;
           if (u.main === 'armor' && levelOf(u) >= 2) {
@@ -872,12 +1258,16 @@
         }
         const out = e.x < 0.6 || e.x > W - 0.6 || e.y < 0.6 || e.y > H - 0.6;
         e.x = clamp(e.x, 0.6, W - 0.6); e.y = clamp(e.y, 0.6, H - 0.6);
-        if (stopped || out || e.run >= e.runMax) { e.mode = 'chase'; e.rechargeT = CFG.rechargeEvery; }
+        if (stopped || out || e.run >= e.runMax) {
+          e.mode = 'chase';
+          if (e.chainLeft > 0) { e.chainLeft--; e.rechargeT = bossGapOf(e); }   // 맹수 대장·맹수 돌격조 등: 한 번 더 돌진
+          else { e.rechargeT = CFG.rechargeEvery; e.chainLeft = bossChainOf(e); }
+        }
         continue;
       }
       if (e.elite) {
         e.rechargeT -= dt;
-        if (e.rechargeT <= 0) { e.mode = 'aim'; e.modeT = CFG.aimTime; g.events.push('warn'); continue; }
+        if (e.rechargeT <= 0) { e.mode = 'aim'; e.modeT = e.boss && e.arch === 'beast' ? CFG.bossBeast.aimTime : CFG.aimTime; g.events.push('warn'); continue; }
       }
       const f = e.elite ? { range: 0.35, spd: 3.2, cd: 1.1 } : FOE[e.arch];
       // 적은 네크로맨서를 노린다. 길을 막은 키메라나 적을 끄는 갑주가 있으면 그쪽과 싸운다.
@@ -889,7 +1279,7 @@
         if (d < pull && (isNecro || d < td)) { tgt = u; isNecro = false; td = d; }
       }
       const reach = f.range + tgt.r + e.r, shooter = e.arch === 'ranger' && !e.elite;
-      if (td > reach * (shooter ? 0.9 : 1)) moveToward(e, tgt.x, tgt.y, f.spd * dt);
+      if (td > reach * (shooter ? 0.9 : 1)) walkToward(g, e, tgt.x, tgt.y, f.spd * dt);
       else e.face = Math.atan2(tgt.y - e.y, tgt.x - e.x);
       if (td <= reach + 0.1 && e.cd <= 0) {
         e.cd = f.cd;
@@ -903,6 +1293,7 @@
     for (const p of g.posts) {
       if (p.dead) continue;
       p.cd -= dt;
+      if (p.summon && dist(p, n) < CFG.postRange) summonTick(g, p, dt);   // summon post: its timer runs only while the necromancer is in range
       if (p.cd <= 0 && dist(p, n) < CFG.postRange) {
         p.cd = CFG.postCd;
         if (n.shieldT > 0) shieldBlock(g, p); else { n.hp -= CFG.postDmg * g.scale; n.hurt = 0.2; }
@@ -922,6 +1313,9 @@
         }
       }
     }
+
+    // Barricades push out the necromancer, foes and chimeras (rushing chimeras jump over).
+    if (g.obstacles && g.obstacles.length) { blockObstacles(g, n); for (const o of bodies) blockObstacles(g, o); }
 
     // 심장을 혼보다 먼저 본다. 폭발로 쏟아진 혼이 계승할 자리를 먼저 차지하면 안 된다.
     // 심장: 자리가 비었으면 계승, 찼으면 연결된 키메라가 유전자를 통째로 삼킨다
@@ -983,15 +1377,19 @@
   const SAVE_V = 1, MAX_DISTRICT = Number.MAX_SAFE_INTEGER;   // 저장값 검증용 상한(사실상 없음)
   const wholeNum = (v, max) => (Number.isFinite(+v) ? clamp(Math.floor(+v), 0, max) : 0);
   const upOf = up => ({ hp: wholeNum(up && up.hp, CFG.gold.hpMax), stat: statUpOf(up && up.stat) });   // 늘 새 객체(깊은 복사)
-  function freshSave() { return { v: SAVE_V, best: 0, cur: 0, gold: 0, up: upOf(null) }; }
+  const seedOf = s => wholeNum(s && s.seed, CFG.gold.seedMax);   // mutation seeds held (old saves without the field read as 0)
+  function freshSave() { return { v: SAVE_V, best: 0, cur: 0, gold: 0, up: upOf(null), seed: 0 }; }
   // 저장 글을 읽는다. 깨졌으면 기본값. 새 저장이 없을 때만 옛 최고 기록(legacyBest)을 옮기고 그만큼 골드를 소급해 준다.
+  // Old saves could buy range for melee kinds (beast, armor). That upgrade is gone: refund the old flat price (rangeRefund) per level (capped at statMax).
+  // upOf() drops the key, so a re-saved file has nothing left to refund (no double refund).
+  const meleeRangeRefund = up => ['beast', 'armor'].reduce((sum, k) => sum + wholeNum(up && up.stat && up.stat[k] && up.stat[k].range, CFG.gold.statMax) * CFG.gold.rangeRefund, 0);
   function loadSave(text, legacyBest) {
     if (text !== null && text !== undefined) {   // 빈 글도 '있었는데 깨진 저장'이다
       try {
         const o = JSON.parse(text);
         if (o && o.v === SAVE_V) {
-          const best = wholeNum(o.best, MAX_DISTRICT), refund = wholeNum(o.up && o.up.genes, CFG.gold.geneMaxOld) * CFG.gold.geneRefund;
-          return { v: SAVE_V, best, cur: o.cur === undefined ? best : wholeNum(o.cur, best), gold: wholeNum(o.gold, MAX_DISTRICT) + refund, up: upOf(o.up) };
+          const best = wholeNum(o.best, MAX_DISTRICT), refund = wholeNum(o.up && o.up.genes, CFG.gold.geneMaxOld) * CFG.gold.geneRefund + meleeRangeRefund(o.up);
+          return { v: SAVE_V, best, cur: o.cur === undefined ? best : wholeNum(o.cur, best), gold: wholeNum(o.gold, MAX_DISTRICT) + refund, up: upOf(o.up), seed: seedOf(o) };
         }
       } catch (e) { /* 깨진 저장은 기본값으로 */ }
       return freshSave();   // 새 저장이 있었는데 깨졌으면 옛 기록으로 다시 옮기지 않는다(소급이 되풀이되지 않게)
@@ -1004,49 +1402,96 @@
   const curOf = save => (Number.isFinite(save.cur) ? save.cur : save.best);
   function clearDistrict(save, district) {
     const d = Math.floor(+district), cur = curOf(save);
-    if (!Number.isFinite(d) || (d <= save.best && d <= cur)) return { save, gained: 0 };
+    if (!Number.isFinite(d) || (d <= save.best && d <= cur)) return { save, gained: 0, seedGained: false };
     const gained = d > save.best ? (d - save.best) * CFG.gold.perClear : 0;
-    return { save: { v: SAVE_V, best: Math.max(save.best, d), cur: Math.max(cur, d), gold: save.gold + gained, up: upOf(save.up) }, gained };
+    // First conquest only (gained > 0): one mutation seed, capped at seedMax (already full: stays at seedMax, no gold instead).
+    const held = seedOf(save), seed = gained > 0 ? Math.min(CFG.gold.seedMax, held + wholeNum(CFG.gold.seedPerClear, CFG.gold.seedMax)) : held;
+    return { save: { v: SAVE_V, best: Math.max(save.best, d), cur: Math.max(cur, d), gold: save.gold + gained, up: upOf(save.up), seed }, gained, seedGained: seed > held };
   }
   // 판이 끝났다: 부순 초소만큼 골드를 더한다(이기든 지든). 처음 정복의 골드는 clear가 따로 준다.
-  function earn(save, posts) {
-    const n = Number.isFinite(+posts) ? Math.max(0, Math.floor(+posts)) : 0, gained = n * CFG.gold.perPost;
+  // 돌격조 처치 수(eliteKills)마다 perElite, 대장을 잡았으면(bossKilled) perBoss를 더한다. 둘을 빼고 부르면 예전 그대로
+  // Run-end gold split per item (posts / elites / boss). earn sums exactly these, so the split always matches gained.
+  const runCnt = v => (Number.isFinite(+v) ? Math.max(0, Math.floor(+v)) : 0);
+  function earnParts(posts, eliteKills, bossKilled) {
+    const G = CFG.gold, p = runCnt(posts), e = runCnt(eliteKills), b = bossKilled === true;
+    return { posts: { count: p, gold: p * G.perPost }, elites: { count: e, gold: e * G.perElite }, boss: { killed: b, gold: b ? G.perBoss : 0 } };
+  }
+  // Result-screen facts of a finished game g (no save change): posts broken, elites killed (boss not counted), boss reached / killed / hp left.
+  function runSummary(g) {
+    g = g || {};
+    const b = g.boss || null, bossKilled = !!(b && b.dead), total = runCnt(g.postsTotal), down = Math.min(total, runCnt(g.postsDown));
+    const maxHp = b ? Math.max(1, Math.round(b.maxHp)) : 0, hp = b && !bossKilled ? clamp(Math.ceil(b.hp), 0, maxHp) : 0;
+    return {
+      over: g.over || null, won: g.over === 'win', lost: g.over === 'lose', district: g.district,
+      postsDown: down, postsTotal: total, postsLeft: total - down,
+      eliteKills: Math.max(0, runCnt(g.eliteKills) - (bossKilled ? 1 : 0)),
+      bossReached: !!b, bossKilled, bossHp: b ? hp : null, bossMaxHp: b ? maxHp : null, bossHpFrac: b ? hp / maxHp : null,
+    };
+  }
+  // Settle a finished run the same way the end screen does (earn, then clear on a win). Returns the new save, the total gained,
+  // and items in show order: posts, elites, boss, clear (first conquest bonus), seed. Sum of item gold === gained. run: runSummary(g) or g itself.
+  function settle(save, run) {
+    const r = run && run.necro ? runSummary(run) : run || {}, won = r.won === true;
+    const q = earnParts(r.postsDown, r.eliteKills, r.bossKilled), e = earn(save, r.postsDown, r.eliteKills, r.bossKilled);
+    let out = e.save, clearGold = 0, seedGained = false;
+    if (won) { const c = clearDistrict(out, r.district); out = c.save; clearGold = c.gained; seedGained = !!c.seedGained; }
+    const items = [
+      { id: 'posts', count: q.posts.count, gold: q.posts.gold },
+      { id: 'elites', count: q.elites.count, gold: q.elites.gold },
+      { id: 'boss', count: q.boss.killed ? 1 : 0, gold: q.boss.gold },
+      { id: 'clear', count: clearGold > 0 ? 1 : 0, gold: clearGold },
+      { id: 'seed', count: Math.max(0, seedOf(out) - seedOf(e.save)), gold: 0 },
+    ];
+    return { save: out, gained: e.gained + clearGold, seedGained, won, firstClear: clearGold > 0, items, run: r };
+  }
+  function earn(save, posts, eliteKills, bossKilled) {
+    const q = earnParts(posts, eliteKills, bossKilled), gained = q.posts.gold + q.elites.gold + q.boss.gold;
     if (!gained) return { save, gained: 0 };
-    return { save: { v: SAVE_V, best: save.best, cur: curOf(save), gold: save.gold + gained, up: upOf(save.up) }, gained };
+    return { save: { v: SAVE_V, best: save.best, cur: curOf(save), gold: save.gold + gained, up: upOf(save.up), seed: seedOf(save) }, gained };
   }
   // 진행만 1구역으로 되돌린다. 최고 기록·골드·강화는 그대로(이미 받은 구역의 골드는 다시 받지 않는다).
-  function restart(save) { return { v: SAVE_V, best: save.best, cur: 0, gold: save.gold, up: upOf(save.up) }; }
+  function restart(save) { return { v: SAVE_V, best: save.best, cur: 0, gold: save.gold, up: upOf(save.up), seed: seedOf(save) }; }
   // 살 수 있는 강화: 'hp'(네크로맨서 체력), '종류.능력치'(예: 'armor.taken')
   const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
   function upKey(key) {
     if (key === 'hp') return { max: CFG.gold.hpMax, cost: CFG.gold.hpCost };
+    if (key === 'seed') return { seed: true, max: CFG.gold.seedMax, cost: CFG.gold.seedCost };
     const [k, s] = String(key).split('.');
-    return KINDS.includes(k) && own(CFG.statStep, s) ? { k, s, max: CFG.gold.statMax, cost: CFG.gold.statCost } : null;
+    return KINDS.includes(k) && own(CFG.statStep, s) && CFG.statKinds[k].includes(s) ? { k, s, max: CFG.gold.statMax, cost: CFG.gold.statCost } : null;
   }
   function upLevel(save, key) {
     const u = upKey(key), up = upOf(save.up);
-    return !u ? 0 : u.k ? up.stat[u.k][u.s] : up.hp;
+    return !u ? 0 : u.seed ? seedOf(save) : u.k ? up.stat[u.k][u.s] : up.hp;
   }
-  function upCost(save, key) { const u = upKey(key); return !u || upLevel(save, key) >= u.max ? null : u.cost; }
+  // Price of the next level. Tables are indexed by the owned level (a level past the table uses its last price); plain numbers are flat prices.
+  const priceAt = (t, lv) => (Array.isArray(t) ? t[Math.min(lv, t.length - 1)] : t);
+  function upCost(save, key) { const u = upKey(key); if (!u) return null; const lv = upLevel(save, key); return lv >= u.max ? null : priceAt(u.cost, lv); }
   // 강화 한 단계를 산다: 골드를 빼고 단계를 올리는 것을 함께. 못 사면 까닭을 돌려준다.
   function buy(save, key) {
     const cost = upCost(save, key);
     if (cost === null) return { ok: false, save, reason: 'max' };
     if (save.gold < cost) return { ok: false, save, reason: 'gold' };
     const u = upKey(key), up = upOf(save.up);
+    if (u.seed) return { ok: true, save: { v: SAVE_V, best: save.best, cur: curOf(save), gold: save.gold - cost, up, seed: seedOf(save) + 1 } };
     if (u.k) up.stat[u.k][u.s]++; else up.hp++;
-    return { ok: true, save: { v: SAVE_V, best: save.best, cur: curOf(save), gold: save.gold - cost, up } };
+    return { ok: true, save: { v: SAVE_V, best: save.best, cur: curOf(save), gold: save.gold - cost, up, seed: seedOf(save) } };
   }
-  const Save = { fresh: freshSave, load: loadSave, clear: clearDistrict, earn, restart, cost: upCost, level: upLevel, buy };
+  // Spend the held mutation seed when a run starts. ok:false (same save object) when none is held.
+  function useSeed(save) {
+    const n = seedOf(save);
+    if (n < 1) return { ok: false, save };
+    return { ok: true, save: { v: SAVE_V, best: save.best, cur: curOf(save), gold: save.gold, up: upOf(save.up), seed: n - 1 } };
+  }
+  const Save = { fresh: freshSave, load: loadSave, clear: clearDistrict, earn, restart, cost: upCost, level: upLevel, buy, useSeed, settle, earnParts };
 
-  const api = { W, H, DURATION, MAX_LEVEL, KINDS, CFG, newGame, step, stats, geneTotal, levelOf, isFrenzy, heartKeep, scaleGenes, detonate, pin, absorb, feedTarget, spawnBoss, nextBlast, MUTS, chooseMut, Save };
+  const api = { W, H, DURATION, MAX_LEVEL, KINDS, CFG, newGame, step, stats, geneTotal, levelOf, isFrenzy, heartKeep, scaleGenes, detonate, pin, absorb, feedTarget, spawnBoss, nextBlast, spawnCurve, actOf, MUTS, chooseMut, Save, runSummary, POST_LAYOUTS, postSpotsFor, foeMixFor, BARRICADE_LAYOUTS, barricadesFor };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.ChimeraSim = api;
 })(typeof window !== 'undefined' ? window : globalThis);
 
 </script>
 <script type="importmap">
-{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/" } }
+{ "imports": { "three": "./src/vendor/three/three.module.min.js" } }
 </script>
 <script type="module">
 // 3D 쿼터뷰(현대 도시의 밤). 규칙(sim.js)은 건드리지 않고 판을 그리는 쪽만 맡는다.
@@ -1055,9 +1500,9 @@
 // 그래서 판의 먼 쪽 두 변은 x = 0과 y = 0이고, 키 큰 건물은 그 바깥에만 세운다.
 // 폰 성능: 그림자·후처리 없음, 땅 위의 표시는 버퍼 하나로 한 번에 그린다.
 import * as THREE from 'three';   // 주소는 페이지의 importmap에 있다(build.cjs)
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
-import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { GLTFLoader } from './src/vendor/three/GLTFLoader.js';   // 부속은 로컬 벤더 파일(index.html 기준 상대 경로)
+import { clone as cloneSkinned } from './src/vendor/three/SkeletonUtils.js';
+import { MeshoptDecoder } from './src/vendor/three/meshopt_decoder.module.js';
 // 모델은 meshopt로 모양을 압축하고 그림을 1024로 줄였다(2026-11-19, 11.2MB → 3.4MB). 읽을 때 풀어야 한다.
 const newLoader = () => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 
@@ -1079,9 +1524,20 @@ const R2 = Math.SQRT1_2;
 
 const cv3 = document.getElementById('game3d');
 const dprMax = Math.min(window.devicePixelRatio || 1, 2);
-const renderer = new THREE.WebGLRenderer({ canvas: cv3, antialias: dprMax < 2, powerPreference: 'high-performance' });
-renderer.setPixelRatio(dprMax);
-renderer.setClearColor(new THREE.Color('#0c0a11'));
+// WebGL을 쓸 수 없거나 렌더러를 만들지 못하면(예외, 컨텍스트 없음) 3D를 접는다. #game3d를 숨겨 검은 바탕이 2D 판을 가리지 않게 하고,
+// window.ChimeraView를 만들지 않아 render.js가 2D 판으로 그린다(맨 아래).
+let renderer = null, glError = null;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas: cv3, antialias: dprMax < 2, powerPreference: 'high-performance' });
+  if (!renderer.getContext()) throw new Error('WebGL 컨텍스트를 만들지 못했다');
+  renderer.setPixelRatio(dprMax);
+  renderer.setClearColor(new THREE.Color('#0c0a11'));
+} catch (e) {
+  glError = e;
+  try { if (renderer) renderer.dispose(); } catch (e2) { /* 반쯤 만든 렌더러: 버린다 */ }
+  renderer = null;
+  if (cv3) cv3.hidden = true;
+}
 const scene = new THREE.Scene();
 const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
 const camDir = new THREE.Vector3(Math.cos(ELEV) * R2, Math.sin(ELEV), Math.cos(ELEV) * R2);   // 목표에서 카메라 쪽
@@ -1089,8 +1545,16 @@ let viewW = 1, viewH = 1, cssW = 1, cssH = 1;
 const target = new THREE.Vector3(S.W / 2, 0, S.H - 4);
 let lastGame = null;
 
-scene.add(new THREE.HemisphereLight(0x8a80b8, 0x1a1522, 1.6));
-const sun = new THREE.DirectionalLight(0xffe6c8, 1.1);
+// District themes: same order as the sim's table cycle (tableIdx over POST_LAYOUTS, 3 entries; districts 1/4/7 -> 0, 2/5 -> 1, 3/6 -> 2).
+// Only light colors/intensity, ground/sidewalk material colors, background and fog change. Dark and low-saturation so foes, souls and danger marks stay readable.
+const THEMES = [
+  { key: 'violet', sky: '#8a80b8', low: '#1a1522', hemiI: 1.6, sun: '#ffe6c8', sunI: 1.1, ground: HEX.ground, walk: HEX.grid, bg: '#0c0a11', fog: '#0c0a11' },
+  { key: 'teal', sky: '#7fa3b4', low: '#131d1f', hemiI: 1.5, sun: '#d6e8ff', sunI: 1.0, ground: '#111a1d', walk: '#233238', bg: '#081013', fog: '#081013' },
+  { key: 'amber', sky: '#b49a80', low: '#211813', hemiI: 1.5, sun: '#ffd4a6', sunI: 1.15, ground: '#1a1512', walk: '#332a24', bg: '#0f0b08', fog: '#0f0b08' },
+];
+const hemi = new THREE.HemisphereLight(THEMES[0].sky, THEMES[0].low, THEMES[0].hemiI);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(THEMES[0].sun, THEMES[0].sunI);
 sun.position.set(-6, 12, 4); scene.add(sun);
 
 // ---- 재료와 모양(함께 쓴다) ----
@@ -1114,6 +1578,7 @@ const GEO = {
   cube: new THREE.BoxGeometry(1.3, 1.3, 1.3),
   orb: new THREE.SphereGeometry(1, 10, 8),
   dot: new THREE.SphereGeometry(1, 8, 6),
+  rune: new THREE.TorusGeometry(1.3, 0.08, 6, 28),
   barrel: new THREE.BoxGeometry(0.9, 0.12, 0.12),
 };
 const mesh = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x || 0, y || 0, z || 0); return m; };
@@ -1207,12 +1672,14 @@ function windowTexture(seed) {
   t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.magFilter = THREE.NearestFilter;
   return t;
 }
+let groundMat = null, walkMat = null, cityBuilds = 0;   // kept so district themes recolor them without rebuilding the city
 function buildCity() {
+  cityBuilds++;
   const city = new THREE.Group();
   // 땅: 아스팔트, 판 바깥은 인도
-  const ground = mesh(new THREE.PlaneGeometry(120, 120).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: COL.ground }), S.W / 2, 0, S.H / 2);
+  const ground = mesh(new THREE.PlaneGeometry(120, 120).rotateX(-Math.PI / 2), groundMat = new THREE.MeshLambertMaterial({ color: COL.ground }), S.W / 2, 0, S.H / 2);
   city.add(ground);
-  const walk = new THREE.MeshLambertMaterial({ color: new THREE.Color(HEX.grid) });
+  const walk = walkMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(HEX.grid) });
   const sideL = mesh(new THREE.BoxGeometry(3, 0.18, S.H + 3), walk, -1.5, 0.09, S.H / 2 - 1.5);
   const sideT = mesh(new THREE.BoxGeometry(S.W, 0.18, 3), walk, S.W / 2, 0.09, -1.5);
   const sideR = mesh(new THREE.BoxGeometry(2, 0.12, S.H + 2), walk, S.W + 1, 0.06, S.H / 2 + 1);
@@ -1264,6 +1731,29 @@ function buildCity() {
   return city;
 }
 scene.add(buildCity());
+scene.background = new THREE.Color(THEMES[0].bg);
+scene.fog = new THREE.Fog(THEMES[0].fog, 70, 150);   // far edge only (board sits about 60 from the camera)
+let themeIdx = -1, themeApplied = 0;
+// Theme index from the sim's own table cycle: the index of this district's post layout (sim tableIdx), formula as fallback
+function themeIdxOf(district) {
+  const i = S.POST_LAYOUTS && S.postSpotsFor ? S.POST_LAYOUTS.indexOf(S.postSpotsFor(district)) : -1;
+  if (i >= 0) return i % THEMES.length;
+  const d = Math.floor(+district);
+  return ((Number.isFinite(d) && d >= 1 ? d : 1) - 1) % THEMES.length;
+}
+// Recolor existing lights, materials, background and fog only (no new objects, city is not rebuilt)
+function applyTheme(i) {
+  if (i === themeIdx) return false;
+  const t = THEMES[i];
+  themeIdx = i; themeApplied++;
+  hemi.color.set(t.sky); hemi.groundColor.set(t.low); hemi.intensity = t.hemiI;
+  sun.color.set(t.sun); sun.intensity = t.sunI;
+  groundMat.color.set(t.ground); walkMat.color.set(t.walk);
+  scene.background.set(t.bg); scene.fog.color.set(t.fog);
+  if (renderer) renderer.setClearColor(scene.background);
+  return true;
+}
+applyTheme(0);
 
 // ---- 움직이는 것들: 판의 물체마다 3D 물체 하나. 사라지면 지운다 ----
 const live = new Map();
@@ -1288,7 +1778,7 @@ const faceToY = a => -a;   // 판의 각(atan2(dy, dx)) → 3D의 y축 회전
 // 키메라 몸 모델(Tripo3D, 네발 뼈대와 걷기 동작). 주 유전자마다 하나씩. 아직 없거나 못 불러오면 도형 몸을 쓴다.
 // 모델의 앞은 -z, 키는 약 0.82, 길이 1로 온다. 게임은 +x가 앞이므로 -90도 돌려 놓는다.
 const BODY = {};
-for (const kind of ['beast', 'armor', 'ranger']) {
+if (renderer) for (const kind of ['beast', 'armor', 'ranger']) {
   newLoader().load('assets/chimera-' + kind + '.glb?v=' + ASSET_V, gltf => {
     // 소총수는 사람형 뼈대의 걷기를 쓴다. 팔과 몸통 동작은 둥근 몸을 앞으로 꺾고 앞팔을 늘리므로 다리 회전만 남긴다.
     if (kind === 'ranger') for (const c of gltf.animations) c.tracks = c.tracks.filter(t => /(Thigh|Calf|Foot|Toe).*\.quaternion$/.test(t.name));
@@ -1412,16 +1902,31 @@ function drawUnit(u, now, reduced) {
   if (u.state === 'rush') dec.line(u.x, u.y, u.tx, u.ty, 0.2, COL.danger, 0.9);
 }
 
+// 진압 대장: 종류마다 몸 색과 모양이 다르다 (armor: plates, beast: horns, ranger: scope)
+const BOSS_LOOK = {
+  armor: { body: 'armor', accent: 'danger', mark: 'plates' },
+  beast: { body: 'beast', accent: 'danger', mark: 'horns' },
+  ranger: { body: 'ranger', accent: 'great', mark: 'scope' },
+};
+function enemyLook(e) {
+  if (e.boss) {
+    const b = BOSS_LOOK[e.arch] || BOSS_LOOK.armor, assist = e.lap >= 1 ? [e.summon ? 'summon' : '', e.chainMax > 0 ? 'chain' : ''].filter(Boolean).join('+') : '';
+    return { kind: 'boss:' + e.arch, body: b.body, accent: b.accent, mark: b.mark, crown: true, assist };
+  }
+  if (e.elite) return { kind: 'elite:' + e.arch, body: 'danger', accent: 'ink', mark: 'wedge', crown: false };
+  return { kind: 'foe:' + e.arch + ':' + (e.g >= 2 ? 2 : 1), body: e.arch, accent: e.arch === 'armor' ? 'armor' : 'ink', mark: e.g >= 2 ? 'band' : 'none', crown: false };
+}
 // 적: 군견(맹수), 방패 기동대(갑주), 소총수(사수), 돌격조, 진압 대장. 색과 모양으로 구별한다
-function makeEnemy(e) {
+function makeEnemy(e, look) {
+  look = look || enemyLook(e);
   const root = new THREE.Group(), turn = new THREE.Group(); root.add(turn);
-  const k = e.elite ? 'danger' : e.arch, m = lambert(k);
+  const m = lambert(look.body), acc = lambert(look.accent);
   if (e.arch === 'beast') {        // 군견: 낮고 긴 몸, 앞으로 내민 머리
     turn.add(mesh(new THREE.BoxGeometry(1.7, 0.8, 0.8), m, 0, 0.55, 0));
     turn.add(mesh(new THREE.BoxGeometry(0.7, 0.6, 0.6), m, 1.05, 0.85, 0));
   } else if (e.arch === 'armor') { // 방패 기동대: 몸통과 앞의 방패
     const bodyM = mesh(GEO.cyl, m, 0, 0.8, 0); bodyM.scale.set(1.4, 1.6, 1.4); turn.add(bodyM);
-    turn.add(mesh(new THREE.BoxGeometry(0.18, 1.6, 1.7), e.elite ? lambert('ink') : lambert('armor'), 0.85, 0.85, 0));
+    turn.add(mesh(new THREE.BoxGeometry(0.18, 1.6, 1.7), acc, 0.85, 0.85, 0));
     const head = mesh(GEO.dot, m, 0, 1.85, 0); head.scale.setScalar(0.4); turn.add(head);
   } else {                         // 소총수: 가는 몸, 머리, 총신
     const bodyM = mesh(GEO.cyl, m, 0, 0.75, 0); bodyM.scale.set(1.0, 1.5, 1.0); turn.add(bodyM);
@@ -1429,23 +1934,87 @@ function makeEnemy(e) {
     turn.add(mesh(GEO.barrel, lambert('ink'), 0.7, 1.1, 0.2));
   }
   if (e.elite) { const w = mesh(GEO.wedge, lambert('ink'), 1.45, 0.9, 0); turn.add(w); }   // 돌격조: 앞쪽의 쐐기
-  if (e.boss) { const crown = new THREE.Mesh(new THREE.TorusGeometry(0.6, 0.1, 6, 18), basic('great')); crown.rotation.x = Math.PI / 2; crown.position.y = 2.35; turn.add(crown); }
+  if (e.boss) {
+    const crown = new THREE.Mesh(new THREE.TorusGeometry(0.6, 0.1, 6, 18), basic('great')); crown.rotation.x = Math.PI / 2; crown.position.y = 2.35; turn.add(crown);
+    const base = mesh(GEO.cyl, acc, 0, 0.12, 0); base.scale.set(2.1, 0.14, 2.1); turn.add(base);
+    if (look.mark === 'plates') { for (const s of [-1, 1]) turn.add(mesh(new THREE.BoxGeometry(0.7, 0.35, 0.55), acc, 0, 1.55, s * 0.8)); }
+    else if (look.mark === 'horns') {
+      for (const s of [-1, 1]) { const hn = mesh(GEO.spike, acc, 1.15, 1.35, s * 0.22); hn.rotation.z = -0.6; turn.add(hn); }
+      for (let i = 0; i < 3; i++) turn.add(mesh(GEO.spike, acc, 0.4 - i * 0.45, 1.3, 0));
+    } else if (look.mark === 'scope') {
+      turn.add(mesh(GEO.barrel, lambert('ink'), 0.7, 1.1, -0.2));
+      turn.add(mesh(GEO.eye, acc, 0.5, 1.32, 0.2));
+    }
+  }
   if (!e.elite && e.g >= 2) { const band = mesh(GEO.cyl, lambert('ink'), 0, 0.12, 0); band.scale.set(1.9, 0.12, 1.9); turn.add(band); }
   // 맞으면 하얗게 번쩍: 몸을 덮는 흰 공(이 적만의 재질)
   const flashMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false });
   const flash = new THREE.Mesh(GEO.dot, flashMat); flash.position.y = 0.9; flash.visible = false; root.add(flash);
-  return { root, turn, flash, flashMat, dispose() { flashMat.dispose(); } };
+  return { root, turn, flash, flashMat, look, dispose() { flashMat.dispose(); } };
+}
+// Phased boss (sim spawnBoss: phases, phase, phaseAt, roarT, weak, stun). Ground ring = boss HP with ticks at phaseAt, roar = shockwaves while roarT > 0,
+// weak point = gold aura and target brackets only while weak && stun > 0 (sim clears weak when the barricade stun ends). Phaseless bosses: nothing extra.
+const ROAR_T = (S.CFG.bossPhase && S.CFG.bossPhase.roar) || 1.6;
+const bossTicksOf = e => (e && e.boss && e.phases && Array.isArray(e.phaseAt) ? e.phaseAt.filter(f => Number.isFinite(f) && f > 0 && f < 1) : []);
+function drawBossFx(e, rec, now, reduced) {
+  const n0 = dec.n, ticks = bossTicksOf(e), roar = e.roarT > 0, weak = !!e.weak && e.stun > 0, H = 0.05;
+  const f = Math.max(0, Math.min(1, e.hp / e.maxHp));
+  if (ticks.length) {
+    const R = e.r + 0.85, a0 = -Math.PI / 2;
+    dec.ring(e.x, e.y, R, 0.14, COL.grid, 0.85, 0, Math.PI * 2, H);
+    if (f > 0) dec.ring(e.x, e.y, R, 0.14, COL.danger, 0.95, a0, a0 + Math.PI * 2 * f, H + 0.005);
+    for (const t of ticks) {
+      const a = a0 + Math.PI * 2 * t, c = Math.cos(a), s = Math.sin(a);
+      dec.line(e.x + c * (R - 0.24), e.y + s * (R - 0.24), e.x + c * (R + 0.24), e.y + s * (R + 0.24), 0.1, f <= t ? COL.dim : COL.great, 1, H + 0.01);
+    }
+  }
+  if (roar) {
+    const k = Math.max(0, Math.min(1, e.roarT / ROAR_T)), el = Math.max(0, ROAR_T - e.roarT);
+    dec.disc(e.x, e.y, e.r + 1.2, COL.danger, 0.16 + 0.22 * k, 0, Math.PI * 2, H - 0.01);
+    if (reduced) dec.ring(e.x, e.y, e.r + 1.6, 0.18, COL.danger, 0.9, 0, Math.PI * 2, H + 0.02);
+    else for (let i = 0; i < 3; i++) { const q = (el * 1.4 + i / 3) % 1; dec.ring(e.x, e.y, e.r + 0.4 + q * 3.6, 0.22 * (1 - q) + 0.05, i % 2 ? COL.great : COL.danger, (1 - q) * 0.95, 0, Math.PI * 2, H + 0.02 + i * 0.002); }
+  }
+  if (weak) {
+    const p = reduced ? 1 : 0.75 + 0.25 * Math.sin(now / 120), rot = reduced ? 0 : now / 350, R = e.r + 0.45 + 0.25 * p;
+    dec.disc(e.x, e.y, e.r + 0.35, COL.great, 0.22 * p, 0, Math.PI * 2, H - 0.005);
+    for (let i = 0; i < 4; i++) { const a = rot + i * Math.PI / 2; dec.ring(e.x, e.y, R, 0.16, COL.great, 0.95, a + 0.25, a + Math.PI / 2 - 0.25, H + 0.03); }
+    dec.dashRing(e.x, e.y, e.r + 1.2, 0.08, 0.3, 0.2, reduced ? 0 : -now / 300, COL.ink, 0.8, H + 0.03);
+  }
+  rec.bossFx = { ticks: ticks.slice(), roar, weak, phase: e.phase || 1, verts: dec.n - n0 };
+  return rec.bossFx;
+}
+// Body glow of a roaring (red pulse) or weak-point (gold) boss, using the hit-flash ball when no hit flash is showing
+function bossGlow(e, rec, now, reduced) {
+  const roar = e.roarT > 0, weak = !!e.weak && e.stun > 0;
+  if (!roar && !weak) return;
+  rec.flash.visible = true;
+  rec.flashMat.color.copy(roar ? COL.danger : COL.great);
+  rec.flashMat.opacity = roar ? (reduced ? 0.35 : 0.2 + 0.3 * Math.abs(Math.sin(now / 70))) : (reduced ? 0.3 : 0.18 + 0.22 * (0.5 + 0.5 * Math.sin(now / 120)));
+  rec.flash.scale.setScalar(1.3);
 }
 function drawEnemy(e, now, reduced) {
-  const rec = sync(e, () => makeEnemy(e));
+  const look = enemyLook(e), old = live.get(e);
+  if (old && old.look.kind !== look.kind) { layer.remove(old.root); if (old.dispose) old.dispose(); live.delete(e); }   // arch changed: rebuild
+  const rec = sync(e, () => makeEnemy(e, look));
   const fl = e.flash > 0 ? e.flash / S.CFG.hit.flash : 0, sh = fl && !reduced ? 0.08 * fl : 0;   // 맞으면 번쩍이고 살짝 떤다
   rec.root.position.set(e.x + (sh ? (Math.random() - 0.5) * sh : 0), 0, e.y + (sh ? (Math.random() - 0.5) * sh : 0));
-  rec.root.scale.setScalar(e.r / 0.5 * 0.5 * (1 + (reduced ? 0 : 0.22 * fl)));   // 맞은 순간 살짝 부푼다
-  rec.flash.visible = fl > 0; if (fl > 0) { rec.flashMat.opacity = Math.min(1, 0.4 + fl); rec.flash.scale.setScalar(1.1); }
+  const roarK = e.boss && e.roarT > 0 && !reduced ? Math.abs(Math.sin(now / 70)) : 0;   // roaring boss swells in pulses
+  rec.root.scale.setScalar(e.r / 0.5 * 0.5 * (1 + (reduced ? 0 : 0.22 * fl) + 0.08 * roarK));   // 맞은 순간 살짝 부푼다
+  rec.flash.visible = fl > 0; if (fl > 0) { rec.flashMat.opacity = Math.min(1, 0.4 + fl); rec.flash.scale.setScalar(1.1); rec.flashMat.color.copy(WHITE); }
+  else if (e.boss) bossGlow(e, rec, now, reduced);
   rec.turn.rotation.y = faceToY(e.face);
   if (e.elite && (e.mode === 'warn' || e.mode === 'aim')) {   // 돌진 예고: 겨눈 방향으로 붉은 길
     const a = e.face, L = 40, w = 0.9 + (reduced ? 0 : 0.25 * Math.sin(now / 60));
     dec.line(e.x, e.y, e.x + Math.cos(a) * L, e.y + Math.sin(a) * L, e.r * 2 * w, COL.danger, 0.28);
+  }
+  if (e.boss) {
+    drawBossFx(e, rec, now, reduced);
+    dec.ring(e.x, e.y, e.r + 0.25, 0.16, COL[look.body], 0.9);
+    dec.dashRing(e.x, e.y, e.r + 0.5, 0.08, 0.35, 0.25, reduced ? 0 : now / 400, COL[look.accent], 0.8);
+    if (e.summon && e.summonT < 1.2) {   // lap 2+ assist summon telegraph (same as 2D)
+      const k = 1 - Math.max(0, e.summonT) / 1.2;
+      dec.dashRing(e.x, e.y, e.r + 0.6 + (1 - k) * 0.8, 0.12, 0.35, 0.25, reduced ? 0 : now / 300, COL.great, 0.4 + 0.5 * k);
+    }
   }
   dec.disc(e.x, e.y, e.r * 0.95, COL.ground, 0.45, 0, Math.PI * 2, 0.02);   // 발밑 그림자 대신 어두운 원(그림자는 쓰지 않는다)
 }
@@ -1455,13 +2024,26 @@ function makePost() {
   const body = mesh(GEO.hex, lambert('dim'), 0, 0.75, 0); root.add(body);
   const top = mesh(new THREE.CylinderGeometry(0.75, 1, 0.35, 6), lambert('ink'), 0, 1.68, 0); root.add(top);
   const light = new THREE.Mesh(GEO.dot, new THREE.MeshBasicMaterial({ color: COL.great.clone() })); light.scale.setScalar(0.24); light.position.y = 2.0; root.add(light);
-  return { root, light, dispose() { light.material.dispose(); } };
+  // Summon post mark (p.summon): violet rune ring around the hex and a floating violet crystal. Always built (shared geometry/material),
+  // shown only while the post lives and has summon. Dead posts are not synced, so sweep() drops the whole record.
+  const mark = new THREE.Group(), halo = mesh(GEO.rune, basic('necro'), 0, 1.1, 0), gem = mesh(GEO.heart, basic('necro'), 0, 2.6, 0);
+  halo.rotation.x = Math.PI / 2; gem.scale.setScalar(0.5); mark.add(halo, gem); mark.visible = false; root.add(mark);
+  return { root, light, mark, gem, kind: 'post', dispose() { light.material.dispose(); } };
 }
 function drawPost(p, n, now, reduced) {
   if (p.dead) { dec.ring(p.x, p.y, p.r, 0.12, COL.grid, 1); dec.disc(p.x, p.y, p.r, COL.grid, 0.35); return; }
   const rec = sync(p, makePost);
   rec.root.position.set(p.x, 0, p.y); rec.root.scale.setScalar(p.r / 0.9 * 0.9);
   rec.light.material.color.copy(Math.floor(now / 400) % 2 ? COL.danger : COL.great);
+  const sm = !!p.summon;
+  rec.mark.visible = sm;
+  if (sm) {   // violet aura + turning rune ring on the ground, gold ring closing in before escorts (same telegraph as the boss)
+    const warn = p.summonT < 1.2 ? 1 - Math.max(0, p.summonT) / 1.2 : 0;
+    if (!reduced) { rec.mark.rotation.y = now / 900; rec.gem.position.y = 2.6 + Math.sin(now / 260) * 0.12; }
+    dec.disc(p.x, p.y, p.r + 0.6, COL.necro, 0.25 + 0.25 * warn, 0, Math.PI * 2, 0.025);
+    dec.dashRing(p.x, p.y, p.r + 0.42, 0.14, 0.4, 0.22, reduced ? 0 : now / 500, COL.necro, 1, 0.04);
+    if (warn > 0) dec.dashRing(p.x, p.y, p.r + 0.6 + (1 - warn) * 0.8, 0.12, 0.35, 0.25, reduced ? 0 : now / 300, COL.great, 0.4 + 0.5 * warn, 0.045);
+  }
   // 사정거리: 네크로맨서가 안에 있으면 진하다
   const inside = Math.hypot(p.x - n.x, p.y - n.y) < S.CFG.postRange;
   dec.disc(p.x, p.y, S.CFG.postRange, COL.danger, inside ? 0.16 : 0.06);
@@ -1469,6 +2051,41 @@ function drawPost(p, n, now, reduced) {
 }
 
 // 혼: 불량은 작고 흐리다. 신선한 것은 푸른 고리, 순혈 코어는 크고 금빛으로 뛴다
+// ---- Barricades: g.obstacles = [{ x, y, hw, hh }] (board units, axis-aligned). Board (x, y) -> 3D (x, height, y), so the box footprint is w = 2hw on x and d = 2hh on z, same as sim collision.
+// Rebuilt only when the list (new game / district) or its contents change; old meshes are removed and their geometry disposed.
+const OBS_H = 1.1;
+const obsBodyMat = new THREE.MeshLambertMaterial({ color: COL.dim }), obsBandMat = new THREE.MeshBasicMaterial({ color: COL.great }), obsCapMat = new THREE.MeshLambertMaterial({ color: COL.ink });
+const obsLayer = new THREE.Group(); scene.add(obsLayer);
+let obsSrc = null, obsKey = '', obsRecs = [];
+const obsStats = { built: 0, disposed: 0 };
+const validBox = b => b && Number.isFinite(b.x) && Number.isFinite(b.y) && b.hw > 0 && b.hh > 0;
+function clearObstacles() {
+  for (const r of obsRecs) { obsLayer.remove(r.root); for (const geo of r.geos) geo.dispose(); obsStats.disposed++; }
+  obsRecs = [];
+}
+function syncObstacles(game) {
+  const src = game.obstacles, list = Array.isArray(src) ? src.filter(validBox) : [];
+  const key = list.map(b => b.x + ',' + b.y + ',' + b.hw + ',' + b.hh).join(';');
+  if (src === obsSrc && key === obsKey) return;
+  obsSrc = src; obsKey = key;
+  clearObstacles();
+  for (const b of list) {
+    const w = b.hw * 2, d = b.hh * 2, root = new THREE.Group();
+    const body = new THREE.BoxGeometry(w, OBS_H, d), band = new THREE.BoxGeometry(w + 0.02, 0.16, d + 0.02), cap = new THREE.BoxGeometry(w, 0.08, d);
+    root.add(mesh(body, obsBodyMat, 0, OBS_H / 2, 0), mesh(band, obsBandMat, 0, OBS_H * 0.62, 0), mesh(cap, obsCapMat, 0, OBS_H + 0.04, 0));
+    root.position.set(b.x, 0, b.y);
+    obsLayer.add(root);
+    obsRecs.push({ root, geos: [body, band, cap], box: { x: b.x, y: b.y, hw: b.hw, hh: b.hh, w, d, h: OBS_H } });
+    obsStats.built++;
+  }
+}
+function drawObstacleDecals() {   // dark footprint under each barricade (no real shadows)
+  for (const r of obsRecs) {
+    const b = r.box, x0 = b.x - b.hw, x1 = b.x + b.hw, z0 = b.y - b.hh, z1 = b.y + b.hh, m = 0.14;
+    dec.quad(x0 - m, z0 - m, x1 + m, z0 - m, x1 + m, z1 + m, x0 - m, z1 + m, SCORCH, 0.55, 0.02);
+  }
+}
+
 function makeSoul(s) {
   const mat = new THREE.MeshBasicMaterial({ color: (s.q === 3 ? COL.great : COL[s.type]).clone(), transparent: true, opacity: s.q === 1 ? 0.6 : 1 });
   const m = new THREE.Mesh(s.type === 'beast' ? GEO.tetra : s.type === 'armor' ? GEO.cube : GEO.orb, mat);
@@ -1524,7 +2141,7 @@ scene.add(necro);
 // 불러오는 동안이나 불러오지 못하면 위의 원뿔을 그대로 쓴다.
 const hero = { root: null, mixer: null, act: {}, cur: null, mats: [], face: -Math.PI / 2, last: null };
 const HERO_H = 2.1;    // 판 위의 키(모델은 높이 1로 온다). 키메라보다 조금 크게
-newLoader().load('assets/necromancer.glb?v=' + ASSET_V, gltf => {
+if (renderer) newLoader().load('assets/necromancer.glb?v=' + ASSET_V, gltf => {
   const root = gltf.scene;
   root.scale.setScalar(HERO_H);
   root.traverse(o => {
@@ -1537,7 +2154,7 @@ newLoader().load('assets/necromancer.glb?v=' + ASSET_V, gltf => {
   const turn = new THREE.Group(); turn.add(root);
   hero.mixer = new THREE.AnimationMixer(root);
   for (const clip of gltf.animations) hero.act[clip.name] = hero.mixer.clipAction(clip);
-  hero.root = turn;
+  hero.root = turn; hero.src = gltf;   // the title stage clones this for its own necromancer
   necro.clear(); necro.add(turn);
 }, undefined, () => { /* 모델이 없으면 원뿔로 계속한다 */ });
 function playHero(name) {
@@ -1627,6 +2244,159 @@ function placeCamera(shake) {
   camera.updateMatrixWorld();
 }
 
+// ---- Title stage (home screen) ----
+// A night street where the necromancer (back center) and the three summons (front left/center/right) stand and breathe.
+// The first summon picked on the title (opts.starter, the same state as window.ChimeraTitle) steps forward under its own light, glow and ring.
+// Taps come in through view.pickTitle: a Raycaster against one hit proxy per summon, then the nearest summon on screen as the fallback
+// (so a tap also works on the shape stand-ins while the GLB models are still loading). It has its own scene, camera and lights: built on the
+// first title frame and fully disposed on the first battle frame, so the battle scene, camera and district theme are never touched.
+const TITLE = { gap: 1.75, front: 0.55, back: -1.5, step: 0.95, summon: 1.7, fov: 34, elev: 10 * Math.PI / 180 };
+const titleStats = { builds: 0, disposed: 0 };
+let stage = null;
+const raycaster = new THREE.Raycaster(), ndc = new THREE.Vector2(), tvec = new THREE.Vector3();
+function dropTitleModel(s) {
+  if (!s.model) return;
+  s.model.mixer.stopAllAction();
+  for (const m of s.model.mats) m.dispose();
+  s.model = null;
+}
+// Body of one title figure: the GLB (makeBodyModel for summons, a clone of the hero model for the necromancer) or a shape stand-in
+function setTitleBody(s) {
+  if (s.body) s.holder.remove(s.body);
+  dropTitleModel(s);
+  const body = new THREE.Group();
+  if (s.kind === 'necro' && hero.src) {
+    const root = cloneSkinned(hero.src.scene), mats = [];
+    root.traverse(o => { if (!o.isMesh) return; o.frustumCulled = false; o.material = o.material.clone(); mats.push(o.material); });
+    const mixer = new THREE.AnimationMixer(root), clip = hero.src.animations.find(c => c.name === 'idle') || hero.src.animations[0];
+    if (clip) mixer.clipAction(clip).play();
+    body.add(root); s.model = { mixer, mats, walk: null };
+  } else if (s.kind !== 'necro' && BODY[s.kind]) {
+    const m = makeBodyModel(s.kind);
+    if (m.walk) m.walk.timeScale = 0;   // stand in the first pose; the breathing comes from the holder
+    m.holder.scale.setScalar(TITLE.summon); body.add(m.holder); s.model = m;
+  } else if (s.kind === 'necro') {
+    const robeT = mesh(GEO.cone, lambert('necro'), 0, 0.75, 0); robeT.scale.set(0.8, 1.5, 0.8);
+    const headT = mesh(GEO.dot, lambert('bone'), 0, 1.7, 0); headT.scale.setScalar(0.26);
+    body.add(robeT, headT);
+  } else {
+    const sh = mesh(s.kind === 'beast' ? GEO.horn : s.kind === 'armor' ? GEO.box : GEO.ball, lambert(s.kind), 0, 0.62, 0); sh.scale.setScalar(0.5);
+    body.add(sh);
+  }
+  body.rotation.y = -Math.PI / 2 + s.yaw;   // model front is +x: turn it toward the camera (+z), summons a little toward the center
+  s.body = body; s.fallback = !s.model; s.holder.add(body);
+}
+function buildTitle() {
+  titleStats.builds++;
+  const sc = new THREE.Scene(), cam = new THREE.PerspectiveCamera(TITLE.fov, 1, 0.1, 120);
+  const st = { scene: sc, cam, geos: [], mats: [], texs: [], slots: [], hits: [], proxies: new Map(), last: null, sel: null, frame: null };
+  const G = x => { st.geos.push(x); return x; }, M = x => { st.mats.push(x); return x; };
+  sc.background = new THREE.Color('#07060c');
+  sc.fog = new THREE.Fog('#07060c', 14, 40);
+  sc.add(new THREE.HemisphereLight('#7c78b8', '#140f1c', 1.15));
+  const moon = new THREE.DirectionalLight('#cdd6ff', 0.9); moon.position.set(-4, 8, 6); sc.add(moon);
+  // street: asphalt, a sidewalk along the buildings, a dashed center line
+  sc.add(mesh(G(new THREE.PlaneGeometry(48, 36).rotateX(-Math.PI / 2)), M(new THREE.MeshLambertMaterial({ color: COL.ground.clone() })), 0, 0, -4));
+  sc.add(mesh(G(new THREE.BoxGeometry(48, 0.16, 3)), M(new THREE.MeshLambertMaterial({ color: COL.grid.clone() })), 0, 0.08, -4.6));
+  const dashG = G(new THREE.BoxGeometry(1.1, 0.02, 0.1)), dashM = M(new THREE.MeshBasicMaterial({ color: COL.great.clone(), transparent: true, opacity: 0.4 }));
+  for (let x = -12; x <= 12; x += 2.4) sc.add(mesh(dashG, dashM, x, 0.012, 2.6));
+  // buildings with lit windows behind the sidewalk (same window texture as the battle city)
+  const texs = [windowTexture(13), windowTexture(41), windowTexture(73)]; st.texs.push(...texs);
+  const roofM = M(new THREE.MeshLambertMaterial({ color: new THREE.Color('#14111b') })), facs = texs.map(t => M(new THREE.MeshBasicMaterial({ map: t })));
+  let seed = 19;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let x = -13; x < 13;) {
+    const w = 2.4 + rnd() * 2.4, h = 4.5 + rnd() * 7, d = 2.6, geo = G(new THREE.BoxGeometry(w, h, d)), uv = geo.attributes.uv;
+    for (let f = 0; f < 6; f++) { const fw = f < 2 ? d : w, fh = f === 2 || f === 3 ? d : h; for (let k = 0; k < 4; k++) { const i = f * 4 + k; uv.setXY(i, uv.getX(i) * fw / 4, uv.getY(i) * fh / 8); } }
+    const fac = facs[Math.floor(rnd() * facs.length)], b = new THREE.Mesh(geo, [fac, fac, roofM, roofM, fac, fac]);
+    b.position.set(x + w / 2, h / 2, -7.4); sc.add(b);
+    x += w + 0.35;
+  }
+  const neonG = G(new THREE.BoxGeometry(1.8, 0.5, 0.1));
+  for (const [k, x, y] of [['great', -7.0, 3.0], ['necro', -4.2, 3.4], ['beast', -1.3, 4.3], ['armor', 1.6, 3.1], ['ranger', 4.4, 4.0], ['danger', 7.2, 3.6]]) sc.add(mesh(neonG, basic(k), x, y, -6.0));
+  const poleG = G(new THREE.BoxGeometry(0.12, 2.8, 0.12)), poleM = M(new THREE.MeshLambertMaterial({ color: new THREE.Color('#3a3445') })), bulbG = G(new THREE.SphereGeometry(0.2, 10, 8));
+  for (const lx of [-3.6, 3.6]) {
+    sc.add(mesh(poleG, poleM, lx, 1.4, -3.6), mesh(bulbG, basic('great'), lx, 2.85, -3.6));
+    const lamp = new THREE.PointLight(HEX.great, 4, 7, 1.5); lamp.position.set(lx, 2.6, -3.2); sc.add(lamp);
+  }
+  // highlight of the picked summon: ring and glow at its feet, a light of its color above it
+  st.ring = mesh(G(new THREE.TorusGeometry(0.95, 0.05, 8, 48)), M(new THREE.MeshBasicMaterial({ color: COL.great.clone(), transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending })), 0, 0.04, 0);
+  st.ring.rotation.x = Math.PI / 2;
+  st.glow = mesh(G(new THREE.CircleGeometry(1.15, 40).rotateX(-Math.PI / 2)), M(new THREE.MeshBasicMaterial({ color: COL.great.clone(), transparent: true, opacity: 0.3, depthWrite: false, blending: THREE.AdditiveBlending })), 0, 0.02, 0);
+  st.spot = new THREE.PointLight(HEX.great, 9, 7, 1.4);
+  sc.add(st.ring, st.glow, st.spot);
+  // figures: necromancer back center, summons front left/center/right (S.KINDS order), each with an invisible hit proxy
+  const proxyG = G(new THREE.CylinderGeometry(0.75, 0.75, 1.6, 10)), proxyM = M(new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false }));
+  const n = S.KINDS.length;
+  const add = (kind, x, z, yaw, i) => {
+    const s = { kind, x, z, yaw, fwd: 0, phase: 0.4 + i * 1.7, holder: new THREE.Group(), body: null, model: null, fallback: true };
+    s.holder.position.set(x, 0, z); sc.add(s.holder); setTitleBody(s); st.slots.push(s);
+    return s;
+  };
+  add('necro', 0, TITLE.back, 0, 0);
+  S.KINDS.forEach((k, i) => {
+    const s = add(k, (i - (n - 1) / 2) * TITLE.gap, TITLE.front, i === 0 ? 0.75 : i === n - 1 ? -0.75 : 0.5, i + 1);
+    const p = mesh(proxyG, proxyM, 0, 0.8, 0); s.holder.add(p); st.hits.push(p); st.proxies.set(p, k);
+  });
+  return st;
+}
+// Frame the street in the band between the logo and the buttons (#homeStage), portrait first: everything fits the width
+function frameTitle(st) {
+  let top = cssH * 0.2, bot = cssH * 0.72;
+  const hs = document.getElementById('homeStage'), cr = cv3 && cv3.getBoundingClientRect ? cv3.getBoundingClientRect() : null, hr = hs && hs.getBoundingClientRect ? hs.getBoundingClientRect() : null;
+  if (cr && hr && hr.height > 60) { top = Math.max(0, hr.top - cr.top); bot = Math.min(cssH, hr.top - cr.top + hr.height); }
+  const band = Math.max(60, bot - top), aspect = cssW / cssH, half = Math.tan(TITLE.fov * Math.PI / 360);
+  const visH = Math.max(3.2 * cssH / band, 5.8 / aspect), dist = visH / (2 * half), cam = st.cam, ty = 1.0, tz = -0.3;
+  cam.fov = TITLE.fov; cam.aspect = aspect; cam.near = 0.1; cam.far = dist + 60;
+  cam.position.set(0, ty + Math.sin(TITLE.elev) * dist, tz + Math.cos(TITLE.elev) * dist);
+  cam.lookAt(0, ty, tz);
+  cam.setViewOffset(cssW, cssH, 0, -((top + bot) / 2 - cssH / 2), cssW, cssH);   // shift the picture so the street sits in the band
+  cam.updateProjectionMatrix(); cam.updateMatrixWorld();
+  st.scene.fog.near = dist + 4; st.scene.fog.far = dist + 30;
+  st.frame = { top, bot, dist };
+}
+function renderTitle(now, opts) {
+  if (!stage) stage = buildTitle();
+  const st = stage, reduced = !!opts.reduced, sel = S.KINDS.includes(opts.starter) ? opts.starter : S.KINDS[0];
+  const dt = st.last == null ? 0 : Math.min(0.05, Math.max(0, (now - st.last) / 1000));
+  st.last = now; st.sel = sel;
+  frameTitle(st);
+  let cur = st.slots[1];
+  for (const s of st.slots) {
+    if (s.fallback && (s.kind === 'necro' ? hero.src : BODY[s.kind])) setTitleBody(s);   // a model finished loading: swap out the stand-in
+    const on = s.kind === sel, want = on ? 1 : 0;
+    s.fwd = reduced ? want : s.fwd + (want - s.fwd) * Math.min(1, dt * 7);
+    const br = reduced ? 0 : Math.sin(now / 820 + s.phase), k = 1 + 0.14 * s.fwd;   // breathing: a slow swell from the feet up
+    s.holder.position.set(s.x * (1 - 0.05 * s.fwd), reduced ? 0 : 0.03 * s.fwd * (1 + Math.sin(now / 300)), s.z + TITLE.step * s.fwd);
+    s.holder.scale.set(k * (1 - 0.012 * br), k * (1 + 0.035 * br), k * (1 - 0.012 * br));
+    s.holder.rotation.y = reduced ? 0 : Math.sin(now / 2300 + s.phase) * 0.07;
+    if (s.model) {
+      if (s.kind !== 'necro') for (const m of s.model.mats) {
+        m.color.setScalar(0.72 + 0.28 * s.fwd);
+        if (m.emissive) m.emissiveIntensity = 0.3 + s.fwd * (0.4 + (reduced ? 0 : 0.12 * Math.sin(now / 260)));
+      }
+      s.model.mixer.update(dt);
+    }
+    if (on) cur = s;
+  }
+  const c = COL[sel], p = reduced ? 1 : 1 + 0.06 * Math.sin(now / 260), hp = cur.holder.position;
+  st.ring.position.set(hp.x, 0.04, hp.z); st.ring.scale.setScalar(p); st.ring.material.color.copy(c); st.ring.material.opacity = 0.35 + 0.6 * cur.fwd;
+  st.glow.position.set(hp.x, 0.02, hp.z); st.glow.material.color.copy(c); st.glow.material.opacity = 0.3 * cur.fwd * p;
+  st.spot.position.set(hp.x, 2.3, hp.z + 0.9); st.spot.color.copy(c); st.spot.intensity = 9 * cur.fwd;
+  renderer.render(st.scene, st.cam);
+}
+function disposeTitle() {
+  const st = stage;
+  if (!st) return;
+  stage = null;
+  for (const s of st.slots) dropTitleModel(s);
+  for (const x of st.geos) x.dispose();
+  for (const x of st.mats) x.dispose();
+  for (const x of st.texs) x.dispose();
+  st.proxies.clear(); st.hits.length = 0; st.scene.clear();
+  titleStats.disposed++;
+}
+
 const view = {
   resize(w, h) {
     cssW = Math.max(1, w); cssH = Math.max(1, h);
@@ -1648,16 +2418,41 @@ const view = {
   },
   // 조이스틱(화면 기준) → 판의 방향. 화면 오른쪽은 판의 (+x, -y), 화면 위쪽은 (-x, -y)
   rotateInput(x, y) { return [(x + y) * R2, (y - x) * R2]; },
+  // Title stage tap (canvas CSS px) -> summon kind or null. Only while the title stage is up.
+  pickTitle(px, py) {
+    const st = stage;
+    if (!st) return null;
+    ndc.set(px / cssW * 2 - 1, 1 - py / cssH * 2);
+    raycaster.setFromCamera(ndc, st.cam);
+    const hits = raycaster.intersectObjects(st.hits, false);
+    if (Array.isArray(hits)) for (const h of hits) { const k = st.proxies.get(h.object); if (k) return k; }
+    let best = null, bd = Infinity;   // fallback: nearest summon on screen
+    for (const s of st.slots) {
+      if (s.kind === 'necro') continue;
+      const p = s.holder.position;
+      tvec.set(p.x, 0.7, p.z).project(st.cam);
+      const d = Math.hypot((tvec.x + 1) / 2 * cssW - px, (1 - tvec.y) / 2 * cssH - py);
+      if (d < bd) { bd = d; best = s.kind; }
+    }
+    return bd <= Math.max(44, cssW * 0.16) ? best : null;
+  },
   render(game, now, opts) {
     g = game;
+    if (opts && opts.title) { renderTitle(now, opts); return; }
+    if (stage) disposeTitle();   // the run started: drop the title scene, camera and lights before the first battle frame
+    applyTheme(themeIdxOf(g.district));
     const n = g.necro, reduced = opts.reduced;
     // 네크로맨서를 부드럽게 따라가되, 판의 먼 쪽(초소가 있는 쪽)을 조금 더 보여 준다.
     // 가까운 두 변(x = W, y = H) 너머의 빈 땅이 화면을 차지하지 않게 목표를 판 안쪽으로 묶는다
-    const LOOK = 5, tx = Math.min(S.W - 2, n.x - LOOK * R2), tz = Math.min(S.H - 4, n.y - LOOK * R2);
+    // Boss intro cut: render.js passes opts.focus (necromancer -> boss blend, same focus as the 2D camera); follow it instead of the necromancer
+    const fo = opts.focus && Number.isFinite(opts.focus.x) && Number.isFinite(opts.focus.y) ? opts.focus : n;
+    const LOOK = 5, tx = Math.min(S.W - 2, fo.x - LOOK * R2), tz = Math.min(S.H - 4, fo.y - LOOK * R2);
     if (g !== lastGame) { lastGame = g; target.set(tx, 0, tz); }
     target.x += (tx - target.x) * 0.28; target.z += (tz - target.z) * 0.28;
     placeCamera(opts.shake);
     dec.reset();
+    syncObstacles(g);
+    drawObstacleDecals();
     // 바닥 그을음(화면 쪽이 만든 목록): 익은 폭발 자리, 옅어지며 사라진다
     for (const s of opts.scorch || []) { const a = s.t / opts.scorchT; for (let i = 0; i < 3; i++) dec.disc(s.x, s.y, s.r * (1 - i * 0.28), SCORCH, a * 0.33, 0, Math.PI * 2, 0.02 + i * 0.002); }
     for (const s of g.souls) drawSoul(s, now, reduced);
@@ -1699,8 +2494,31 @@ const view = {
     renderer.render(scene, camera);
   },
 };
-view._hero = hero;   // 확인용(화면 검사 스크립트가 동작 상태를 읽는다)
-window.ChimeraView = view;
+if (renderer) {
+  view._hero = hero;
+  // Inspection hooks read the live scene graph: each group in obsLayer.children (position x/z) and its body mesh geometry size (BoxGeometry.parameters)
+  view._obstacles = () => obsLayer.children.map(root => {
+    const body = root.children[0], p = (body && body.geometry && body.geometry.parameters) || {};
+    return { x: root.position.x, y: root.position.z, w: p.width, h: p.height, d: p.depth, root, geos: root.children.map(c => c.geometry) };
+  });
+  view._obstacleStats = () => ({ built: obsStats.built, disposed: obsStats.disposed, live: obsLayer.children.length });
+  view._obsLayer = obsLayer; view._scene = scene;   // 확인용(화면 검사 스크립트가 동작 상태를 읽는다)
+  view._enemyLook = e => { const r = live.get(e); return r ? r.look : null; };
+  view._bossFx = e => { const r = live.get(e); return r && r.bossFx ? Object.assign({}, r.bossFx, { ticks: r.bossFx.ticks.slice() }) : null; };
+  view._postMark = p => { const r = live.get(p); return r && r.kind === 'post' ? { summon: r.mark.visible === true } : null; };
+  view._postMarks = () => { const out = []; for (const [k, r] of live) if (r.kind === 'post') out.push({ post: k, summon: r.mark.visible === true }); return out; };
+  view._themes = THEMES; view._themeIdxOf = themeIdxOf;
+  view._theme = () => ({ idx: themeIdx, key: THEMES[themeIdx].key, applied: themeApplied, builds: cityBuilds, hemi, sun, ground: groundMat, walk: walkMat, fog: scene.fog, bg: scene.background });
+  view._title = () => {
+    const st = stage;
+    return { active: !!st, builds: titleStats.builds, disposed: titleStats.disposed, selected: st ? st.sel : null, scene: st ? st.scene : null, frame: st && st.frame ? Object.assign({}, st.frame) : null,
+      slots: st ? st.slots.map(s => ({ kind: s.kind, x: s.holder.position.x, z: s.holder.position.z, fwd: s.fwd, model: !!s.model, fallback: s.fallback })) : [] };
+  };
+  window.ChimeraView = view;
+} else {
+  window.ChimeraView3DError = String((glError && glError.message) || glError);
+  console.warn('3D 판을 띄우지 못해 2D 판으로 그린다: ' + window.ChimeraView3DError);
+}
 
 </script>
 <script type="module">
@@ -1711,6 +2529,11 @@ window.ChimeraView = view;
   // 3D 판(3d.html)이면 판을 그리는 쪽을 넘겨받는다. 없으면 지금의 2D 판이다.
   // V: render(g, now, opts) / resize(w, h) / toScreen(x, y, h) → [px, py] / toWorld(px, py) → {x, y} / rotateInput(x, y) → [x, y]
   const V = window.ChimeraView || null;
+  // 3D 판(index.html)인데 V가 없으면(WebGL을 못 쓰거나 render3d.js·three를 띄우지 못함) 2D 판으로 그린다.
+  // 밑에 깔린 #game3d(검은 WebGL 바탕)는 숨긴다. 2d.html에는 #game3d가 없다.
+  const cv3 = V ? null : document.getElementById('game3d');
+  if (cv3) cv3.hidden = true;
+  window.ChimeraRenderMode = V ? '3d' : cv3 ? '2d-fallback' : '2d';
   const cv = document.getElementById('game');
   const ctx = cv.getContext('2d');
   const css = getComputedStyle(document.documentElement);
@@ -1727,6 +2550,7 @@ window.ChimeraView = view;
 
   let g = null, mode = 'title', inp = { x: 0, y: 0 }, stick = null, keys = {}, last = 0;
   let retryDistrict = 1;   // 끝 화면의 '다시' 버튼이 여는 구역
+  let starter = 'beast';   // first summon kind picked on the title/end screens (default beast)
   let subN = 0, subT = -1e9, shieldSndT = 0;   // 집속탄 피치 계단과 마지막으로 터진 시각, 방벽 소리 간격
   // 폭발 손맛(화면만): 바닥 그을음, 튀는 파편, 처치 수 글자. 규칙(sim)과 따로 Math.random을 쓴다(같은 시드 같은 판은 그대로)
   let scorch = [], debris = [], popups = [], seenFx = new WeakSet();
@@ -1735,33 +2559,51 @@ window.ChimeraView = view;
   // 공격 몸짓: 휘두르는 동안 바라보는 쪽으로 나갔다 돌아온다(사수는 반동으로 뒤로)
   const LUNGE = { beast: 0.45, armor: 0.35, ranger: -0.18 };
   const lungeOf = u => (reduced || !(u.swing > 0) ? 0 : Math.sin(Math.PI * (1 - u.swing / S.CFG.hit.swing)) * LUNGE[u.main]);
+  // Boss kill (g.over 'win'): conquest sequence before the result screen. Length in real seconds; effects run slowed (VIC_SLOW).
+  const VIC_S = 1.6, VIC_SLOW = 0.3, VIC_FLASH = 0.6, VIC_STOP = 0.35, VIC_SHAKE = 1.4;
+  const victoryEl = document.getElementById('victoryBanner');
+  let victory = null, endCount = 0, vnow = 0;
+  hideVictory();
   let flash = 0, hitstop = 0;   // 익은 폭발 연출: 화면 번쩍임, 판을 잠깐 멈춤(그림만, 규칙은 그대로)
   let scale = 1, dpr = 1, camX = 0, camY = 0, shake = 0, beatT = 0, lastTap = null, seed = (Date.now() % 100000) + 1;
 
   // ---- 소리: 외부 파일 없이 Web Audio로 만든다. 첫 터치(시작 버튼) 뒤에만 켜진다. ----
+  // 소리는 모두 master 하나를 지난다(끄면 gain 0). 켜고 끈 것은 게임 저장과 다른 키에 둔다.
+  /*SND>*/
+  const SOUND_KEY = 'chimera-lab-sound-v1';
   const Sound = {
-    ac: null,
+    ac: null, master: null, bgm: null, muted: false,   // bgm: music bus under master, made by the BGM engine on its first unmuted note
     on() {
       try {
         const AC = window.AudioContext || window.webkitAudioContext;
         if (!this.ac && AC) this.ac = new AC();
+        if (this.ac && !this.master) { this.master = this.ac.createGain(); this.master.connect(this.ac.destination); }
+        this.apply();
         if (this.ac && this.ac.state === 'suspended') this.ac.resume();
-      } catch (e) { this.ac = null; }
+      } catch (e) { this.ac = null; this.master = null; this.bgm = null; }
     },
+    apply() { if (this.master) this.master.gain.value = this.muted ? 0 : 1; },
+    load() { let v = null; try { v = localStorage.getItem(SOUND_KEY); } catch (e) { v = null; } this.muted = v === '1'; this.apply(); },
+    setMuted(m) {
+      this.muted = !!m; this.apply();
+      try { localStorage.setItem(SOUND_KEY, this.muted ? '1' : '0'); } catch (e) { /* 저장소가 막혀도 이 세션은 메모리로 */ }
+      return this.muted;
+    },
+    toggle() { return this.setMuted(!this.muted); },
     tone(type, f0, f1, dur, vol, delay) {
-      const ac = this.ac; if (!ac) return;
+      const ac = this.ac, out = this.master; if (!ac || !out) return;
       const t = ac.currentTime + (delay || 0), o = ac.createOscillator(), v = ac.createGain();
       o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t + dur);
       v.gain.setValueAtTime(vol, t); v.gain.exponentialRampToValueAtTime(0.001, t + dur);
-      o.connect(v); v.connect(ac.destination); o.start(t); o.stop(t + dur + 0.02);
+      o.connect(v); v.connect(out); o.start(t); o.stop(t + dur + 0.02);
     },
     noise(dur, vol, cutoff) {
-      const ac = this.ac; if (!ac) return;
+      const ac = this.ac, out = this.master; if (!ac || !out) return;
       const n = Math.floor(ac.sampleRate * dur), buf = ac.createBuffer(1, n, ac.sampleRate), d = buf.getChannelData(0);
       for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
       const src = ac.createBufferSource(), f = ac.createBiquadFilter(), v = ac.createGain();
       src.buffer = buf; f.type = 'lowpass'; f.frequency.value = cutoff; v.gain.value = vol;
-      src.connect(f); f.connect(v); v.connect(ac.destination); src.start();
+      src.connect(f); f.connect(v); v.connect(out); src.start();
     },
     absorb() { this.tone('sawtooth', 150, 400, 0.08, 0.18); },                    // 혼이 빨려 드는 짧은 스윕
     beat() { this.tone('sine', 70, 45, 0.12, 0.35); this.tone('sine', 62, 40, 0.12, 0.25, 0.16); },   // 과부하: 심장 박동
@@ -1777,6 +2619,7 @@ window.ChimeraView = view;
     rush() { this.tone('sawtooth', 300, 900, 0.2, 0.12); },
     sub(i) { const f = 150 + Math.min(i, 10) * 35; this.noise(0.12, 0.3, 900); this.tone('sine', f, f * 0.4, 0.12, 0.35); },   // 집속탄·연쇄: 짧은 퍽. 0.6초 안에 이어 터질수록 한 계단씩 높아진다
     shield() { this.tone('triangle', 900, 600, 0.08, 0.07); },
+    roar() { this.tone('sawtooth', 120, 50, 0.55, 0.3); this.noise(0.45, 0.35, 700); this.tone('square', 240, 90, 0.3, 0.08, 0.05); },   // phased boss roar (phase shift)
     // 평타: 맹수 물기(짧은 찢는 소리), 갑주 쿠당(낮게), 사수 탕(짧고 높게). 자주 나니 작게
     hit(kind) {
       // 폰 스피커는 200Hz 아래를 거의 못 낸다: 셋 다 들리는 높이에서 모양을 다르게 한다
@@ -1785,6 +2628,177 @@ window.ChimeraView = view;
       else { this.noise(0.07, 0.22, 3200); this.tone('sawtooth', 1500, 200, 0.05, 0.06); }   // 사수: 잡음이 큰 '탕'
     },   // 갑주 방벽이 막았다: 가볍게 팅
   };
+  /*<SND*/
+
+  // ---- BGM: procedural zone music from oscillators and noise only (no audio files, no network). ----
+  // Own bus Sound.bgm (GainNode, BGM_VOL) under Sound.master: mute (master gain 0) covers it and SFX stay on top.
+  // Phone speakers barely play below 200 Hz (see Sound.hit): every music pitch, bass and drums included, stays at 200 Hz or more.
+  // Lookahead scheduler: update() runs every frame and books steps up to LOOK seconds ahead on the audio clock.
+  // Muted, paused, hidden or no AudioContext yet: nothing is booked and no music node is created. The step index is kept, so play resumes in place.
+  // Stopping cancels booked nodes but gives back every step whose start time is still ahead of ac.currentTime (see halt), so no beat is skipped.
+  // Home has no Sound.on of its own: wake() (first gesture, home sound button) makes / resumes the AudioContext when unmuted.
+  // Themes: home (title, night street), act (drums+bass, +arp/hats, +lead per zone act), boss (faster per roar), win/lose stinger then silence.
+  /*BGM>*/
+  function makeMusic(Sound, S) {
+    const BGM_VOL = 0.32, LOOK = 0.3, LEAD = 0.05, MIN_F = 200, MAX_ROAR = 3;
+    const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+    // C minor throughout; the lowest note used is Ab3 (208 Hz)
+    const HOME = {
+      bpm: 70, len: 64, roots: [60, 56, 65, 59], chords: [[60, 63, 67], [56, 60, 63], [56, 60, 65], [59, 62, 67]],
+      bell: { 2: 84, 7: 79, 12: 82, 20: 80, 26: 75, 34: 77, 39: 80, 44: 79, 52: 74, 58: 79 },
+    };
+    const ACT = {
+      bpm: 104, len: 64, roots: [60, 56, 63, 58], chords: [[60, 63, 67], [56, 60, 63], [63, 67, 70], [58, 62, 65]],
+      lead: { 0: 72, 4: 75, 6: 74, 8: 72, 12: 67, 16: 68, 20: 72, 24: 75, 28: 74, 32: 75, 36: 79, 38: 77, 40: 75, 44: 70, 48: 74, 52: 72, 56: 70, 58: 74, 60: 67 },
+    };
+    const BOSS = {
+      bpm: 128, len: 32, stab: [[72, 75, 78], [73, 77, 80]],
+      riff: [60, 60, 72, 60, 61, 60, 63, 60, 60, 60, 72, 60, 66, 65, 63, 61, 60, 60, 72, 60, 61, 60, 63, 60, 60, 60, 72, 60, 67, 66, 65, 63],
+    };
+    const LOOP = { home: HOME, act: ACT, boss: BOSS };
+    const M = { theme: null, step: 0, nextT: 0, played: 0, playing: false, layers: 1, intensity: 0, end: null, stung: false, fill: false,
+      game: null, live: [], nodes: 0, count: {}, buf: null, bufAc: null, booked: [], stingEnd: 0 };
+    const bpmOf = th => (LOOP[th] ? LOOP[th].bpm + (th === 'boss' ? 8 * M.intensity : 0) : 0);
+    function bus() {
+      if (!Sound.bgm) { const b = Sound.ac.createGain(); b.gain.value = BGM_VOL; b.connect(Sound.master); Sound.bgm = b; }
+      return Sound.bgm;
+    }
+    function keep(src, end, name) { M.live.push({ src, end }); M.nodes++; M.count[name] = (M.count[name] || 0) + 1; }
+    function tone(name, type, f0, f1, t, dur, vol, att) {
+      const ac = Sound.ac, o = ac.createOscillator(), v = ac.createGain(), a = Math.min(att || 0.005, dur * 0.5);
+      const fa = Math.max(MIN_F, f0), fb = Math.max(MIN_F, f1);
+      o.type = type; o.frequency.setValueAtTime(fa, t);
+      if (fb !== fa) o.frequency.exponentialRampToValueAtTime(fb, t + dur);
+      v.gain.setValueAtTime(0.0001, t); v.gain.exponentialRampToValueAtTime(vol, t + a); v.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(v); v.connect(bus()); o.start(t); o.stop(t + dur + 0.02);
+      keep(o, t + dur + 0.02, name);
+    }
+    const note = (name, type, m, t, dur, vol, att) => tone(name, type, mtof(m), mtof(m), t, dur, vol, att);
+    function hiss(name, t, dur, vol) {
+      const ac = Sound.ac;
+      if (!M.buf || M.bufAc !== ac) {   // one second of bright noise (first difference of white noise), made once per context
+        const n = Math.max(1, Math.floor(ac.sampleRate)), b = ac.createBuffer(1, n, ac.sampleRate), d = b.getChannelData(0);
+        let p = 0;
+        for (let i = 0; i < d.length; i++) { const r = Math.random() * 2 - 1; d[i] = (r - p) * 0.5; p = r; }
+        M.buf = b; M.bufAc = ac;
+      }
+      const src = ac.createBufferSource(), v = ac.createGain();
+      src.buffer = M.buf; v.gain.setValueAtTime(vol, t); v.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      src.connect(v); v.connect(bus()); src.start(t); src.stop(t + dur + 0.02);
+      keep(src, t + dur + 0.02, name);
+    }
+    function kick(t) { tone('kick', 'triangle', 330, 200, t, 0.11, 0.22); hiss('kick', t, 0.015, 0.05); }   // high punchy kick: audible on phones
+    function snare(t) { hiss('snare', t, 0.12, 0.12); tone('snare', 'triangle', 300, 220, t, 0.07, 0.07); }
+    function hat(t, vol) { hiss('hat', t, 0.035, vol); }
+    function playStep(th, s, t, sd) {
+      const i = s % 16, bar = Math.floor(s / 16);
+      if (M.fill && th !== 'home') { M.fill = false; hiss('crash', t, 0.6, 0.08); tone('tom', 'triangle', 420, 260, t, 0.18, 0.12); }   // alarm / boss entry accent
+      if (th === 'home') {   // dark night street: slow pad, soft pulse, sparse bell with an echo
+        if (i === 0) for (const m of HOME.chords[bar]) note('pad', 'triangle', m, t, sd * 16, 0.04, sd * 4);
+        if (i === 0 || i === 10) note('bass', 'triangle', HOME.roots[bar], t, sd * 5, 0.07, 0.02);
+        const b = HOME.bell[s];
+        if (b) { note('bell', 'sine', b, t, sd * 6, 0.045); note('bell', 'sine', b, t + sd * 3, sd * 4, 0.015); }
+        if (i === 4 || i === 12) hat(t, 0.02);
+        return;
+      }
+      if (th === 'act') {   // act 1: drums + bass, act 2: + arp and hats, act 3: + lead and busier drums
+        const L = M.layers, root = ACT.roots[bar], ch = ACT.chords[bar];
+        if (i === 0 || i === 8 || (L >= 3 && i === 10)) kick(t);
+        if (i === 4 || i === 12) snare(t);
+        if (i % 2 === 0) note('bass', 'sawtooth', root + (i === 6 || i === 14 ? 12 : 0), t, sd * 1.6, 0.075);
+        if (L >= 2) { note('arp', 'square', ch[s % 3] + (i % 8 === 7 ? 24 : 12), t, sd * 0.9, 0.026); if (i % 4 === 2) hat(t, 0.05); }
+        if (L >= 3) { const m = ACT.lead[s]; if (m) note('lead', 'sawtooth', m, t, sd * 3.5, 0.04, 0.02); if (i % 2 === 1) hat(t, 0.03); }
+        return;
+      }
+      const k = M.intensity;   // boss: four-on-the-floor, semitone riff, stabs; each roar adds tempo and layers
+      if (i % 4 === 0 || (k >= 2 && (i === 14 || i === 15))) kick(t);
+      if (i === 4 || i === 12) snare(t);
+      if (i % 2 === 1 || k >= 1) hat(t, 0.035);
+      note('bass', 'sawtooth', BOSS.riff[s], t, sd * 0.85, 0.07);
+      if (k >= 2 && i % 2 === 0) note('bass', 'square', BOSS.riff[s] + 12, t, sd * 0.7, 0.025);
+      if (i === 0) for (const m of BOSS.stab[bar]) note('stab', 'square', m, t, sd * 2, 0.03);
+      if (k >= 1 && (i === 0 || i === 8)) tone('lead', 'square', mtof(k >= 2 ? 84 : 79), mtof(k >= 2 ? 83 : 78), t, sd * 7, 0.035, 0.01);
+      if (k >= 3) note('arp', 'square', BOSS.stab[bar][s % 3] + 12, t, sd * 0.8, 0.02);
+    }
+    function sting(th, t) {
+      if (th === 'win') {   // conquest: rising major arpeggio
+        [60, 64, 67, 72].forEach((m, j) => { note('win', 'triangle', m, t + j * 0.12, j === 3 ? 1.2 : 0.3, 0.12); note('win', 'square', m + 12, t + j * 0.12, j === 3 ? 0.9 : 0.2, 0.025); });
+        hiss('win', t + 0.36, 0.5, 0.06);
+      } else {   // defeat: slow falling minor line over a held low note
+        [67, 63, 60, 59].forEach((m, j) => note('lose', 'triangle', m, t + j * 0.3, j === 3 ? 1.6 : 0.5, 0.1, 0.02));
+        note('lose', 'sawtooth', 56, t, 1.9, 0.035, 0.3);
+      }
+    }
+    function cut(at) { for (const l of M.live) { try { l.src.stop(at); } catch (e) { /* already stopped */ } } M.live = []; }
+    // Stop now. keep (pause / hide, not mute): booked steps whose start time is still ahead of ac.currentTime were never heard, so they are
+    // given back (M.step / M.played rewind, a pending fill accent too) and resume plays them in place; an end stinger cut before its last
+    // note ended is armed again so resume plays it (never once it has finished).
+    function halt(keep) {
+      const ac = Sound.ac;
+      if (ac) {
+        const now = ac.currentTime;
+        if (keep !== false) {
+          const left = M.booked.filter(b => b.t >= now);
+          if (left.length) { M.step = left[0].step; M.played -= left.length; if (left.some(b => b.fill)) M.fill = true; }
+          if (M.stung && now < M.stingEnd) M.stung = false;
+        }
+        cut(now);
+      }
+      M.booked = []; M.playing = false;
+    }
+    function want(st) {
+      const g = st.g;
+      if (st.mode === 'title') { M.end = null; return 'home'; }
+      if (!g) return null;
+      if (!M.end && g.over) M.end = g.over === 'win' ? 'win' : 'lose';
+      if (!M.end && st.victory) M.end = 'win';
+      if (M.end) return M.end;
+      if (st.mode !== 'play') return null;
+      const b = g.boss;
+      if (b && !b.dead && b.hp > 0) { M.intensity = Math.max(M.intensity, Math.min(MAX_ROAR, b.roars || 0)); return 'boss'; }
+      const a = S && S.actOf ? S.actOf(g) : 0;
+      M.layers = a > 0 ? a : Math.min(3, 1 + (g.postsDown || 0));
+      return 'act';
+    }
+    // st: { mode, g, paused, hidden, victory }
+    function update(st) {
+      st = st || {};
+      if (st.g !== M.game) { M.game = st.g || null; M.intensity = 0; M.end = null; M.layers = 1; M.fill = false; }
+      const th = want(st), ac = Sound.ac;
+      if (th !== M.theme) { if (ac) cut(ac.currentTime + 0.02); M.theme = th; M.step = 0; M.stung = false; M.stingEnd = 0; M.booked = []; M.nextT = 0; M.playing = false; }
+      if ((th === 'win' || th === 'lose') && Sound.muted) M.stung = true;   // muted at the end: no late stinger after unmuting
+      const run = !!(th && ac && Sound.master) && !Sound.muted && !st.paused && !st.hidden;
+      if (!run) { if (M.playing || M.live.length) halt(!Sound.muted); return; }
+      const now = ac.currentTime;
+      M.live = M.live.filter(l => l.end > now);
+      M.booked = M.booked.filter(b => b.t >= now);   // started on the audio clock: spent
+      if (!M.playing || M.nextT < now) { M.playing = true; M.nextT = now + LEAD; }   // (re)start or after a stall: same step, fresh time
+      if (th === 'win' || th === 'lose') {
+        if (!M.stung) { M.stung = true; const i0 = M.live.length; sting(th, M.nextT); M.stingEnd = M.live.slice(i0).reduce((m, l) => Math.max(m, l.end), M.nextT); }
+        return;
+      }
+      const T = LOOP[th], sd = 60 / bpmOf(th) / 4;
+      for (let n = 0; M.nextT < now + LOOK && n < 64; n++) { const f = M.fill; playStep(th, M.step, M.nextT, sd); M.booked.push({ step: M.step, t: M.nextT, fill: f && !M.fill }); M.step = (M.step + 1) % T.len; M.played++; M.nextT += sd; }
+    }
+    function event(ev) {
+      if (ev === 'roar') M.intensity = Math.min(MAX_ROAR, M.intensity + 1);
+      else if (ev === 'alarm' || ev === 'boss') M.fill = true;
+      else if (ev === 'win' || ev === 'lose') M.end = ev;
+    }
+    const debug = () => ({ theme: M.theme, playing: M.playing, step: M.step, played: M.played, layers: M.layers, intensity: M.intensity, bpm: bpmOf(M.theme),
+      end: M.end, stung: M.stung, stingEnd: M.stingEnd, booked: M.booked.length, live: M.live.length, nodes: M.nodes, count: Object.assign({}, M.count) });
+    // User gesture / home sound button: unmuted only, make or resume the AudioContext (Sound.on) and run the current theme at once.
+    // Muted: no Sound.on and no music node; update() then just stops what is playing.
+    function wake(st) {
+      if (!Sound.muted && (!Sound.ac || !Sound.master || Sound.ac.state !== 'running')) Sound.on();
+      update(st);
+      return !!(Sound.ac && Sound.master && !Sound.muted);
+    }
+    return { update, event, halt, wake, debug };
+  }
+  /*<BGM*/
+  const Music = makeMusic(Sound, S);
+  const musicState = () => ({ mode, g, paused, hidden: !!document.hidden, victory: !!victory });
 
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -1818,8 +2832,10 @@ window.ChimeraView = view;
   // 제목 화면: 다시 열면 지금 진행의 다음 구역부터. 1구역이 아닐 때만 '1구역으로 되돌리기'를 보인다(두 번 눌러야 된다)
   const RESET_LABEL = '1구역으로 되돌리기 (골드·강화는 그대로)';
   let resetArmed = false, resetTimer = null;
+  // Home CTA: '시작' on a fresh run (save.cur 0), otherwise '이어하기 N구역' with N = save.cur + 1 (the district start() opens)
+  const ctaLabel = cur => (cur > 0 ? '이어하기 ' + (cur + 1) + '구역' : '시작');
   function refreshTitle() {
-    startBtn.textContent = (save.cur + 1) + '구역으로';
+    startBtn.textContent = ctaLabel(save.cur);
     resetBtn.hidden = save.cur === 0;
     resetArmed = false; clearTimeout(resetTimer);
     resetBtn.textContent = RESET_LABEL;
@@ -1839,19 +2855,162 @@ window.ChimeraView = view;
   window.addEventListener('storage', e => {   // 다른 탭이 저장을 바꾸면 따라간다
     if (e.key !== SAVE_KEY) return;
     reload();
-    if (mode === 'title') refreshTitle();
+    if (mode === 'title') { refreshTitle(); refreshGold(0); }   // 제목 화면의 강화 상점과 골드도 따라간다
     else if (mode === 'over') refreshGold(lastGained);
   });
+
+  // ---- In-play guidance (sim untouched): district 1 goal banner, plus one short line the first time each moment happens ----
+  // Seen tips live under their own storage key (not the game save). Marked seen when actually shown; blocked storage = memory only.
+  const TIP_KEY = 'chimera-lab-tips-v1', BANNER_S = 3.2, TIP_S = 3.4;
+  const TIPS = {
+    absorb: '혼을 먹이면 불안정도가 찬다',
+    frenzy: '과부하: 익은 채 오래 들면 체력이 샌다',
+    ripe: '80% 익었다! 두 번 톡톡 쳐서 터뜨려라',
+    boom: '익은 폭발은 초소와 대장도 무너뜨린다',
+    rebirth: '심장을 밟아 유전자를 물려받았다',
+    postdown: '초소 하나를 부쉈다 · 남은 초소로 가라',
+  };
+  const hasTip = k => Object.prototype.hasOwnProperty.call(TIPS, k);
+  const bannerEl = document.getElementById('goalBanner'), tipEl = document.getElementById('tipLine');
+  const tipSeen = {};
+  let tipQ = [], tipT = 0, bannerT = 0;
+  function loadTips() {
+    let v = null;
+    try { v = JSON.parse(localStorage.getItem(TIP_KEY) || '[]'); } catch (e) { v = null; }
+    if (Array.isArray(v)) for (const k of v) if (hasTip(k)) tipSeen[k] = true;
+  }
+  function saveTips() { try { localStorage.setItem(TIP_KEY, JSON.stringify(Object.keys(tipSeen))); } catch (e) { /* memory only */ } }
+  function tip(k) {
+    if (!hasTip(k) || tipSeen[k] || tipQ.includes(k)) return false;
+    tipQ.push(k);
+    return true;
+  }
+  // ---- Boss intro cut and big boss HUD (view only, sim untouched) ----
+  // On the 'boss' event the camera pans from the necromancer to the boss, holds, then eases back to normal tracking.
+  // camFocus() is the one focus both views use: drawWorld2D (camX/camY) and V.render(opts.focus) in 3D.
+  // #bossHud (src/page.html) replaces the old 7px strip in the top band: title/name tag and a thick HP bar with quarter ticks.
+  const CUT_PAN = 0.6, CUT_HOLD = 1.1, CUT_BACK = 0.7;
+  const BOSS_NAME = { armor: '방패 진압 대장', beast: '군견 진압 대장', ranger: '저격 진압 대장' };
+  const bossHudEl = document.getElementById('bossHud'), bossTitleEl = document.getElementById('bossTitle'), bossNameEl = document.getElementById('bossName');
+  const bossBarEl = document.getElementById('bossBar'), bossFillEl = document.getElementById('bossFill'), bossHpEl = document.getElementById('bossHpText');
+  let bossCut = null, bossKey = '';
+  // Phased boss (sim spawnBoss: phases, phase, phaseAt, roarT, roars, weak, stun): HP bar phase ticks at phaseAt, roar effects while roarT > 0,
+  // weak point only while a barricade stun is on (weak && stun > 0; sim clears weak when that stun ends). Phaseless bosses and other foes: no ticks, no effects.
+  const bossStateEl = document.getElementById('bossState'), bossTicksEl = document.getElementById('bossTicks');
+  const ROAR_T = (S.CFG.bossPhase && S.CFG.bossPhase.roar) || 1.6;
+  const ROAR_TEXT = '\uD3EC\uD6A8!', PHASE_TEXT = '\uB2E8\uACC4', WEAK_TEXT = '\uC57D\uC810 \uB178\uCD9C \u00B7 \uD3C9\uD0C0 \uAE30\uD68C';
+  const bossTicks = e => (e && e.boss && e.phases && Array.isArray(e.phaseAt) ? e.phaseAt.filter(f => Number.isFinite(f) && f > 0 && f < 1) : []);
+  const bossRoaring = e => !!(e && e.boss && e.roarT > 0);
+  const bossWeak = e => !!(e && e.boss && e.weak && e.stun > 0);
+  const bossFxOf = e => (e && e.boss ? { ticks: bossTicks(e), roar: bossRoaring(e), weak: bossWeak(e), phase: e.phase || 1 } : null);
+  let drawnBossFx = [];
+  const easeIO = x => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
+  const liveBoss = () => { const b = g && g.boss; return b && !b.dead && b.hp > 0 && g.enemies.includes(b) ? b : null; };
+  const belowBossHud = y => (bossHudEl.hidden ? y : Math.max(y, 192));   // edge markers stay clear of the boss HUD
+  function startBossCut() { const b = liveBoss(); bossCut = b ? { t: 0, k: 0, phase: 'pan', boss: b } : null; bossStep(); }
+  function cutStep(dt) {
+    if (!bossCut) return;
+    if (g.over || liveBoss() !== bossCut.boss) { bossCut = null; return; }   // boss gone / killed / replaced, or the run is over
+    if (!g.choice) bossCut.t += dt;   // the mutation pick freezes the cut
+    const t = bossCut.t, t2 = CUT_PAN + CUT_HOLD;
+    if (t >= t2 + CUT_BACK) { bossCut = null; return; }
+    bossCut.phase = t < CUT_PAN ? 'pan' : t < t2 ? 'hold' : 'back';
+    bossCut.k = t < CUT_PAN ? easeIO(t / CUT_PAN) : t < t2 ? 1 : 1 - easeIO((t - t2) / CUT_BACK);
+  }
+  function camFocus() {
+    const n = g.necro, c = mode === 'play' ? bossCut : null, k = c ? c.k : 0;
+    if (!(k > 0)) return { x: n.x, y: n.y, k: 0 };
+    const b = c.boss;
+    return { x: n.x + (b.x - n.x) * k, y: n.y + (b.y - n.y) * k, k };
+  }
+  function hideBoss() { bossKey = ''; bossHudEl.hidden = true; bossStateEl.hidden = true; bossStateEl.textContent = ''; bossTicksEl.textContent = ''; }
+  function bossStep() {
+    const b = mode === 'play' ? liveBoss() : null;
+    if (!b) { hideBoss(); return; }
+    const f = Math.max(0, Math.min(1, b.hp / b.maxHp)), pct = Math.round(f * 100), hp = Math.ceil(Math.max(0, b.hp)), max = Math.ceil(b.maxHp);
+    const fx = bossFxOf(b), state = fx.roar ? 'roar' : fx.weak ? 'weak' : '';
+    const key = g.district + '|' + b.arch + '|' + hp + '|' + max + '|' + fx.ticks.join(',') + '|' + fx.phase + '|' + state;
+    if (key === bossKey && !bossHudEl.hidden) return;
+    bossKey = key;
+    bossTitleEl.textContent = g.district + '구역 대장';
+    bossNameEl.textContent = BOSS_NAME[b.arch] || BOSS_NAME.armor;
+    if (bossFillEl.style) bossFillEl.style.width = (f * 100).toFixed(2) + '%';
+    bossBarEl.setAttribute('aria-valuenow', String(pct));
+    bossHpEl.textContent = hp + ' / ' + max + ' · ' + pct + '%';
+    bossHudEl.setAttribute('data-arch', b.arch);
+    bossHudEl.setAttribute('data-phased', fx.ticks.length ? '1' : '0');
+    bossHudEl.setAttribute('data-phase', String(fx.phase));
+    bossHudEl.setAttribute('data-state', state);
+    bossStateEl.textContent = fx.roar ? ROAR_TEXT + ' ' + fx.phase + PHASE_TEXT : fx.weak ? WEAK_TEXT : '';
+    bossStateEl.hidden = !state;
+    bossTicksEl.textContent = '';
+    for (const t of fx.ticks) {   // phase thresholds on the big bar (66% / 33% for district 1, any list the sim gives)
+      const m = document.createElement('i');
+      m.className = 'phaseTick';
+      m.setAttribute('data-at', String(Math.round(t * 100)));
+      m.setAttribute('data-passed', f <= t ? '1' : '0');
+      if (m.style) m.style.left = (t * 100).toFixed(2) + '%';
+      bossTicksEl.appendChild(m);
+    }
+    bossHudEl.hidden = false;
+  }
+  function hideHud() { bannerT = 0; tipT = 0; tipQ = []; bannerEl.hidden = true; tipEl.hidden = true; bossCut = null; hideBoss(); }
+  function startHud() {
+    hideHud(); loadTips();
+    if (g.district !== 1) return;
+    bannerEl.textContent = '1구역: 봉쇄 초소 ' + g.postsTotal + '개를 무너뜨려라';
+    bannerEl.setAttribute('data-kind', 'goal'); bannerEl.hidden = false; bannerT = BANNER_S;
+  }
+  // Zone 1 act shift banner: sim actShift sets g.alarm and pushes 'alarm' once per broken post. Same #goalBanner and timer as the goal banner
+  // (frozen under the mutation pick, hidden by hideHud), tinted by data-kind="alarm": progress + alarm, then the elite / boss notice.
+  const ACT_S = 2.8;
+  function actText(a) {
+    const head = a.postsDown + '/' + a.postsTotal + ' 초소 함락';
+    if (a.last) return head + ' · ' + (a.elite ? '돌격조와 대장 출현!' : '대장 출현!');
+    return head + ', 경보! · ' + (a.elite ? '돌격조 접근' : a.act + '막 증원이 온다');
+  }
+  function actBanner() {
+    const a = g && g.acts ? g.alarm : null;
+    if (!a) return false;
+    bannerEl.textContent = actText(a); bannerEl.setAttribute('data-kind', 'alarm');
+    bannerEl.hidden = false; bannerT = ACT_S;   // hud() hides it again while the mutation pick is open
+    return true;
+  }
+  function hud(dt) {
+    // Mutation pick (g.choice) covers the board: hide guidance and freeze its timers/queue so nothing is consumed or saved unseen
+    if (g.choice) { bannerEl.hidden = true; tipEl.hidden = true; return; }
+    if (bannerT > 0) bannerEl.hidden = false;   // restore what the pick interrupted
+    if (tipT > 0) tipEl.hidden = false;
+    if (bannerT > 0 && (bannerT -= dt) <= 0) { bannerT = 0; bannerEl.hidden = true; }
+    if (g.units.some(u => u.state === 'ok' && S.isFrenzy(u))) tip('ripe');   // gauge reached 80%
+    if (tipT > 0 && (tipT -= dt) <= 0) { tipT = 0; tipEl.hidden = true; }
+    if (tipT <= 0 && tipQ.length) {
+      const k = tipQ.shift();
+      tipSeen[k] = true; saveTips();
+      tipEl.textContent = TIPS[k]; tipEl.setAttribute('data-tip', k); tipEl.hidden = false; tipT = TIP_S;
+    }
+  }
+  loadTips(); hideHud();
 
   // opts: { district }. 없으면 아직 못 깬 다음 구역. 어느 경로로 시작하든 골드로 산 시작 강화를 넣는다.
   function start(opts) {
     Sound.on();
     reload();
     const district = opts && opts.district ? opts.district : save.cur + 1;
-    g = S.newGame(seed++, { district, start: { hp: save.up.hp, stat: save.up.stat } });
-    mode = 'play'; shake = 0; flash = 0; hitstop = 0; lastTap = null;
+    // An explicit opts.starter wins (and becomes the shown selection); otherwise the kind picked on the title/end screen.
+    if (opts && S.KINDS.includes(opts.starter)) selectStarter(opts.starter, 'start');
+    else refreshStarter();
+    // A held mutation seed is spent (and saved) here; the run then opens one 3-card mutation pick before play.
+    const sd = S.Save.useSeed(save);
+    if (sd.ok) { save = sd.save; persist(); }
+    g = S.newGame(seed++, { district, start: { hp: save.up.hp, stat: save.up.stat }, mutSeed: sd.ok, starter });
+    mode = 'play'; shake = 0; flash = 0; hitstop = 0; lastTap = null; victory = null; hideVictory();
     titleEl.hidden = true; endEl.hidden = true; mutEl.hidden = true; mutFor = null;
+    rwStop(); endStep = 0;   // a restart drops any pending result-screen reveal timer
+    setHelp(false);
+    paused = false; pauseEl.hidden = true;
     scorch = []; debris = []; popups = []; subN = 0;
+    startHud();
     inp.x = inp.y = 0; stick = null;
   }
   document.getElementById('startBtn').addEventListener('click', () => start());
@@ -1862,7 +3021,8 @@ window.ChimeraView = view;
 
   // 누르고 끌면 이동. 두 번 톡톡 치면 자폭(탈피). 키메라를 한 번 톡 누르면 먹일 대상으로 찍는다.
   cv.addEventListener('pointerdown', e => {
-    if (mode !== 'play') return;
+    if (mode === 'title') { titleTap(e); return; }   // home: tapping a summon on the stage picks the first summon
+    if (mode !== 'play' || paused || victory) return;   // 멈춤 덮개가 떠 있으면 새로 끌지 않는다
     cv.setPointerCapture(e.pointerId);
     stick = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, at: performance.now(), far: 0 };
   });
@@ -1909,7 +3069,11 @@ window.ChimeraView = view;
     stick = null;
   });
   cv.addEventListener('pointercancel', e => { if (stick && e.pointerId === stick.id) stick = null; });
-  window.addEventListener('keydown', e => { keys[e.key] = true; if (e.key === ' ' && mode === 'play') S.detonate(g); });
+  window.addEventListener('keydown', e => {
+    if (!helpEl.hidden) { if (e.key === 'Escape') setHelp(false); else if (e.key === 'Tab') trapHelpFocus(e); return; }
+    if (paused) { if (e.key === 'Enter' || e.key === ' ') resumePlay(); return; }   // 멈춘 동안의 키는 판에 넣지 않는다
+    keys[e.key] = true; if (e.key === ' ' && mode === 'play' && !victory) S.detonate(g);
+  });
   window.addEventListener('keyup', e => { keys[e.key] = false; });
 
   function readInput() {
@@ -2020,6 +3184,56 @@ window.ChimeraView = view;
     if (u.state === 'rush') { ctx.strokeStyle = COL.danger; ctx.lineWidth = 0.2; ctx.beginPath(); ctx.moveTo(u.x, u.y); ctx.lineTo(u.tx, u.ty); ctx.stroke(); }
   }
 
+  // 진압 대장: 종류마다 몸 색과 모양이 다르다 (armor: shield, beast: horns, ranger: scope)
+  const BOSS_LOOK = {
+    armor: { body: 'armor', edge: 'danger', accent: 'danger', mark: 'shield' },
+    beast: { body: 'beast', edge: 'danger', accent: 'danger', mark: 'horns' },
+    ranger: { body: 'ranger', edge: 'danger', accent: 'great', mark: 'scope' },
+  };
+  const bossLook = e => (e && e.boss ? BOSS_LOOK[e.arch] || BOSS_LOOK.armor : null);
+  // Lap 2+ (district 4+) assist pattern, read from the real sim fields (lap, summon, chainMax). Lap 1 bosses: none.
+  const bossAssist = e => {
+    if (!e || !e.boss || !(e.lap >= 1)) return [];
+    const out = [];
+    if (e.summon) out.push({ k: 'summon', text: '+수비대 소환' });
+    if (e.chainMax > 0) out.push({ k: 'chain', text: '+연속 돌진' });
+    return out;
+  };
+  const bossTag = e => bossAssist(e).map(a => a.text).join(' · ');
+  const SUMMON_WARN = 1.2;   // seconds before an assist summon: ring telegraph around the boss
+  // Phased boss effects in board units: roar shockwaves and glow under the body, weak point aura under it and target brackets over it.
+  function drawBossUnder(e, now) {
+    if (bossRoaring(e)) {
+      const k = Math.max(0, Math.min(1, e.roarT / ROAR_T)), el = Math.max(0, ROAR_T - e.roarT);
+      ctx.save();
+      ctx.globalAlpha = 0.16 + 0.22 * k; ctx.fillStyle = COL.danger; circle(e.x, e.y, e.r + 1.2); ctx.fill();
+      if (reduced) { ctx.globalAlpha = 0.9; ctx.strokeStyle = COL.danger; ctx.lineWidth = 0.18; circle(e.x, e.y, e.r + 1.6); ctx.stroke(); }
+      else for (let i = 0; i < 3; i++) {
+        const q = (el * 1.4 + i / 3) % 1;
+        ctx.globalAlpha = (1 - q) * 0.95; ctx.strokeStyle = i % 2 ? COL.great : COL.danger; ctx.lineWidth = 0.22 * (1 - q) + 0.05;
+        circle(e.x, e.y, e.r + 0.4 + q * 3.6); ctx.stroke();
+      }
+      ctx.restore();
+    }
+    if (bossWeak(e)) {
+      const p = reduced ? 1 : 0.75 + 0.25 * Math.sin(now / 120);
+      ctx.save(); ctx.globalAlpha = 0.25 * p; ctx.fillStyle = COL.great; circle(e.x, e.y, e.r + 0.35); ctx.fill(); ctx.restore();
+    }
+  }
+  function drawBossOver(e, now) {
+    if (bossWeak(e)) {
+      const p = reduced ? 1 : 0.75 + 0.25 * Math.sin(now / 120), rot = reduced ? 0 : now / 350, R = e.r + 0.45 + 0.25 * p;
+      ctx.save(); ctx.strokeStyle = COL.great; ctx.lineWidth = 0.16; ctx.globalAlpha = 0.95;
+      for (let i = 0; i < 4; i++) { const a = rot + i * Math.PI / 2; ctx.beginPath(); ctx.arc(e.x, e.y, R, a + 0.25, a + Math.PI / 2 - 0.25); ctx.stroke(); }
+      ctx.globalAlpha = 0.6 + 0.3 * p; ctx.lineWidth = 0.1; ctx.strokeStyle = COL.ink; ctx.setLineDash([0.3, 0.2]); ctx.lineDashOffset = reduced ? 0 : now / 300;
+      circle(e.x, e.y, e.r + 1.2); ctx.stroke(); ctx.setLineDash([]);
+      ctx.restore();
+    }
+    if (bossRoaring(e) && !reduced) {
+      ctx.save(); ctx.globalAlpha = 0.5 + 0.4 * Math.abs(Math.sin(now / 70)); ctx.strokeStyle = COL.danger; ctx.lineWidth = 0.14;
+      circle(e.x, e.y, e.r * 1.15); ctx.stroke(); ctx.restore();
+    }
+  }
   function drawEnemy(e, now) {
     if (e.elite && (e.mode === 'warn' || e.mode === 'aim')) {
       // 돌진 예고: 겨눈 방향으로 붉은 길이 깔린다
@@ -2028,8 +3242,24 @@ window.ChimeraView = view;
       ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(e.x + Math.cos(a) * L, e.y + Math.sin(a) * L); ctx.stroke();
       ctx.restore();
     }
+    if (e.boss && e.summon && e.summonT < SUMMON_WARN) {   // assist summon telegraph (any arch with the summon flag)
+      const k = 1 - Math.max(0, e.summonT) / SUMMON_WARN;
+      ctx.save(); ctx.globalAlpha = 0.4 + 0.5 * k; ctx.strokeStyle = COL.great; ctx.lineWidth = 0.12;
+      ctx.setLineDash([0.35, 0.25]); ctx.lineDashOffset = reduced ? 0 : -now / 300;
+      circle(e.x, e.y, e.r + 0.6 + (1 - k) * 0.8); ctx.stroke(); ctx.restore();
+    }
+    if (e.boss) drawBossUnder(e, now);
     ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(e.face);
-    if (e.elite) {
+    if (e.boss) {
+      const lk = bossLook(e), r = e.r;
+      ctx.fillStyle = COL[lk.body]; ctx.strokeStyle = COL[lk.edge]; ctx.lineWidth = 0.16;
+      shape(e.arch, r); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = COL[lk.accent];
+      if (lk.mark === 'shield') { ctx.fillRect(r * 0.95, -r * 0.85, r * 0.28, r * 1.7); ctx.fillRect(-r * 0.5, -r * 1.1, r * 0.7, r * 0.22); ctx.fillRect(-r * 0.5, r * 0.88, r * 0.7, r * 0.22); }
+      else if (lk.mark === 'horns') { for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(r * 0.55, s * r * 0.3); ctx.lineTo(r * 1.15, s * r * 0.95); ctx.lineTo(r * 0.25, s * r * 0.6); ctx.closePath(); ctx.fill(); } }
+      else { ctx.strokeStyle = COL[lk.accent]; ctx.lineWidth = 0.1; circle(0, 0, r * 0.5); ctx.stroke(); ctx.beginPath(); ctx.moveTo(-r * 0.6, 0); ctx.lineTo(r * 0.6, 0); ctx.moveTo(0, -r * 0.6); ctx.lineTo(0, r * 0.6); ctx.stroke(); }
+      ctx.fillStyle = COL.ink; ctx.beginPath(); ctx.moveTo(r * 1.7, 0); ctx.lineTo(r * 0.9, r * 0.4); ctx.lineTo(r * 0.9, -r * 0.4); ctx.closePath(); ctx.fill();
+    } else if (e.elite) {
       ctx.fillStyle = COL.danger; ctx.strokeStyle = COL.ink; ctx.lineWidth = 0.1;
       shape(e.arch, e.r); ctx.fill(); ctx.stroke();
       ctx.fillStyle = COL.ink; ctx.beginPath(); ctx.moveTo(e.r * 1.7, 0); ctx.lineTo(e.r * 0.9, e.r * 0.4); ctx.lineTo(e.r * 0.9, -e.r * 0.4); ctx.closePath(); ctx.fill();
@@ -2039,8 +3269,20 @@ window.ChimeraView = view;
       if (e.g >= 2) { ctx.strokeStyle = COL.ink; ctx.lineWidth = 0.06; shape(e.arch, e.r * 0.55); ctx.stroke(); }
     }
     ctx.restore();
+    if (e.boss) {   // 대장: 머리 위 금빛 표시
+      const cy = e.y - e.r - 0.75;
+      ctx.fillStyle = COL.great; ctx.beginPath();
+      ctx.moveTo(e.x - 0.45, cy + 0.25); ctx.lineTo(e.x - 0.45, cy - 0.1); ctx.lineTo(e.x - 0.22, cy + 0.08); ctx.lineTo(e.x, cy - 0.22); ctx.lineTo(e.x + 0.22, cy + 0.08); ctx.lineTo(e.x + 0.45, cy - 0.1); ctx.lineTo(e.x + 0.45, cy + 0.25);
+      ctx.closePath(); ctx.fill();
+    }
+    if (e.boss) drawBossOver(e, now);
     if (e.stun > 0) { ctx.strokeStyle = COL.great; ctx.lineWidth = 0.07; ctx.beginPath(); ctx.arc(e.x, e.y - e.r - 0.3, 0.2, now / 90, now / 90 + 4.5); ctx.stroke(); }
-    if (e.hp < e.maxHp) bar(e.x, e.y - e.r - 0.35, e.elite ? 2 : 0.9, e.hp / e.maxHp, COL.danger);
+    const ticks = e.boss ? bossTicks(e) : [];
+    if (e.hp < e.maxHp || ticks.length) {   // phased boss: bar always shown with its phase ticks (passed ones dim)
+      const bw = e.elite ? 2 : 0.9, by = e.y - e.r - 0.35, hf = e.hp / e.maxHp;
+      bar(e.x, by, bw, hf, COL.danger);
+      for (const t of ticks) { ctx.fillStyle = hf <= t ? COL.dim : COL.great; ctx.fillRect(e.x - bw / 2 + bw * t - 0.03, by - 0.05, 0.06, 0.24); }
+    }
     if (e.flash > 0) { ctx.save(); ctx.globalAlpha = e.flash / S.CFG.hit.flash * 0.8; ctx.fillStyle = '#fff'; circle(e.x, e.y, e.r * 1.05); ctx.fill(); ctx.restore(); }   // 맞으면 하얗게 번쩍
   }
 
@@ -2057,20 +3299,81 @@ window.ChimeraView = view;
     if (V) {
       ctx.clearRect(0, 0, cv.width, cv.height);
       if (!g) return;
-      V.render(g, now, { shake: reduced ? 0 : shake, reduced, scorch, scorchT: SCORCH_T });
+      V.render(g, now, { shake: reduced ? 0 : shake, reduced, scorch, scorchT: SCORCH_T, title: mode === 'title', starter, focus: mode === 'title' ? null : camFocus() });
     } else {
       ctx.fillStyle = COL.ground; ctx.fillRect(0, 0, cv.width, cv.height);
       if (!g) return;
-      drawWorld2D(now);
+      if (mode === 'title') drawTitleStage2D(now); else drawWorld2D(now);
     }
-    if (flash > 0) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = Math.min(1, flash / 0.14) * 0.45; ctx.fillStyle = '#fff6e0'; ctx.fillRect(0, 0, cv.width, cv.height); ctx.globalAlpha = 1; }
-    drawScreen(now);
+    if (flash > 0) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = victory ? Math.min(1, flash / 0.3) * 0.7 : Math.min(1, flash / 0.14) * 0.45; ctx.fillStyle = '#fff6e0'; ctx.fillRect(0, 0, cv.width, cv.height); ctx.globalAlpha = 1; }
+    if (mode !== 'title') drawScreen(now);   // home: the board shows through the clear stage without the in-play HUD
+  }
+
+  // Barricades: g.obstacles = [{ x, y, hw, hh }] (axis-aligned boxes, see sim.js barricadesFor/pushOutOf).
+  // The filled body is exactly the collision box [x-hw, x+hw] x [y-hh, y+hh]; a drop shadow, hazard stripes and an ink edge set it apart from floor, posts and units.
+  let drawnObs = [];
+  function drawObstacles() {
+    const list = g && Array.isArray(g.obstacles) ? g.obstacles : [];
+    drawnObs = [];
+    for (const b of list) {
+      if (!b || !Number.isFinite(b.x) || !Number.isFinite(b.y) || !(b.hw > 0) || !(b.hh > 0)) continue;
+      const x0 = b.x - b.hw, y0 = b.y - b.hh, w = b.hw * 2, h = b.hh * 2;
+      ctx.save();
+      ctx.globalAlpha = 0.45; ctx.fillStyle = '#000000'; ctx.fillRect(x0 + 0.12, y0 + 0.16, w, h);   // shadow
+      ctx.globalAlpha = 1; ctx.fillStyle = COL.dim; ctx.fillRect(x0, y0, w, h);   // body = collision box
+      ctx.beginPath(); ctx.rect(x0, y0, w, h); ctx.clip();
+      ctx.strokeStyle = COL.great; ctx.lineWidth = 0.16; ctx.globalAlpha = 0.85;
+      for (let s = -h; s < w + h; s += 0.5) { ctx.beginPath(); ctx.moveTo(x0 + s, y0 + h); ctx.lineTo(x0 + s + h, y0); ctx.stroke(); }
+      ctx.restore();
+      ctx.strokeStyle = COL.ink; ctx.lineWidth = 0.08; ctx.strokeRect(x0, y0, w, h);
+      drawnObs.push({ x: x0, y: y0, w, h });
+    }
+  }
+
+  // Post hex outline (body, and the summon post's inner rune hex)
+  function hexPath(x, y, r) { ctx.beginPath(); for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3 + Math.PI / 6; ctx[i ? 'lineTo' : 'moveTo'](x + Math.cos(a) * r, y + Math.sin(a) * r); } ctx.closePath(); }
+  // Summon post (p.summon, district 2+): violet (necro) aura, turning dashed rune ring and three runes pointing in, plus the boss-style
+  // gold ring closing in just before it calls escorts. Plain posts never get it; dead posts take the early return and lose it.
+  let drawnPostMarks = [];
+  function drawSummonMark(p, now) {
+    const r = p.r, warn = p.summonT < SUMMON_WARN ? 1 - Math.max(0, p.summonT) / SUMMON_WARN : 0, rot = reduced ? 0 : now / 900;
+    ctx.save();
+    ctx.globalAlpha = 0.28 + 0.25 * warn; ctx.fillStyle = COL.necro; circle(p.x, p.y, r + 0.6); ctx.fill();
+    ctx.globalAlpha = 1; ctx.strokeStyle = COL.necro; ctx.lineWidth = 0.14;
+    ctx.setLineDash([0.4, 0.22]); ctx.lineDashOffset = reduced ? 0 : -now / 500;
+    circle(p.x, p.y, r + 0.42); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = COL.necro;
+    for (let i = 0; i < 3; i++) {
+      const a = rot + i * Math.PI * 2 / 3, c = Math.cos(a), s = Math.sin(a), R = r + 0.95;
+      ctx.beginPath(); ctx.moveTo(p.x + c * (r + 0.6), p.y + s * (r + 0.6)); ctx.lineTo(p.x + c * R - s * 0.22, p.y + s * R + c * 0.22); ctx.lineTo(p.x + c * R + s * 0.22, p.y + s * R - c * 0.22); ctx.closePath(); ctx.fill();
+    }
+    if (warn > 0) { ctx.globalAlpha = 0.4 + 0.5 * warn; ctx.strokeStyle = COL.great; ctx.lineWidth = 0.12; circle(p.x, p.y, r + 0.6 + (1 - warn) * 0.8); ctx.stroke(); }
+    ctx.restore();
+    drawnPostMarks.push({ x: p.x, y: p.y, warn });
+  }
+  // 봉쇄 초소: 폭발로만 부서진다. 옅은 원이 사격 범위, 위의 칸이 남은 내구도.
+  function drawPost(p, n, now) {
+    if (p.dead) { ctx.strokeStyle = COL.grid; ctx.lineWidth = 0.1; circle(p.x, p.y, p.r); ctx.stroke(); return; }
+    // 사정거리: 이 원 안에 네크로맨서가 들어가면 쏜다. 들어가 있는 동안은 진하게 보인다.
+    const inside = Math.hypot(p.x - n.x, p.y - n.y) < S.CFG.postRange;
+    ctx.save();
+    ctx.globalAlpha = inside ? 0.16 : 0.06; ctx.fillStyle = COL.danger; circle(p.x, p.y, S.CFG.postRange); ctx.fill();
+    ctx.globalAlpha = inside ? 0.95 : 0.55; ctx.strokeStyle = COL.danger; ctx.lineWidth = inside ? 0.12 : 0.08;
+    ctx.setLineDash([0.45, 0.3]); ctx.lineDashOffset = reduced ? 0 : -now / 700;
+    circle(p.x, p.y, S.CFG.postRange); ctx.stroke();
+    ctx.restore();
+    if (p.summon) drawSummonMark(p, now);
+    ctx.fillStyle = COL.dim; ctx.strokeStyle = COL.ink; ctx.lineWidth = 0.1;
+    hexPath(p.x, p.y, p.r); ctx.fill(); ctx.stroke();
+    if (p.summon) { ctx.strokeStyle = COL.necro; ctx.lineWidth = 0.1; hexPath(p.x, p.y, p.r * 0.62); ctx.stroke(); }
+    ctx.fillStyle = Math.floor(now / 400) % 2 ? COL.danger : COL.great; circle(p.x, p.y, 0.22); ctx.fill();
+    for (let i = 0; i < p.maxHp; i++) { ctx.fillStyle = i < p.hp ? COL.ink : COL.grid; ctx.fillRect(p.x - 0.45 + i * 0.5, p.y - p.r - 0.5, 0.4, 0.18); }
   }
 
   function drawWorld2D(now) {
-    const vh = cv.height / scale, n = g.necro;
-    camX = Math.max(0, Math.min(S.W - VIEW_W, n.x - VIEW_W / 2));
-    camY = vh >= S.H ? (S.H - vh) / 2 : Math.max(0, Math.min(S.H - vh, n.y - vh / 2));
+    const vh = cv.height / scale, n = g.necro, fc = camFocus();   // fc: the necromancer, or the boss intro cut blend
+    camX = Math.max(0, Math.min(S.W - VIEW_W, fc.x - VIEW_W / 2));
+    camY = vh >= S.H ? (S.H - vh) / 2 : Math.max(0, Math.min(S.H - vh, fc.y - vh / 2));
     const shx = shake > 0 && !reduced ? (Math.random() - 0.5) * shake * 1.2 : 0, shy = shake > 0 && !reduced ? (Math.random() - 0.5) * shake * 1.2 : 0;
     ctx.setTransform(scale, 0, 0, scale, (-camX + shx) * scale, (-camY + shy) * scale);
 
@@ -2081,6 +3384,7 @@ window.ChimeraView = view;
 
     // 혼: 불량은 작고 흐리다. 신선한 것은 푸른 고리, 순혈 코어는 크고 금빛으로 뛴다.
     // 바닥 그을음: 익은 폭발 자리, 4.5초 동안 옅어진다
+    drawObstacles();   // above the floor, below souls/units/UI
     for (const s of scorch) { const a = s.t / SCORCH_T; ctx.save(); ctx.fillStyle = '#3a1a12'; for (let i = 0; i < 3; i++) { ctx.globalAlpha = a * 0.33; circle(s.x, s.y, s.r * (1 - i * 0.28)); ctx.fill(); } ctx.restore(); }
     for (const s of g.souls) {
       if (s.ttl < 3 && Math.floor(now / 120) % 2 === 0) continue;
@@ -2110,23 +3414,10 @@ window.ChimeraView = view;
       ctx.restore();
     }
 
-    // 봉쇄 초소: 폭발로만 부서진다. 옅은 원이 사격 범위, 위의 칸이 남은 내구도.
-    for (const p of g.posts) {
-      if (p.dead) { ctx.strokeStyle = COL.grid; ctx.lineWidth = 0.1; circle(p.x, p.y, p.r); ctx.stroke(); continue; }
-      // 사정거리: 이 원 안에 네크로맨서가 들어가면 쏜다. 들어가 있는 동안은 진하게 보인다.
-      const inside = Math.hypot(p.x - n.x, p.y - n.y) < S.CFG.postRange;
-      ctx.save();
-      ctx.globalAlpha = inside ? 0.16 : 0.06; ctx.fillStyle = COL.danger; circle(p.x, p.y, S.CFG.postRange); ctx.fill();
-      ctx.globalAlpha = inside ? 0.95 : 0.55; ctx.strokeStyle = COL.danger; ctx.lineWidth = inside ? 0.12 : 0.08;
-      ctx.setLineDash([0.45, 0.3]); ctx.lineDashOffset = reduced ? 0 : -now / 700;
-      circle(p.x, p.y, S.CFG.postRange); ctx.stroke();
-      ctx.restore();
-      ctx.fillStyle = COL.dim; ctx.strokeStyle = COL.ink; ctx.lineWidth = 0.1;
-      ctx.beginPath(); for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3 + Math.PI / 6; ctx[i ? 'lineTo' : 'moveTo'](p.x + Math.cos(a) * p.r, p.y + Math.sin(a) * p.r); } ctx.closePath(); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = Math.floor(now / 400) % 2 ? COL.danger : COL.great; circle(p.x, p.y, 0.22); ctx.fill();
-      for (let i = 0; i < p.maxHp; i++) { ctx.fillStyle = i < p.hp ? COL.ink : COL.grid; ctx.fillRect(p.x - 0.45 + i * 0.5, p.y - p.r - 0.5, 0.4, 0.18); }
-    }
-    for (const e of g.enemies) drawEnemy(e, now);
+    drawnPostMarks = [];
+    for (const p of g.posts) drawPost(p, n, now);
+    drawnBossFx = [];
+    for (const e of g.enemies) { drawEnemy(e, now); if (e.boss) drawnBossFx.push(bossFxOf(e)); }
 
     // 예고 연결선: 이 혼을 밟으면 누가 먹는지. 먹으면 터질 참이면 붉다.
     if (g.link) {
@@ -2212,9 +3503,15 @@ window.ChimeraView = view;
   function drawMarks3D(now) {
     const sbar = (x, y, w, f, col) => { ctx.fillStyle = COL.grid; ctx.fillRect(x - w / 2, y, w, 4); ctx.fillStyle = col; ctx.fillRect(x - w / 2, y, w * Math.max(0, f), 4); };
     const ppu = V.pxPerUnit();
+    drawnBossFx = [];
     for (const e of g.enemies) {
       const [x, y] = scr(e.x, e.y, e.r * 2.2 + 0.4);
-      if (e.hp < e.maxHp) sbar(x, y - 8, (e.elite ? 2 : 0.9) * ppu, e.hp / e.maxHp, COL.danger);
+      const ticks = e.boss ? bossTicks(e) : [], bw = (e.elite ? 2 : 0.9) * ppu, hf = e.hp / e.maxHp;
+      if (e.hp < e.maxHp || ticks.length) {
+        sbar(x, y - 8, bw, hf, COL.danger);
+        for (const t of ticks) { ctx.fillStyle = hf <= t ? COL.dim : COL.great; ctx.fillRect(x - bw / 2 + bw * t - 1, y - 10, 2, 8); }
+      }
+      if (e.boss) drawnBossFx.push(bossFxOf(e));
       if (e.stun > 0) { ctx.strokeStyle = COL.great; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y - 16, 5, now / 90, now / 90 + 4.5); ctx.stroke(); }
     }
     for (const p of g.posts) {
@@ -2237,6 +3534,129 @@ window.ChimeraView = view;
     }
   }
 
+  // ---- 2D title stage (2d.html and the no-WebGL fallback) ----
+  // A night street with the original art (art/*.png): the necromancer at the back center, the three summons in front (left/center/right).
+  // The picked first summon (`starter`, same state as window.ChimeraTitle) steps forward, grows and glows; everyone breathes.
+  // Drawing and tapping share stageLayout(). Without images (still loading, blocked, fake DOM) each figure falls back to its game shape.
+  const STAGE_ART = { necro: 'art/necromancer.png', beast: 'art/chimera-beast.png', armor: 'art/chimera-armor.png', ranger: 'art/chimera-ranger.png' };
+  const stageFwd = {};
+  let stageImgs = null, stageT = null, stageDrawn = 0, stageFallback = 0;
+  function stageArt() {
+    if (stageImgs) return stageImgs;
+    stageImgs = {};
+    const Img = window.Image;
+    for (const k in STAGE_ART) {
+      let im = null;
+      if (typeof Img === 'function') { try { im = new Img(); im.decoding = 'async'; im.src = STAGE_ART[k]; } catch (e) { im = null; } }
+      stageImgs[k] = im;
+    }
+    return stageImgs;
+  }
+  const artReady = im => !!(im && im.complete && im.naturalWidth > 0 && im.naturalHeight > 0);
+  // Figure slots in canvas CSS px: x, foot (y of the feet), h (height), f (0..1 how far the picked summon has stepped forward)
+  function stageLayout() {
+    const r = cv.getBoundingClientRect(), w = Math.max(1, r.width || 0), h = Math.max(1, r.height || 0);
+    let top = h * 0.2, bot = h * 0.72;
+    const hs = document.getElementById('homeStage'), sr = hs && hs.getBoundingClientRect ? hs.getBoundingClientRect() : null;
+    if (sr && sr.height > 60) { top = Math.max(0, sr.top - r.top); bot = Math.min(h, sr.top - r.top + sr.height); }
+    const bh = Math.max(60, bot - top), n = S.KINDS.length, gap = Math.min(w * 0.3, bh * 0.62);
+    const heroH = Math.min(bh * 0.74, w * 0.6), sumH = Math.min(bh * 0.46, gap * 1.05);
+    const slots = [{ k: 'necro', i: -1, x: w / 2, foot: top + bh * 0.64, h: heroH, f: 0 }];
+    S.KINDS.forEach((k, i) => {
+      const f = stageFwd[k] || 0;
+      slots.push({ k, i, x: w / 2 + (i - (n - 1) / 2) * gap * (1 - 0.05 * f), foot: top + bh * (0.9 + 0.07 * f), h: sumH * (1 + 0.24 * f), f });
+    });
+    return { w, h, top, bot, slots };
+  }
+  function stagePick(px, py) {
+    let best = null, bd = Infinity;
+    for (const s of stageLayout().slots) {
+      if (s.k === 'necro') continue;
+      const hw = s.h * 0.5;
+      if (px < s.x - hw || px > s.x + hw || py < s.foot - s.h || py > s.foot + s.h * 0.12) continue;
+      const d = Math.hypot(px - s.x, py - (s.foot - s.h * 0.5)) - s.f * 20;   // the picked one (in front) wins where boxes overlap
+      if (d < bd) { bd = d; best = s.k; }
+    }
+    return best;
+  }
+  // Home tap: the 3D stage picks with its own camera (V.pickTitle), the 2D stage with stageLayout(). Ignored while the controls panel is open.
+  function titleTap(e) {
+    if (mode !== 'title' || !helpEl.hidden) return null;
+    const r = cv.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
+    const k = V ? (typeof V.pickTitle === 'function' ? V.pickTitle(px, py) : null) : stagePick(px, py);
+    if (k && S.KINDS.includes(k)) selectStarter(k, 'stage');
+    return k || null;
+  }
+  function drawTitleStage2D(now) {
+    const art = stageArt(), dt = stageT == null ? 0 : Math.min(0.05, Math.max(0, (now - stageT) / 1000));
+    stageT = now;
+    for (const k of S.KINDS) { const want = k === starter ? 1 : 0, f = stageFwd[k] || 0; stageFwd[k] = reduced ? want : f + (want - f) * Math.min(1, dt * 7); }
+    const L = stageLayout(), w = L.w, h = L.h, horizon = L.top + (L.bot - L.top) * 0.5;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.globalAlpha = 1;
+    ctx.fillStyle = '#0b0912'; ctx.fillRect(0, 0, w, h);
+    // skyline with lit windows (fixed seed: the same street every frame)
+    let sd = 23;
+    const rnd = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+    for (let x = -12; x < w + 12;) {
+      const bw = 40 + rnd() * 50, bhh = Math.max(60, (horizon - L.top) * (0.6 + rnd() * 0.8) + 30), y0 = horizon - bhh;
+      ctx.fillStyle = '#17131f'; ctx.fillRect(x, y0, bw, bhh);
+      for (let wy = Math.max(y0 + 10, 4); wy < horizon - 14; wy += 17) for (let wx = x + 7; wx < x + bw - 12; wx += 14) {
+        const q = rnd();
+        if (q < 0.28) { ctx.globalAlpha = 0.3 + q * 1.5; ctx.fillStyle = q < 0.08 ? '#a99cff' : '#f2d35e'; ctx.fillRect(wx, wy, 6, 8); ctx.globalAlpha = 1; }
+      }
+      x += bw + 5;
+    }
+    // neon signs, sidewalk, asphalt with a dashed line, two street lamps
+    const neon = ['necro', 'beast', 'armor', 'ranger'];
+    for (let i = 0; i < neon.length; i++) {
+      const nx = w * (0.12 + i * 0.25), ny = horizon - 46 - (i % 2) * 30, fl = reduced ? 1 : 0.75 + 0.25 * Math.sin(now / 340 + i * 2.1);
+      ctx.fillStyle = COL[neon[i]]; ctx.globalAlpha = 0.25 * fl; ctx.fillRect(nx - 30, ny - 14, 60, 30); ctx.globalAlpha = 0.9 * fl; ctx.fillRect(nx - 22, ny - 4, 44, 9);
+    }
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = COL.grid; ctx.fillRect(0, horizon, w, 10);
+    ctx.fillStyle = COL.ground; ctx.fillRect(0, horizon + 10, w, Math.max(0, h - horizon - 10));
+    ctx.fillStyle = COL.great; ctx.globalAlpha = 0.35;
+    const laneY = horizon + (h - horizon) * 0.42;
+    for (let x = 8; x < w; x += 46) ctx.fillRect(x, laneY, 26, 3);
+    for (const lx of [w * 0.08, w * 0.92]) {
+      ctx.globalAlpha = 1; ctx.fillStyle = '#3a3445'; ctx.fillRect(lx - 2, horizon - 86, 4, 96);
+      ctx.fillStyle = COL.great; circle(lx, horizon - 88, 5); ctx.fill(); ctx.globalAlpha = 0.12; circle(lx, horizon - 70, 46); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    // figures back to front: necromancer, the summons, the picked one last
+    stageFallback = 0;
+    for (const s of L.slots.slice().sort((a, b) => a.foot - b.foot)) {
+      const im = art[s.k], br = reduced ? 0 : Math.sin(now / 820 + (s.i + 1) * 1.7);
+      ctx.globalAlpha = 0.45; ctx.fillStyle = '#000000'; ctx.beginPath(); ctx.ellipse(s.x, s.foot, s.h * 0.32, s.h * 0.07, 0, 0, Math.PI * 2); ctx.fill();
+      if (s.k !== 'necro' && s.f > 0.02) {   // the picked summon: a glow of its color and a ring at its feet
+        const p = reduced ? 1 : 0.85 + 0.15 * Math.sin(now / 260);
+        ctx.globalAlpha = 0.22 * s.f * p; ctx.fillStyle = COL[s.k]; circle(s.x, s.foot - s.h * 0.45, s.h * 0.62); ctx.fill();
+        ctx.globalAlpha = 0.9 * s.f; ctx.strokeStyle = COL[s.k]; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(s.x, s.foot, s.h * 0.46 * p, s.h * 0.1 * p, 0, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.save();
+      ctx.translate(s.x, s.foot);
+      ctx.scale(1 - 0.012 * br, 1 + 0.03 * br);   // breathing: a slow swell from the feet up
+      ctx.globalAlpha = s.k === 'necro' || s.k === starter ? 1 : 0.8;
+      if (artReady(im)) {
+        const dh = s.h, dw = dh * im.naturalWidth / im.naturalHeight;
+        ctx.drawImage(im, -dw / 2, -dh, dw, dh);
+      } else {
+        stageFallback++;
+        if (s.k === 'necro') {
+          ctx.fillStyle = COL.necro; ctx.beginPath(); ctx.moveTo(0, -s.h * 0.78); ctx.lineTo(s.h * 0.24, 0); ctx.lineTo(-s.h * 0.24, 0); ctx.closePath(); ctx.fill();
+          ctx.fillStyle = COL.bone; circle(0, -s.h * 0.82, s.h * 0.09); ctx.fill();
+        } else {
+          ctx.translate(0, -s.h * 0.42);
+          ctx.fillStyle = COL.bone; ctx.strokeStyle = COL[s.k]; ctx.lineWidth = s.h * 0.05; ctx.lineJoin = 'round';
+          shape(s.k, s.h * 0.28); ctx.fill(); ctx.stroke();
+        }
+      }
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+    stageDrawn++;
+  }
+
   function drawScreen(now) {
     const n = g.necro;
     // 여기부터 화면 좌표(글자가 또렷하게 나오게)
@@ -2245,10 +3665,19 @@ window.ChimeraView = view;
     if (V) drawMarks3D(now);
     drawJuice();
     for (const u of g.units) { const [x, y] = scr(u.x, u.y, u.r * 1.1); label(String(S.levelOf(u)), x, y, Math.max(13, u.r * px * 0.9), V ? COL.ink : COL.ground); }
+    // boss name tag: only lap 2+ bosses get the assist pattern text above the crown
+    for (const e of g.enemies) {
+      if (!e.boss || e.dead) continue;
+      const tag = bossTag(e), fx = bossFxOf(e), st = fx.roar ? ROAR_TEXT : fx.weak ? WEAK_TEXT : '';
+      if (!tag && !st) continue;
+      const [bx, by] = V ? scr(e.x, e.y, e.r * 2.2 + 0.4) : scr(e.x, e.y - e.r - 1.3);
+      if (tag) label(tag, bx, by - (V ? 28 : 0), 12, COL.great);
+      if (st) { const pz = reduced ? 1 : 1 + 0.08 * Math.sin(now / 90); label(st, bx, by - (V ? 28 : 0) - (tag ? 18 : 0) - 4, (fx.roar ? 18 : 14) * pz, fx.roar ? COL.danger : COL.great); }   // roar / weak point call-out over the boss
+    }
     // 화면 밖에서 겨누는 돌격조: 가장자리에 느낌표
     for (const e of g.enemies) {
       if (!e.elite || (e.mode !== 'warn' && e.mode !== 'aim')) continue;
-      const [qx, qy] = scr(e.x, e.y), ex = Math.max(26, Math.min(w - 26, qx)), ey = Math.max(100, Math.min(hh - 30, qy));
+      const [qx, qy] = scr(e.x, e.y), ex = Math.max(26, Math.min(w - 26, qx)), ey = Math.max(belowBossHud(100), Math.min(hh - 30, qy));
       if (ex !== qx || ey !== qy) label('!', ex, ey, 34, COL.danger);
     }
     // 다음 목표(가장 가까운 초소, 다 부쉈으면 대장)가 화면 밖이면 가장자리에 표시한다
@@ -2257,7 +3686,7 @@ window.ChimeraView = view;
       let goal = null, gd = 1e9;
       for (const p of goals) { const d = Math.hypot(p.x - n.x, p.y - n.y); if (d < gd) { gd = d; goal = p; } }
       if (goal) {
-        const [gx, gy] = scr(goal.x, goal.y), ex = Math.max(30, Math.min(w - 30, gx)), ey = Math.max(104, Math.min(hh - 34, gy));
+        const [gx, gy] = scr(goal.x, goal.y), ex = Math.max(30, Math.min(w - 30, gx)), ey = Math.max(belowBossHud(104), Math.min(hh - 34, gy));
         if (ex !== gx || ey !== gy) {
           const a = Math.atan2(gy - ey, gx - ex);
           ctx.save(); ctx.translate(ex, ey); ctx.rotate(a);
@@ -2273,7 +3702,7 @@ window.ChimeraView = view;
     for (let i = 0; i < g.postsTotal; i++) { ctx.fillStyle = i < g.postsDown ? COL.grid : COL.great; ctx.fillRect(pad + i * 22, 10, 16, 9); }
     ctx.fillStyle = g.boss ? (g.boss.dead ? COL.grid : COL.danger) : COL.grid;
     ctx.beginPath(); ctx.moveTo(pad + g.postsTotal * 22 + 8, 6); ctx.lineTo(pad + g.postsTotal * 22 + 17, 14.5); ctx.lineTo(pad + g.postsTotal * 22 + 8, 23); ctx.lineTo(pad + g.postsTotal * 22 - 1, 14.5); ctx.closePath(); ctx.fill();
-    if (g.boss && !g.boss.dead) { ctx.fillStyle = COL.grid; ctx.fillRect(pad + g.postsTotal * 22 + 26, 11, bw - g.postsTotal * 22 - 26, 7); ctx.fillStyle = COL.danger; ctx.fillRect(pad + g.postsTotal * 22 + 26, 11, (bw - g.postsTotal * 22 - 26) * Math.max(0, g.boss.hp / g.boss.maxHp), 7); }
+    // boss HP: the big DOM bar (#bossHud, bossStep) replaced the old 7px strip here
     ctx.fillStyle = COL.grid; ctx.fillRect(pad, 24, bw, 10);
     ctx.fillStyle = n.hp / n.maxHp < 0.3 ? COL.danger : COL.necro; ctx.fillRect(pad, 24, bw * n.hp / n.maxHp, 10);
     const slots = hudSlots(w);
@@ -2289,6 +3718,10 @@ window.ChimeraView = view;
     }
     ctx.font = '600 14px ' + FONT; ctx.textBaseline = 'middle'; ctx.fillStyle = COL.ink;
     ctx.textAlign = 'right'; ctx.fillText(g.district + '구역', w - pad, 57);
+    if (g.boss && !g.boss.dead) {   // HUD: lap 2+ boss assist pattern under the slots (lap 1: nothing new)
+      const tag = bossTag(g.boss);
+      if (tag) { ctx.font = '700 12px ' + FONT; ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.fillStyle = COL.danger; ctx.fillText(tag, w - pad, 86); }
+    }
 
     if (stick && stick.far >= 14) {
       const r = cv.getBoundingClientRect();
@@ -2304,6 +3737,8 @@ window.ChimeraView = view;
   // 판에서 일어난 일을 소리와 흔들림으로 바꾼다
   function consumeEvents(dt) {
     for (const ev of g.events) {
+      Music.event(ev);   // alarm / boss / roar / win / lose drive the BGM
+      if (ev !== 'purify') tip(ev);   // first feed / frenzy / boom / rebirth / postdown. purify (gold soul) drops the gauge: never the absorb tip
       if (ev === 'absorb') Sound.absorb();
       else if (ev === 'purify') Sound.purify();
       else if (ev === 'frenzy') { Sound.ripe(); Sound.beat(); buzz(15); }
@@ -2322,7 +3757,9 @@ window.ChimeraView = view;
       else if (ev === 'rush') Sound.rush();
       else if (ev === 'postdown') { Sound.clash(); Sound.purify(); buzz([40, 60, 40]); shake = Math.max(shake, 0.6); }
       else if (ev === 'posthit' || ev === 'postbounce') Sound.clash();
-      else if (ev === 'boss') { Sound.siren(); shake = Math.max(shake, 0.3); }
+      else if (ev === 'boss') { Sound.siren(); shake = Math.max(shake, 0.3); startBossCut(); }
+      else if (ev === 'alarm') actBanner();
+      else if (ev === 'roar') { Sound.roar(); buzz([60, 40, 60]); shake = Math.max(shake, 0.6); }   // phase shift roar
     }
     g.events.length = 0;
     // 과부하인 키메라가 있는 동안 심장 박동이 이어진다
@@ -2334,25 +3771,68 @@ window.ChimeraView = view;
 
   // 끝 화면의 골드 줄과 구매 버튼(판 밖에서만 산다).
   // 소환수 능력치: 종류 탭을 고르고, 그 종류의 능력치 하나를 한 단계씩 산다(그 종류의 모든 소환수에 붙는다).
-  const STAT_NAME = [['hp', '체력', '+'], ['dmg', '공격력', '+'], ['cd', '공격 간격', '-'], ['spd', '이동 속도', '+'], ['range', '사거리', '+'], ['taken', '받는 피해', '-']];
-  const TAB_NAME = { beast: '맹수', armor: '갑주', ranger: '소총수' };
+  // Labels for every upgrade key. Each tab shows S.CFG.statKinds[kind] in slot order (melee kinds get leap/quake instead of range).
+  const STAT_NAME = { hp: ['체력', '+'], dmg: ['공격력', '+'], cd: ['공격 간격', '-'], spd: ['이동 속도', '+'], range: ['사거리', '+'], leap: ['도약 간격', '-'], quake: ['충격파', '+'], taken: ['받는 피해', '-'] };
+  const SLOTS = Math.max.apply(null, S.KINDS.map(k => S.CFG.statKinds[k].length));
+  const KIND_NAME = { beast: '맹수', armor: '갑주', ranger: '사수' };
   const tabsEl = document.getElementById('statTabs'), statsEl = document.getElementById('statShop'), hpBtn = document.getElementById('buyHp');
+  const titleGoldEl = document.getElementById('titleGold');
   let shopKind = 'beast';
   const tabBtns = S.KINDS.map(k => {
     const b = document.createElement('button');
-    b.type = 'button'; b.className = 'tab'; b.textContent = TAB_NAME[k];
+    b.type = 'button'; b.className = 'tab'; b.textContent = KIND_NAME[k];
     b.addEventListener('click', () => { shopKind = k; refreshGold(lastGained); });
     tabsEl.appendChild(b);
     return { k, b };
   });
-  const statBtns = STAT_NAME.map(([key, name, sign]) => {
-    const b = document.createElement('button');
+  const statBtns = Array.from({ length: SLOTS }, () => {
+    const b = document.createElement('button'), it = { key: null, b };
     b.type = 'button'; b.className = 'buy stat';
-    b.addEventListener('click', () => buyUp(shopKind + '.' + key));
+    b.addEventListener('click', () => { if (it.key) buyUp(shopKind + '.' + it.key); });
     statsEl.appendChild(b);
-    return { key, name, sign, b };
+    return it;
   });
   hpBtn.addEventListener('click', () => buyUp('hp'));
+  // First summon kind picker: one row next to the title start button, one next to the end screen retry button. Both share `starter`.
+  const starterBtns = [];
+  for (const id of ['titleStarter', 'endStarter']) {
+    const box = document.getElementById(id);
+    for (const k of S.KINDS) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'tab'; b.textContent = KIND_NAME[k];
+      b.setAttribute('data-starter', k);
+      b.addEventListener('click', () => selectStarter(k, 'button'));
+      box.appendChild(b);
+      starterBtns.push({ k, b });
+    }
+  }
+  // First-summon selection hook for the title stage (stage 2: tapping a 3D model or the 2D fallback stage calls select).
+  // source: 'button' (kind tabs), 'start' (start({ starter })), or whatever the caller passes (default 'stage').
+  const starterSubs = [];
+  function refreshStarter() { for (const t of starterBtns) t.b.setAttribute('aria-pressed', String(t.k === starter)); titleEl.setAttribute('data-starter', starter); }
+  function selectStarter(k, source) {
+    if (!S.KINDS.includes(k)) return false;
+    const changed = k !== starter;
+    starter = k; refreshStarter();
+    for (const f of starterSubs.slice()) f(k, source, changed);
+    return true;
+  }
+  window.ChimeraTitle = {
+    kinds: S.KINDS.slice(),
+    get: () => starter,
+    isOpen: () => mode === 'title',
+    select: (k, source) => mode !== 'play' && selectStarter(k, source || 'stage'),
+    onSelect(f) {
+      if (typeof f !== 'function') return () => {};
+      starterSubs.push(f);
+      return () => { const i = starterSubs.indexOf(f); if (i >= 0) starterSubs.splice(i, 1); };
+    },
+    start: () => { if (mode === 'title') start(); },
+  };
+  refreshStarter();
+  // Mutation seed button (one-shot, max 1 held). The two escaped glyphs are not in the font subset (chars.txt), so they use the fallback system font.
+  const seedBtn = document.getElementById('buySeed'), SEED_NAME = '변이 \uC528\uC557';
+  seedBtn.addEventListener('click', () => buyUp('seed'));
   function buyUp(key) {
     reload();
     const r = S.Save.buy(save, key);
@@ -2363,23 +3843,144 @@ window.ChimeraView = view;
   function refreshGold(gained) {
     lastGained = gained;
     document.getElementById('endGold').textContent = save.gold + '골드' + (gained ? ' (+' + gained + ')' : '');
+    titleGoldEl.textContent = save.gold + '골드';
     for (const t of tabBtns) t.b.setAttribute('aria-pressed', String(t.k === shopKind));
-    const maxS = S.CFG.gold.statMax;
-    for (const it of statBtns) {
-      const key = shopKind + '.' + it.key, k = S.Save.level(save, key), cost = S.Save.cost(save, key);
+    const maxS = S.CFG.gold.statMax, slots = S.CFG.statKinds[shopKind];
+    statBtns.forEach((it, i) => {
+      it.key = slots[i] || null;
+      it.b.hidden = !it.key; it.b.setAttribute('data-key', it.key || '');
+      if (!it.key) { it.b.disabled = true; return; }
+      const key = shopKind + '.' + it.key, k = S.Save.level(save, key), cost = S.Save.cost(save, key), [name, sign] = STAT_NAME[it.key];
       const pct = Math.round(S.CFG.statStep[it.key] * 100);
-      it.b.textContent = it.name + ' ' + it.sign + pct + '%\n' + (cost === null ? '최대' : cost + '골드') + ' · ' + k + '/' + maxS + '단계';
+      it.b.textContent = name + ' ' + sign + pct + '%\n' + (cost === null ? '최대' : cost + '골드') + ' · ' + k + '/' + maxS + '단계';
       it.b.disabled = cost === null || save.gold < cost;
-    }
+    });
     const k = S.Save.level(save, 'hp'), cost = S.Save.cost(save, 'hp'), now = String(100 + S.CFG.gold.hpStep * k);
     hpBtn.textContent = '네크로맨서 체력 +' + S.CFG.gold.hpStep + ' · ' + (cost === null ? '최대' : cost + '골드') + ' (지금 ' + now + ')';
     hpBtn.disabled = cost === null || save.gold < cost;
+    const sc = S.Save.cost(save, 'seed'), sn = S.Save.level(save, 'seed');
+    seedBtn.textContent = SEED_NAME + ' (다음 판 시작 때 변이 하나) · ' + (sc === null ? '보유 중' : sc + '골드') + ' · 보유 ' + sn + '/' + S.CFG.gold.seedMax;
+    seedBtn.disabled = sc === null || save.gold < sc;
   }
-  const KIND_NAME = { beast: '맹수', armor: '갑주', ranger: '사수' };
+  // 제목 화면의 '강화': 끝 화면과 같은 상점(#shop, 같은 refreshGold·buyUp)을 제목으로 옮겨 보인다. 끝 화면이 뜨면 다시 끝 화면으로 돌려놓는다.
+  const shopEl = document.getElementById('shop'), endShopEl = document.getElementById('endShop');
+  const titleShopEl = document.getElementById('titleShop'), shopBtn = document.getElementById('shopBtn');
+  function setTitleShop(open) {
+    if (open) { reload(); titleShopEl.appendChild(shopEl); refreshGold(0); }
+    titleShopEl.hidden = !open;
+    shopBtn.textContent = open ? '강화 접기' : '강화';
+    shopBtn.setAttribute('aria-expanded', String(open));
+  }
+  shopBtn.addEventListener('click', () => { if (mode === 'title') setTitleShop(titleShopEl.hidden); });
+  setTitleShop(false);
+  refreshGold(0);
+  const soundBtn = document.getElementById('soundBtn');
+  function refreshSound() {
+    soundBtn.textContent = Sound.muted ? '소리 꺼짐' : '소리 켜짐';
+    soundBtn.setAttribute('aria-pressed', String(!Sound.muted));
+  }
+  Sound.load(); refreshSound();
+  soundBtn.addEventListener('click', () => { Sound.toggle(); refreshSound(); Music.wake(musicState()); });   // home: on starts audio + home theme at once, off stops it
+  // First user gesture anywhere (home included, where nothing else calls Sound.on): unmuted only, start / resume audio and the current theme
+  for (const type of ['pointerdown', 'touchend', 'keydown', 'click']) window.addEventListener(type, () => { Music.wake(musicState()); }, true);
+  // Controls panel: the old title rules, opened from the home icon row. Closes with its button, Escape, a tap outside, or when a run starts.
+  const helpEl = document.getElementById('helpModal'), helpBtn = document.getElementById('helpBtn'), helpClose = document.getElementById('helpClose');
+  // While the panel is open the home behind it is inert (out of the Tab order, not clickable) and Tab / Shift+Tab stay inside the panel.
+  function helpFocusables() {
+    const list = typeof helpEl.querySelectorAll === 'function' ? Array.from(helpEl.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')) : [];
+    const can = list.filter(x => x && !x.disabled && !x.hidden);
+    return can.length ? can : [helpClose];
+  }
+  const inHelp = x => !!x && (x === helpEl || (typeof helpEl.contains === 'function' && helpEl.contains(x)));
+  function trapHelpFocus(e) {
+    const f = helpFocusables(), first = f[0], lastF = f[f.length - 1], act = document.activeElement, inside = inHelp(act) && act !== helpEl;
+    const to = e.shiftKey ? (!inside || act === first ? lastF : null) : (!inside || act === lastF ? first : null);
+    if (to) { if (typeof e.preventDefault === 'function') e.preventDefault(); to.focus(); }
+  }
+  document.addEventListener('focusin', e => { if (!helpEl.hidden && e && e.target && !inHelp(e.target)) helpClose.focus(); });
+  function setHelp(open) {
+    const was = !helpEl.hidden;
+    helpEl.hidden = !open;
+    titleEl.inert = !!open;   // set before moving focus: focus cannot land on an inert home
+    helpBtn.setAttribute('aria-expanded', String(!!open));
+    if (open) helpClose.focus();
+    else if (was && mode === 'title') helpBtn.focus();
+  }
+  helpBtn.addEventListener('click', () => { if (mode === 'title') setHelp(helpEl.hidden); });
+  helpClose.addEventListener('click', () => setHelp(false));
+  helpEl.addEventListener('click', e => { if (e && e.target === helpEl) setHelp(false); });
+  setHelp(false);
+  // ---- Result screen in two steps. Step 1: big title, short run record, gold items (sim Save.settle items) revealed one by one
+  // with a rising total, or on a loss how far the run got. Step 2: big next/retry button, the shared #shop (endShopEl.appendChild), home.
+  // Reveal timers are cleared on a step change, a restart or going home; rwFinish() fills in what is left at once.
+  const endStep1El = document.getElementById('endStep1'), endStep2El = document.getElementById('endStep2');
+  const rewardListEl = document.getElementById('rewardList'), rewardGoldEl = document.getElementById('rewardGold'), progressEl = document.getElementById('endProgress');
+  const endContinueBtn = document.getElementById('endContinue'), homeBtn = document.getElementById('homeBtn'), againBtnEl = document.getElementById('againBtn');
+  const RW_FIRST = 350, RW_GAP = 450, RW_COUNT = 6, RW_TICK = 45;
+  const RW_NAME = { posts: n => '부순 초소 ' + n + '곳', elites: n => '돌격조 ' + n + '마리', boss: () => '진압 대장', clear: () => '첫 정복 덤', seed: n => SEED_NAME + ' +' + n, none: () => '받은 골드 없음' };
+  let rw = null, endStep = 0, endNextBtn = null;
+  function rwRow(it) {
+    const p = document.createElement('p');
+    p.className = 'rw'; p.setAttribute('data-id', it.id); p.setAttribute('data-gold', String(it.gold));
+    p.textContent = RW_NAME[it.id](it.count) + (it.gold ? ' +' + it.gold + '골드' : '');
+    rewardListEl.appendChild(p); rw.shown.push({ id: it.id, count: it.count, gold: it.gold });
+  }
+  function rwTotal(n) { rw.total = n; rewardGoldEl.textContent = n + '골드'; }
+  function rwNext() {
+    const r = rw; if (!r || r.i >= r.q.length) return;
+    r.timer = setTimeout(() => { if (rw !== r) return; r.timer = null; const f = r.q[r.i++][1]; f(); rwNext(); }, r.q[r.i][0]);
+  }
+  function rwStop() { if (rw && rw.timer) { clearTimeout(rw.timer); rw.timer = null; } }
+  function rwFinish() { const r = rw; if (!r) return; rwStop(); while (r.i < r.q.length) r.q[r.i++][1](); }
+  function playReward(items, target) {
+    rwStop();
+    rewardListEl.textContent = '';
+    const shown = items.filter(it => it.count > 0);
+    if (!shown.length) shown.push({ id: 'none', count: 0, gold: 0 });
+    rw = { q: [], i: 0, timer: null, shown: [], total: 0, target };
+    rwTotal(0);
+    let sum = 0;
+    shown.forEach((it, k) => {
+      rw.q.push([k ? RW_GAP : RW_FIRST, () => rwRow(it)]);
+      const from = sum; sum += it.gold;
+      if (it.gold) for (let j = 1; j <= RW_COUNT; j++) rw.q.push([RW_TICK, () => rwTotal(from + Math.round(it.gold * j / RW_COUNT))]);
+    });
+    if (reduced) rwFinish(); else rwNext();
+  }
+  function progressText(r) {
+    const posts = '초소 ' + r.postsDown + ' / ' + r.postsTotal + ' 부숨';
+    if (!r.bossReached) return posts + ' · 남은 초소 ' + r.postsLeft + '곳 · 대장을 만나지 못했다';
+    return posts + ' · 대장까지 갔다 · 대장 체력 ' + r.bossHp + ' / ' + r.bossMaxHp + ' 남음 (' + Math.round(r.bossHpFrac * 100) + '%)';
+  }
+  function setEndStep(n) {
+    endStep = n;
+    endStep1El.hidden = n !== 1; endStep2El.hidden = n !== 2;
+    if (n === 2) { rwFinish(); (endNextBtn || againBtnEl).focus(); }
+    else if (n === 1) endContinueBtn.focus();
+  }
+  // Home: back to the title with #shop in its home slot (collapsed). The CTA follows save.cur (next district after a conquest, same one after a loss).
+  function goHome() {
+    if (mode !== 'over') return;
+    rwStop(); endStep = 0;
+    mode = 'title'; endEl.hidden = true;
+    reload();
+    titleShopEl.appendChild(shopEl); setTitleShop(false);
+    refreshTitle(); refreshGold(0); refreshStarter();
+    titleEl.inert = false; titleEl.hidden = false; stageT = null;
+    startBtn.focus();
+  }
+  endContinueBtn.addEventListener('click', () => { if (mode === 'over') setEndStep(2); });
+  homeBtn.addEventListener('click', goHome);
   function showEnd() {
-    mode = 'over';
+    if (mode !== 'play') return;   // one result screen per run
+    mode = 'over'; endCount++;
+    victory = null; hideVictory();
+    shake = 0; flash = 0; hitstop = 0;
+    hideHud();
     mutEl.hidden = true; mutFor = null;
+    setTitleShop(false); endShopEl.appendChild(shopEl);   // 제목에서 열었던 상점을 끝 화면 자리로
     const won = g.over === 'win';
+    endEl.setAttribute('data-result', won ? 'win' : 'lose');
     document.getElementById('endTitle').textContent = won ? g.district + '구역 정복' : g.district + '구역에서 쓰러졌다';
     document.getElementById('endPosts').textContent = g.postsDown + ' / ' + g.postsTotal;
     document.getElementById('endKills').textContent = g.kills + '마리 (돌격조 ' + g.eliteKills + ')';
@@ -2387,23 +3988,27 @@ window.ChimeraView = view;
     document.getElementById('endLevel').textContent = g.maxLevel + '등급';
     // 부순 초소만큼 골드(이기든 지든). 처음 정복한 구역이면 골드를 더 받고 최고 기록이 오른다(둘을 함께)
     reload();
-    const e = S.Save.earn(save, g.postsDown); save = e.save;
-    let gained = e.gained;
-    if (won) { const r = S.Save.clear(save, g.district); save = r.save; gained += r.gained; }
+    // Settle once with sim Save.settle (earn, then clear on a win): its items (posts, elites, boss, first-conquest bonus, seed) sum to gained
+    const st = S.Save.settle(save, g); save = st.save;
+    const gained = st.gained, seedGot = st.seedGained;
+    g.seedGained = seedGot;   // result state: did this run actually earn a mutation seed (first conquest)
     if (gained || won) persist();
     document.getElementById('endBest').textContent = save.best + '구역';
     refreshGold(gained);
+    progressEl.hidden = won;   // loss: how far the run got (posts, boss reached, boss hp left)
+    progressEl.textContent = won ? '' : progressText(st.run);
     // 이기면 다음 구역으로(키메라는 데려가지 않고 처음부터 키운다). 지면 그 구역을 다시 한다.
     const list = document.getElementById('aceList'), askEl = document.getElementById('aceAsk'), again = document.getElementById('againBtn');
     list.textContent = '';
-    askEl.hidden = true; list.hidden = !won;
+    // one line only when this run actually earned a mutation seed (escaped glyphs are outside the font subset)
+    askEl.textContent = seedGot ? SEED_NAME + ' \uD68D\uB4DD' : ''; askEl.hidden = !seedGot; list.hidden = !won;
+    endNextBtn = null;
     if (won) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.textContent = (g.district + 1) + '구역으로';
-      const next = g.district + 1;
+      const b = document.createElement('button'), next = g.district + 1;
+      b.type = 'button'; b.className = 'cta';
+      b.textContent = '다음 구역 → ' + next + '구역';
       b.addEventListener('click', () => start({ district: next }));
-      list.appendChild(b);
+      list.appendChild(b); endNextBtn = b;
     }
     retryDistrict = won ? 1 : g.district;
     // 지면 한 구역 아래로 내려가 초소 골드를 모을 수 있다(진행 기록은 내려가지 않아, 거기서 이기면 다시 이 구역으로 간다)
@@ -2411,9 +4016,10 @@ window.ChimeraView = view;
     downBtn.hidden = !downDistrict;
     if (downDistrict) downBtn.textContent = downDistrict + '구역으로 내려가기 (초소 골드 모으기)';
     again.textContent = won ? '1구역부터 다시' : g.district + '구역 다시';
-    again.className = won ? '' : 'solo';   // 졌을 때는 이 버튼이 주된 행동이다
+    again.className = won ? '' : 'solo cta';   // on a loss the retry button is the main action
     endEl.hidden = false;
-    document.getElementById('againBtn').focus();
+    playReward(st.items, gained);
+    setEndStep(1);
   }
 
   // 초소를 부수면 판이 멈추고 변이 카드 셋이 뜬다. 끌던 손가락이 바로 카드를 누르지 않게 0.35초 동안 잠근다.
@@ -2422,8 +4028,7 @@ window.ChimeraView = view;
   let mutFor = null, mutAt = 0;   // 모달이 보여 주는 카드 셋(g.choice), 뜬 시각
   function openMut() {
     mutFor = g.choice; mutAt = performance.now();
-    stick = null; inp.x = inp.y = 0; keys = {};
-    if (lastTap) { clearTimeout(lastTap.timer); lastTap = null; }
+    cancelInput();
     mutList.textContent = '';
     const btns = g.choice.map(id => {
       const m = S.MUTS[id], b = document.createElement('button'), nm = document.createElement('span'), ds = document.createElement('span'), have = g.muts[id] || 0;
@@ -2445,6 +4050,41 @@ window.ChimeraView = view;
     Sound.purify();
     mutEl.hidden = true; mutFor = null;   // 초소 둘을 한꺼번에 부쉈으면 다음 프레임에 다음 셋이 뜬다
   }
+  // 끌던 손가락·눌린 키·한 번 톡 대기를 모두 끊는다(변이 카드와 멈춤 덮개가 함께 쓴다)
+  function cancelInput() {
+    stick = null; inp.x = inp.y = 0; keys = {};
+    if (lastTap) { clearTimeout(lastTap.timer); lastTap = null; }
+  }
+
+  // 앱·탭이 뒤로 가면(전화, 알림, 홈) 판을 멈추고 '눌러서 계속' 덮개를 띄운다. 판 안 버튼은 늘리지 않는다.
+  // 변이 카드와 같은 규칙: 끌던 입력을 끊고, 보인 직후(돌아온 직후) 0.35초 동안은 눌러도 무시한다.
+  const pauseEl = document.getElementById('pauseModal'), resumeBtn = document.getElementById('resumeBtn');
+  let paused = false, pauseAt = 0;
+  pauseEl.hidden = true;
+  function lockPause() {
+    const at = pauseAt = performance.now();
+    resumeBtn.disabled = true;
+    setTimeout(() => { if (paused && pauseAt === at) resumeBtn.disabled = false; }, MUT_LOCK_MS);
+  }
+  function autoPause() {
+    if (mode !== 'play' || paused || !g || g.over) return;
+    cancelInput();
+    if (g.choice) return;   // 변이 카드가 떠 있으면 판은 이미 멈춰 있다(덮개를 겹치지 않는다). 돌아오면 카드를 다시 잠근다
+    paused = true; pauseEl.hidden = false; lockPause();
+  }
+  function resumePlay() {
+    if (!paused || performance.now() - pauseAt < MUT_LOCK_MS) return;
+    paused = false; pauseEl.hidden = true;
+    cancelInput();
+    Sound.on();   // 뒤로 간 사이 멈춘 소리를 이 누름으로 다시 켠다
+  }
+  pauseEl.addEventListener('click', resumePlay);   // 덮개 어디를 눌러도 된다(잠긴 버튼은 눌리지 않는다)
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { autoPause(); Music.update(musicState()); return; }   // stop music at once (rAF stops while hidden)
+    if (mode !== 'play') return;
+    if (paused) lockPause();
+    else if (!victory && g.choice && mutFor === g.choice) openMut();
+  });
 
   // 새로 생긴 폭발에서 그을음·파편·처치 수 글자를 만들고, 있는 것들을 흘려보낸다
   function juice(dt) {
@@ -2491,22 +4131,66 @@ window.ChimeraView = view;
     }
   }
 
+  // ---- Conquest sequence (view only, sim untouched): S.step stops (g.over is set), the win is locked, banner, then showEnd once ----
+  function hideVictory() { victoryEl.hidden = true; victoryEl.className = 'hudMsg'; victoryEl.textContent = ''; }
+  function startVictory() {
+    if (victory || !g || g.over !== 'win') return;
+    victory = { t: 0, slow: reduced ? 1 : VIC_SLOW, hp: g.necro.hp, district: g.district };
+    hideHud();   // boss HUD, intro cut, goal banner, tip line
+    mutEl.hidden = true; mutFor = null;
+    cancelInput();
+    shake = Math.max(shake, VIC_SHAKE);
+    if (!reduced) { flash = Math.max(flash, VIC_FLASH); hitstop = Math.max(hitstop, VIC_STOP); }
+    Sound.boom(); Sound.rebirth(); buzz([120, 60, 120, 60, 220]);
+    victoryEl.textContent = g.district + '구역 정복';
+    victoryEl.className = 'hudMsg conquer'; victoryEl.hidden = false;
+  }
+  function victoryStep(dt) {
+    const v = victory;
+    if (g.over !== 'win') g.over = 'win';   // nothing turns the conquest into a loss
+    if (!(g.necro.hp >= v.hp)) g.necro.hp = v.hp;   // the necromancer cannot be hurt during the sequence
+    g.events.length = 0;
+    v.t += dt;   // real time: the result screen opens VIC_S seconds later
+    let fx = dt * v.slow;   // effects run slowed
+    if (hitstop > 0) { hitstop = Math.max(0, hitstop - dt); fx = 0; }
+    shake = Math.max(0, shake - dt); flash = Math.max(0, flash - fx);
+    juice(fx);
+    if (v.t >= VIC_S) showEnd();
+  }
+  const victoryState = () => (victory ? { t: victory.t, slow: victory.slow, district: victory.district, flash, hitstop, shake, banner: !victoryEl.hidden, text: victoryEl.textContent } : null);
+
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000 || 0);
+    vnow += Math.max(0, now - last) * (victory ? victory.slow : 1);   // drawing clock: slowed during the conquest sequence
     last = now;
-    if (mode === 'play') {
+    if (mode === 'play' && document.hidden) autoPause();   // 알림을 놓쳐도 숨은 동안은 멈춘다
+    if (mode === 'play' && !paused) {   // 멈춘 동안은 S.step을 부르지 않는다. last는 프레임마다 갱신해 재개 때 dt가 튀지 않는다
       readInput();
-      if (g.choice) { if (mutFor !== g.choice) openMut(); }
-      else if (hitstop > 0) hitstop -= dt;
-      else S.step(g, dt, inp);
-      consumeEvents(dt);
-      juice(dt);
-      if (g.over) showEnd();
+      if (victory) victoryStep(dt);   // conquest sequence: no S.step, the win is locked
+      else {
+        if (g.choice) { if (mutFor !== g.choice) openMut(); }
+        else if (hitstop > 0) hitstop -= dt;
+        else S.step(g, dt, inp);
+        consumeEvents(dt);
+        if (g.over === 'win') startVictory();   // boss kill: hold the result screen for the sequence
+        else {
+          cutStep(dt);
+          bossStep();
+          hud(dt);
+          juice(dt);
+          if (g.over) showEnd();   // loss: result screen right away
+        }
+      }
     }
-    draw(now);
+    Music.update(musicState());   // BGM follows mode / pause / hidden every frame
+    draw(vnow);
     requestAnimationFrame(frame);
   }
 
+  window.ChimeraRender2D = { victory: victoryState, endCount: () => endCount,
+    banner: () => ({ hidden: bannerEl.hidden, text: bannerEl.textContent, kind: bannerEl.getAttribute ? bannerEl.getAttribute('data-kind') : null, t: bannerT }),
+    endState: () => ({ step: endStep, items: rw ? rw.shown.map(o => Object.assign({}, o)) : [], total: rw ? rw.total : 0, target: rw ? rw.target : 0, done: !rw || rw.i >= rw.q.length, pending: !!(rw && rw.timer) }), fx: () => ({ flash, hitstop, shake }), bossCut: () => (bossCut ? { t: bossCut.t, k: bossCut.k, phase: bossCut.phase } : null), camFocus: () => (g ? camFocus() : null), drawEnemy, bossLook, bossAssist, bossTag, bossTicks, bossFx: bossFxOf, lastBossFx: () => drawnBossFx.map(o => Object.assign({}, o, { ticks: o.ticks.slice() })), drawObstacles, lastObstacles: () => drawnObs.map(o => Object.assign({}, o)), drawPost, lastPostMarks: () => drawnPostMarks.map(o => Object.assign({}, o)),
+    titleStage: () => { const L = stageLayout(), art = stageImgs || {}; return { slots: L.slots.map(s => Object.assign({}, s)), fwd: Object.assign({}, stageFwd), drawn: stageDrawn, fallback: stageFallback, art: Object.keys(STAGE_ART).filter(k => artReady(art[k])), band: [L.top, L.bot], pick: stagePick }; } };   // smoke check hook
   resize();
   g = S.newGame(seed);   // 제목 화면 뒤에 판의 첫 모습을 깔아 둔다
   requestAnimationFrame(frame);

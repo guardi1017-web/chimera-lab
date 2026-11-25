@@ -33,3 +33,8 @@ node smoke.cjs   # 화면 코드 예외 확인
 ```
 
 설치할 것은 없다(Node만 있으면 된다). 재미 판정은 봇이 아니라 폰에서 직접 해 본 느낌으로 한다.
+
+## 라이선스와 출처
+- 저장소 전체는 권리보유(All Rights Reserved)다. 공개 저장소이지만 허가 없이 복제·수정·배포·상업적으로 쓸 수 없다: [`LICENSE`](LICENSE)
+- `src/vendor/three/`의 서드파티 파일(three.js, meshoptimizer)만 예외로, 각자의 MIT 라이선스를 따른다: [`src/vendor/three/LICENSE`](src/vendor/three/LICENSE)
+- 3D 모델(`assets/`), 원화(`art/`), 서드파티 코드의 파일별 출처와 권리: [`CREDITS.md`](CREDITS.md). 에셋을 더하면 이 문서도 같이 고친다.

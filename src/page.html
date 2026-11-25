@@ -1,7 +1,21 @@
 <title>키메라 실험실</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=Gowun+Dodum&display=swap">
 <style>
+  /* 글꼴: 저장소 안의 서브셋(python src/vendor/sync_fonts.py → src/vendor/fonts/) */
+  @font-face {
+    font-family: 'Gowun Batang';
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+    src: url('./src/vendor/fonts/GowunBatang-Bold.subset.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'Gowun Dodum';
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+    src: url('./src/vendor/fonts/GowunDodum-Regular.subset.woff2') format('woff2');
+  }
   /* 배치: 화면 전체가 판이다. 글은 시작과 끝의 덮개에만 있고, 판 중에는 위쪽 띠 하나만 남는다. */
   :root {
     --ground: #15121c;   /* 봉쇄된 밤거리의 아스팔트 */
@@ -32,8 +46,70 @@
     padding-left: max(24px, env(safe-area-inset-left, 0px));
     padding-right: max(24px, env(safe-area-inset-right, 0px));
     overflow-y: auto;
+    z-index: 2;
   }
+  /* In-play guidance (render.js hud): district 1 goal banner and one-time tip line. Never blocks touches; veils (z 2) cover it. */
+  .hudMsg { position: absolute; left: 50%; transform: translateX(-50%); z-index: 1; box-sizing: border-box; width: max-content; max-width: calc(100% - 32px); margin: 0; padding: 8px 14px; text-align: center; background: var(--veil); pointer-events: none; }
+  #goalBanner { top: max(28%, 196px); font-family: var(--font-display); font-weight: 700; font-size: 1.35rem; color: var(--great); border-top: 2px solid var(--great); border-bottom: 2px solid var(--great); }
+  /* Zone 1 act shift (render.js actBanner): the same banner, tinted as an alarm */
+  #goalBanner[data-kind="alarm"] { color: var(--danger); border-color: var(--danger); }
+  #tipLine { bottom: max(28px, env(safe-area-inset-bottom, 0px)); font-size: 1rem; color: var(--ink); border-left: 4px solid var(--necro); }
+  /* Boss HUD (render.js bossStep): title/name tag and a thick HP bar with quarter ticks, under the canvas top band (y < 92px) and above the goal banner. Replaces the old 7px strip. */
+  #bossHud { position: absolute; top: 96px; left: max(16px, env(safe-area-inset-left, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); z-index: 1; box-sizing: border-box; max-width: 30rem; margin-inline: auto; padding: 6px 10px 8px; display: grid; gap: 4px; background: var(--veil); border-left: 4px solid var(--danger); pointer-events: none; }
+  .bossTag { display: flex; gap: 10px; align-items: baseline; }
+  #bossTitle { font-size: 0.85rem; color: var(--dim); }
+  #bossName { font-family: var(--font-display); font-weight: 700; font-size: 1.2rem; color: var(--danger); }
+  #bossBar { position: relative; height: 18px; background: var(--grid); outline: 2px solid var(--ink); overflow: hidden; }
+  #bossFill { height: 100%; width: 100%; background: var(--danger); transition: width 0.15s linear; }
+  #bossBar::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent calc(25% - 1px), var(--ground) 0 25%, transparent 0 calc(50% - 1px), var(--ground) 0 50%, transparent 0 calc(75% - 1px), var(--ground) 0 75%, transparent 0); }
+  #bossHpText { font-size: 0.85rem; font-variant-numeric: tabular-nums; text-align: right; }
+  /* Phased boss (render.js bossStep): phase ticks at boss.phaseAt replace the quarter ticks; roar and weak point states tint the HUD */
+  #bossTicks { position: absolute; inset: 0; pointer-events: none; }
+  .phaseTick { position: absolute; top: 0; bottom: 0; width: 4px; margin-left: -2px; background: var(--great); box-shadow: 0 0 0 1px var(--ground); }
+  .phaseTick[data-passed="1"] { background: var(--dim); }
+  #bossHud[data-phased="1"] #bossBar::after { display: none; }
+  #bossState { margin-left: auto; font-family: var(--font-display); font-weight: 700; font-size: 1rem; }
+  #bossHud[data-state="roar"] { border-left-color: var(--great); animation: bossRoar 0.12s ease-in-out infinite alternate; }
+  #bossHud[data-state="roar"] #bossState { color: var(--danger); }
+  #bossHud[data-state="weak"] { border-left-color: var(--great); outline: 2px solid var(--great); }
+  #bossHud[data-state="weak"] #bossState { color: var(--great); }
+  #bossHud[data-state="weak"] #bossFill { background: var(--great); }
+  @keyframes bossRoar { from { transform: translateX(-2px); } to { transform: translateX(2px); } }
+  @media (prefers-reduced-motion: reduce) { #bossHud[data-state="roar"] { animation: none; } }
+  @media (prefers-reduced-motion: reduce) { #bossFill { transition: none; } }
+  /* Conquest banner (render.js startVictory): shown during the boss-kill sequence, hidden when the result screen (#end) opens. */
+  #victoryBanner { top: 34%; z-index: 1; font-family: var(--font-display); font-weight: 700; font-size: clamp(2.2rem, 10vw, 3.2rem); line-height: 1.2; color: var(--great); padding: 12px 28px; border-top: 3px solid var(--great); border-bottom: 3px solid var(--great); text-shadow: 0 0 18px var(--great); }
+  #victoryBanner.conquer { animation: conquer 0.45s ease-out both; }
+  @keyframes conquer { from { opacity: 0; transform: translateX(-50%) scale(1.35); } to { opacity: 1; transform: translateX(-50%) scale(1); } }
+  @media (prefers-reduced-motion: reduce) { #victoryBanner.conquer { animation: none; } }
   .veil > * { max-width: 26rem; width: 100%; margin-inline: auto; }
+  /* Home (#title): no veil. Big logo on top, a clear stage in the middle where the board (the 3D stage later) shows through,
+     the main CTA at thumb height and a compact icon row under it. Only the controls panel (#helpModal) is a veil. */
+  .home {
+    position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; gap: 10px;
+    background: linear-gradient(to bottom, rgba(21, 18, 28, 0.6), rgba(21, 18, 28, 0) 24%, rgba(21, 18, 28, 0) 55%, rgba(21, 18, 28, 0.8));
+    padding-top: max(24px, env(safe-area-inset-top, 0px));
+    padding-bottom: max(18px, env(safe-area-inset-bottom, 0px));
+    padding-left: max(20px, env(safe-area-inset-left, 0px));
+    padding-right: max(20px, env(safe-area-inset-right, 0px));
+    pointer-events: none;
+  }
+  .home > * { pointer-events: auto; max-width: 26rem; width: 100%; margin-inline: auto; }
+  .home .logo { flex: none; font-size: clamp(2.4rem, 11vw, 3.4rem); line-height: 1.15; text-align: center; color: var(--ink); text-shadow: 0 2px 0 var(--ground), 0 0 22px var(--necro); }
+  .homeStage { flex: 1 1 auto; min-height: 0; pointer-events: none; }
+  .homeDock { flex: 0 1 auto; min-height: 0; overflow-y: auto; display: grid; gap: 10px; }
+  .homeDock .shopSlot { background: var(--veil); padding: 12px; }
+  .homeDock .tabs { background: rgba(21, 18, 28, 0.7); }
+  button.cta { font-size: 1.7rem; padding: 20px 18px; min-height: 4.4rem; color: var(--ground); background: var(--great); }
+  .iconRow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  button.icon { font-family: var(--font-body); font-size: 0.9rem; padding: 8px 4px; display: grid; justify-items: center; gap: 2px; color: var(--ink); background: rgba(21, 18, 28, 0.72); outline: 2px solid var(--grid); outline-offset: -2px; }
+  button.icon::before { font-size: 1.35rem; line-height: 1; }
+  #shopBtn::before { content: "\2191"; }
+  #soundBtn::before { content: "\266A"; }
+  #soundBtn[aria-pressed="false"] { color: var(--dim); }
+  #soundBtn[aria-pressed="false"]::before { content: "\00D7"; }
+  #helpBtn::before { content: "?"; }
+  #helpModal { z-index: 3; }
   h1, h2 { font-family: var(--font-display); font-weight: 700; margin: 0; text-wrap: balance; }
   h1 { font-size: 2.1rem; }
   h2 { font-size: 1.9rem; }
@@ -67,11 +143,25 @@
   .statShop { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   button.buy.stat { font-size: 0.85rem; padding: 8px 10px; white-space: pre-line; line-height: 1.35; }
   button.buy:disabled { color: var(--dim); outline-color: var(--grid); cursor: default; }
+  /* 상점(#shop)은 하나다: 끝 화면(#endShop)과 제목 화면(#titleShop) 사이를 옮겨 보인다 */
+  .shopSlot, .shop { display: grid; gap: 12px; }
   #end #againBtn { background: transparent; color: var(--ink); outline: 2px solid var(--dim); outline-offset: -2px; }
   #end #againBtn.solo { background: var(--ink); color: var(--ground); outline: 0; }
+  /* Result screen (render.js showEnd): step 1 = title, short record, gold items revealed one by one; step 2 = next/retry, #shop, home */
+  .endStep { display: grid; gap: 12px; }
+  #endTitle { font-size: clamp(2.2rem, 10vw, 3rem); text-align: center; }
+  #end[data-result="win"] #endTitle { color: var(--great); }
+  #end[data-result="lose"] #endTitle { color: var(--danger); }
+  #endProgress { border-left: 4px solid var(--danger); padding-left: 12px; }
+  #endStep1 dl { font-size: 0.92rem; }
+  #rewardList { display: grid; gap: 6px; min-height: 1.5rem; }
+  .rw { padding: 6px 10px; background: rgba(242, 211, 94, 0.1); border-left: 3px solid var(--great); font-variant-numeric: tabular-nums; animation: rwIn 0.3s ease-out both; }
+  @keyframes rwIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .rw { animation: none; } }
+  .rwTotal { font-family: var(--font-display); font-size: 1.4rem; font-variant-numeric: tabular-nums; }
   #mutList { display: grid; gap: 10px; }
   button.mut { font-family: var(--font-body); text-align: left; padding: 16px 18px; background: var(--great); display: grid; gap: 4px; }
-  button.mut:disabled { opacity: 0.55; cursor: default; }   /* 뜬 직후 0.35초 잠금 */
+  button.mut:disabled, #resumeBtn:disabled { opacity: 0.55; cursor: default; }   /* 뜬 직후 0.35초 잠금 */
   .mutName { font-family: var(--font-display); font-size: 1.25rem; }
   .mutDesc { font-size: 0.95rem; }
   button:focus-visible { outline: 3px solid var(--necro); outline-offset: 3px; }
@@ -79,11 +169,37 @@
 
 <div id="stage">
   <canvas id="game" aria-label="키메라 실험 판"></canvas>
+  <p class="hudMsg" id="goalBanner" role="status" hidden></p>
+  <p class="hudMsg" id="tipLine" role="status" aria-live="polite" hidden></p>
+  <p class="hudMsg" id="victoryBanner" role="status" aria-live="assertive" hidden></p>
+  <div id="bossHud" role="group" aria-label="진압 대장" hidden>
+    <p class="bossTag"><span id="bossTitle"></span><strong id="bossName"></strong><span id="bossState" role="status" hidden></span></p>
+    <div id="bossBar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100" aria-labelledby="bossName"><div id="bossFill"></div><div id="bossTicks"></div></div>
+    <p id="bossHpText"></p>
+  </div>
 
-  <section class="veil" id="title">
-    <h1>키메라 실험실</h1>
+  <section class="home" id="title" aria-label="키메라 실험실">
+    <h1 class="logo">키메라 실험실</h1>
+    <div class="homeStage" id="homeStage" aria-hidden="true"></div>
+    <div class="homeDock">
+      <div id="titleShop" class="shopSlot" hidden>
+        <p>가진 골드 <span id="titleGold" class="gold">0골드</span></p>
+      </div>
+      <div id="titleStarter" class="tabs" role="group" aria-label="첫 소환수 종류"></div>
+      <button id="startBtn" class="cta" type="button">시작</button>
+      <div class="iconRow">
+        <button id="shopBtn" class="icon" type="button" aria-expanded="false" aria-controls="titleShop">강화</button>
+        <button id="soundBtn" class="icon" type="button" aria-pressed="true">소리 켜짐</button>
+        <button id="helpBtn" class="icon" type="button" aria-expanded="false" aria-controls="helpModal">조작&#xBC95;</button>
+      </div>
+      <button id="resetBtn" class="sub" type="button" hidden>1구역으로 되돌리기 (골드·강화는 그대로)</button>
+    </div>
+  </section>
+
+  <section class="veil" id="helpModal" role="dialog" aria-modal="true" aria-labelledby="helpTitle" hidden>
+    <h2 id="helpTitle">조작&#xBC95;</h2>
     <p>봉쇄된 서울의 밤. 네크로맨서는 직접 싸우지 못하고, 키메라 셋이 대신 싸운다.</p>
-    <p class="goal"><strong>목적:</strong> <span class="gold">봉쇄 초소</span>를 폭발로 모두 부수면 진압 대장이 나온다. 대장을 잡으면 구역을 차지하고 다음 구역이 열린다. 구역마다 키메라는 처음부터 키운다. 초소를 부술 때마다 <span class="gold">골드</span>를 받고(구역을 처음 차지하면 더), 끝 화면에서 소환수 능력치(종류마다)와 네크로맨서를 강화한다.</p>
+    <p class="goal"><strong>목적:</strong> <span class="gold">봉쇄 초소</span>를 폭발로 모두 부수면 진압 대장이 나온다. 대장을 잡으면 구역을 차지하고 다음 구역이 열린다. 구역마다 키메라는 처음부터 키운다. 초소를 부술 때마다 <span class="gold">골드</span>를 받고(구역을 처음 차지하면 더), 끝 화면이나 제목의 <strong>강화</strong> 버튼에서 소환수 능력치(종류마다)와 네크로맨서를 강화한다.</p>
     <ol class="how">
       <li><span class="step">1</span><span>누르고 끌면 움직인다. 적이 남긴 혼을 밟으면 키메라가 된다.</span></li>
       <li><span class="step">2</span><span>셋이 차면 연결선이 닿은 키메라가 혼을 먹어 커진다. 먹일 대상은 위쪽 칸을 눌러 바꾼다.</span></li>
@@ -96,32 +212,52 @@
       <li><span class="swatch armor"></span>방패 기동대: 막고 밀친다</li>
       <li><span class="swatch ranger"></span>소총수: 멀리서 쏜다</li>
     </ul>
-    <button id="startBtn" type="button">1구역으로</button>
-    <button id="resetBtn" class="sub" type="button" hidden>1구역으로 되돌리기 (골드·강화는 그대로)</button>
+    <button id="helpClose" type="button">확인</button>
   </section>
 
   <section class="veil" id="end" hidden>
-    <h2 id="endTitle">쓰러졌다</h2>
-    <dl>
-      <dt>부순 초소</dt><dd id="endPosts">0 / 3</dd>
-      <dt>잡은 적</dt><dd id="endKills">0마리</dd>
-      <dt>탈피</dt><dd id="endMolt">0번</dd>
-      <dt>가장 높은 등급</dt><dd id="endLevel">1등급</dd>
-      <dt>최고 기록</dt><dd id="endBest">0구역</dd>
-      <dt>골드</dt><dd id="endGold" class="gold">0골드</dd>
-    </dl>
-    <p id="aceAsk" class="gold" hidden></p>
-    <div id="aceList" hidden></div>
-    <div id="statTabs" class="tabs" role="group" aria-label="강화할 소환수 종류"></div>
-    <div id="statShop" class="statShop"></div>
-    <button id="buyHp" class="buy" type="button">네크로맨서 체력 +10</button>
-    <button id="againBtn" type="button">1구역부터 다시</button>
-    <button id="downBtn" class="sub" type="button" hidden>1구역으로 내려가기 (초소 골드 모으기)</button>
+    <div id="endStep1" class="endStep">
+      <h2 id="endTitle">쓰러졌다</h2>
+      <p id="endProgress" hidden></p>
+      <dl>
+        <dt>부순 초소</dt><dd id="endPosts">0 / 3</dd>
+        <dt>잡은 적</dt><dd id="endKills">0마리</dd>
+        <dt>탈피</dt><dd id="endMolt">0번</dd>
+        <dt>가장 높은 등급</dt><dd id="endLevel">1등급</dd>
+        <dt>최고 기록</dt><dd id="endBest">0구역</dd>
+      </dl>
+      <div id="rewardList" aria-live="polite"></div>
+      <p class="rwTotal">받은 골드 <span id="rewardGold" class="gold">0골드</span></p>
+      <p id="aceAsk" class="gold" hidden></p>
+      <button id="endContinue" class="cta" type="button">계속</button>
+    </div>
+    <div id="endStep2" class="endStep" hidden>
+      <div id="aceList" hidden></div>
+      <button id="againBtn" type="button">1구역부터 다시</button>
+      <div id="endStarter" class="tabs" role="group" aria-label="첫 소환수 종류"></div>
+      <button id="downBtn" class="sub" type="button" hidden>1구역으로 내려가기 (초소 골드 모으기)</button>
+      <p>가진 골드 <span id="endGold" class="gold">0골드</span></p>
+      <div id="endShop" class="shopSlot">
+        <div id="shop" class="shop">
+          <div id="statTabs" class="tabs" role="group" aria-label="강화할 소환수 종류"></div>
+          <div id="statShop" class="statShop"></div>
+          <button id="buyHp" class="buy" type="button">네크로맨서 체력 +10</button>
+          <button id="buySeed" class="buy" type="button">변이 &#xC528;&#xC557;</button>
+        </div>
+      </div>
+      <button id="homeBtn" class="sub" type="button">홈으로</button>
+    </div>
   </section>
 
   <section class="veil" id="mutModal" hidden>
     <h2>초소 파괴 — 변이 선택</h2>
     <div id="mutList"></div>
+  </section>
+
+  <section class="veil" id="pauseModal" hidden>
+    <h2>잠깐 멈춤</h2>
+    <p>앱이 뒤로 간 사이 판을 멈춰 두었다.</p>
+    <button id="resumeBtn" type="button">눌러서 계속</button>
   </section>
 </div>
 

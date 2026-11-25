@@ -14,8 +14,9 @@ fs.writeFileSync(path.join(__dirname, '2d.html'), head + page + tail);
 
 // 3D: WebGL 캔버스(#game3d)를 밑에 깔고, 지금의 2D 캔버스(#game)를 투명하게 위에 겹친다.
 // 모듈 스크립트는 적힌 순서대로 돈다: render3d.js가 window.ChimeraView를 만든 뒤 render.js가 그것을 쓴다.
-// three와 그 부속(GLTFLoader)을 같은 판(0.170.0)으로 CDN에서 받는다. 모듈보다 먼저 와야 한다.
-const IMPORTMAP = '<script type="importmap">\n{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/" } }\n</script>\n';
+// three(0.170.0)는 외부 CDN이 아니라 저장소의 src/vendor/three/에서 읽는다(index.html이 저장소 루트에 있다). 모듈보다 먼저 와야 한다.
+// 부속(GLTFLoader 등)은 src/render3d.js가 ./src/vendor/three/*.js로 바로 부르고, 그 안의 'three'만 이 importmap으로 푼다.
+const IMPORTMAP = '<script type="importmap">\n{ "imports": { "three": "./src/vendor/three/three.module.min.js" } }\n</script>\n';
 // 모델 파일 내용의 짧은 해시. 모델이 바뀌면 주소(?v=)가 바뀌어 폰 브라우저가 예전 모델을 캐시에서 쓰지 않는다.
 const crypto = require('crypto');
 const assetDir = path.join(__dirname, 'assets');
